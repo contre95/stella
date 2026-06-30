@@ -1,0 +1,69 @@
+<div>
+  <h1 class="text-2xl font-bold tracking-tight">Cards</h1>
+  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+    Add a fact; each becomes a forward card (and an optional reverse).
+  </p>
+
+  <form
+    hx-post="/cards"
+    hx-target="#card-list"
+    hx-swap="innerHTML"
+    _="on htmx:afterRequest call me.reset()"
+    class="mt-6 grid gap-4 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950 sm:grid-cols-2"
+  >
+    <label class="block">
+      <span class="text-sm font-medium text-gray-700 dark:text-gray-200">Front</span>
+      <input
+        name="front"
+        required
+        placeholder="Question / prompt"
+        class="mt-1 w-full rounded-lg border-gray-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-900"
+      />
+    </label>
+
+    <label class="block">
+      <span class="text-sm font-medium text-gray-700 dark:text-gray-200">Back</span>
+      <input
+        name="back"
+        placeholder="Answer"
+        class="mt-1 w-full rounded-lg border-gray-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-900"
+      />
+    </label>
+
+    <label class="block">
+      <span class="text-sm font-medium text-gray-700 dark:text-gray-200">Initial grade</span>
+      <select
+        name="grade"
+        class="mt-1 w-full rounded-lg border-gray-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-900"
+      >
+        <option value="-1" selected>Unseen (grade in review)</option>
+        <option value="0">0 — blackout</option>
+        <option value="1">1 — wrong, familiar</option>
+        <option value="2">2 — wrong, easy recall</option>
+        <option value="3">3 — right, hard</option>
+        <option value="4">4 — right, hesitant</option>
+        <option value="5">5 — perfect</option>
+      </select>
+    </label>
+
+    <label class="flex items-center gap-2 self-end pb-2">
+      <input
+        type="checkbox"
+        name="reverse"
+        class="size-4 rounded border-gray-300 text-indigo-600 dark:border-gray-600"
+      />
+      <span class="text-sm font-medium text-gray-700 dark:text-gray-200">Also add reverse card</span>
+    </label>
+
+    <div class="flex justify-end sm:col-span-2">
+      <button
+        type="submit"
+        class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+      >
+        Add card
+      </button>
+    </div>
+  </form>
+
+  <div id="card-list" hx-get="/cards/list" hx-trigger="load" class="mt-6"></div>
+</div>

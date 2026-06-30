@@ -1,0 +1,15 @@
+# Local runtime data and config
+/data/
+/config.yaml
+*.db
+*.db-journal
+
+# Build artifacts
+/stella
+/tmp/
+
+# Node / Tailwind
+/node_modules/
+
+# Editor
+.DS_Store

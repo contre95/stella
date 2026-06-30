@@ -1,0 +1,41 @@
+<aside
+  class="hidden w-60 shrink-0 flex-col border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950 sm:flex"
+>
+  <div class="flex items-center gap-2 px-6 py-5">
+    <span class="text-2xl">✦</span>
+    <span class="text-xl font-bold tracking-tight">Stella</span>
+  </div>
+  <nav class="flex-1 space-y-1 px-3">
+    <a
+      href="/"
+      hx-get="/"
+      hx-target="#contenido"
+      hx-swap="innerHTML"
+      hx-push-url="true"
+      class="block rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+    >
+      Dashboard
+    </a>
+    <a
+      href="/cards"
+      hx-get="/cards"
+      hx-target="#contenido"
+      hx-swap="innerHTML"
+      hx-push-url="true"
+      class="block rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+    >
+      Cards
+    </a>
+    <a
+      href="/about"
+      hx-get="/about"
+      hx-target="#contenido"
+      hx-swap="innerHTML"
+      hx-push-url="true"
+      class="block rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+    >
+      About
+    </a>
+  </nav>
+  <div class="px-6 py-4 text-xs text-gray-400">v0.0.1 · skeleton</div>
+</aside>

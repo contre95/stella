@@ -1,0 +1,82 @@
+package main
+
+import (
+	"log/slog"
+	"math/rand"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/contre95/stella/src/features/cards"
+	"github.com/contre95/stella/src/features/config"
+	"github.com/contre95/stella/src/features/hosting"
+	"github.com/contre95/stella/src/features/logging"
+	"github.com/contre95/stella/src/features/ui"
+	"github.com/contre95/stella/src/infra/database"
+	"github.com/contre95/stella/src/srs"
+)
+
+func main() {
+	// 1. Config + logging.
+	configPath := os.Getenv(config.EnvConfigPath)
+	if configPath == "" {
+		configPath = "config.yaml"
+	}
+	cfgManager, err := config.NewManager(configPath)
+	if err != nil {
+		slog.Error("failed to load config", "err", err)
+		os.Exit(1)
+	}
+	slog.SetDefault(logging.SetupLogger(cfgManager))
+
+	// 2. Infra: database + scheduler.
+	db, err := database.NewSqliteSRS(cfgManager.Get().Database.Path)
+	if err != nil {
+		slog.Error("failed to open database", "err", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	scheduler := srs.NewScheduler(
+		schedulerParams(cfgManager.Get()),
+		time.Local,
+		time.Now,
+		srs.NewMathRand(rand.Int63()),
+	)
+
+	// 3. Feature services.
+	cardsService := cards.NewService(db, scheduler, cfgManager)
+
+	// 4. Handlers.
+	uiHandler := ui.NewHandler()
+	cardsHandler := cards.NewHandler(cardsService)
+
+	// 5. Routes + server.
+	server := hosting.NewServer(cfgManager, uiHandler, cardsHandler)
+
+	go func() {
+		if err := server.Start(); err != nil {
+			slog.Error("server stopped", "err", err)
+		}
+	}()
+	slog.Info("stella started", "port", cfgManager.Get().Server.Port)
+
+	// Graceful shutdown.
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+	slog.Info("shutting down")
+	_ = server.Shutdown()
+}
+
+// schedulerParams maps the review config onto the domain's scheduler params.
+func schedulerParams(c *config.Config) srs.Params {
+	return srs.Params{
+		DayStartsAt:              c.Review.DayStartsAt,
+		NonMemorisedCardsInHand:  c.Review.NonMemorisedCardsInHand,
+		MaxScheduledIntervalDays: c.Review.MaxScheduledIntervalDays,
+		RandomiseScheduledCards:  c.Review.RandomiseScheduledCards,
+		RandomiseNewCards:        c.Review.RandomiseNewCards,
+	}
+}

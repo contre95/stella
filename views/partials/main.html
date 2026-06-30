@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+  {{template "partials/head" .}}
+  <body class="h-full bg-gray-50 text-gray-900 antialiased dark:bg-gray-900 dark:text-gray-100">
+    <div class="flex min-h-full">
+      {{template "partials/sidebar" .}}
+      <div class="flex flex-1 flex-col">
+        {{template "partials/navbar" .}}
+        <main id="contenido" class="flex-1 p-6 sm:p-8">
+          {{if eq .Section "about"}}
+            {{template "sections/about" .}}
+          {{else if eq .Section "cards"}}
+            {{template "sections/cards" .}}
+          {{else}}
+            {{template "sections/dashboard" .}}
+          {{end}}
+        </main>
+      </div>
+    </div>
+    {{template "partials/scripts" .}}
+  </body>
+</html>

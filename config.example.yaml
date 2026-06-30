@@ -1,0 +1,21 @@
+dataPath: ./data
+server:
+  port: 8080
+  appName: Stella
+  bodyLimit: 10485760
+database:
+  path: ./data/stella.db
+logger:
+  level: info
+  debug: false
+review:
+  # Hour (0-23) at which a new study day begins.
+  dayStartsAt: 3
+  # How many not-yet-retained cards to juggle at once.
+  nonMemorisedCardsInHand: 10
+  # Cap on the scheduled interval in days; 0 = no cap.
+  maxScheduledIntervalDays: 0
+  # Shuffle due cards instead of ordering by interval.
+  randomiseScheduledCards: false
+  # Shuffle the order unseen cards are introduced.
+  randomiseNewCards: false

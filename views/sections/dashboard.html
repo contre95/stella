@@ -1,0 +1,35 @@
+<div>
+  <h1 class="text-2xl font-bold tracking-tight">Dashboard</h1>
+  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+    Your spaced-repetition overview.
+  </p>
+
+  <dl class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <div
+      class="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950"
+    >
+      <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Due today</dt>
+      <dd class="mt-2 text-3xl font-bold text-indigo-600 dark:text-indigo-400">
+        {{.DueToday}}
+      </dd>
+    </div>
+    <div
+      class="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950"
+    >
+      <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Total cards</dt>
+      <dd class="mt-2 text-3xl font-bold">{{.TotalCards}}</dd>
+    </div>
+    <div
+      class="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950"
+    >
+      <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">New cards</dt>
+      <dd class="mt-2 text-3xl font-bold">{{.NewCards}}</dd>
+    </div>
+  </dl>
+
+  <div
+    class="mt-6 rounded-2xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400"
+  >
+    Add cards and start a review session once the cards and review features land.
+  </div>
+</div>
