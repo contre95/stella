@@ -24,8 +24,9 @@ handlers (transport) -> service (logic) -> domain interfaces <- infra (adapters)
 
 - `src/srs/` — pure domain: entities + the SM2 algorithm + repository interface
 - `src/infra/database/` — SQLite implementation of `srs.Repository`
-- `src/features/<f>/` — config, logging, hosting, ui, cards, review
-- `src/main.go` — composition root
+- `src/features/<f>/` — config, logging, hosting, ui, cards, review, mcp
+- `src/main.go` — web composition root
+- `src/cmd/mcp/` — MCP server composition root (a second binary)
 
 ## Run
 
@@ -35,6 +36,35 @@ curl localhost:8080/health   # -> OK
 ```
 
 Config path is overridable via `STELLA_CONFIG_PATH`.
+
+## MCP server
+
+A second binary speaks the [Model Context Protocol](https://modelcontextprotocol.io)
+over stdio, so an MCP client (Claude, editors, …) can create and browse cards. It
+is a transport over the same cards service and reads the same `config.yaml`/SQLite
+database as the web app.
+
+```bash
+go build -o stella-mcp ./src/cmd/mcp
+```
+
+Tools:
+
+- `create_card` — make a fact and its sister cards. `front` is required; `back`,
+  `reverse` (also quiz back→front), `grade` (0–5 initial self-grade; omit to leave
+  unseen) and `deckId` are optional.
+- `list_recent_cards` — list recent facts with each sister card's scheduling status.
+
+Register it with a client by pointing at the built binary, e.g. for Claude Code:
+
+```bash
+claude mcp add stella -e STELLA_CONFIG_PATH=/abs/path/to/config.yaml -- /abs/path/to/stella-mcp
+```
+
+The MCP server and the web app can run at once against the same DB (SQLite serialises
+writes with a busy timeout). Because the client controls the binary's working
+directory, use **absolute** paths for `database.path` (and `dataPath`) in the
+config you point `STELLA_CONFIG_PATH` at.
 
 ## Status
 
