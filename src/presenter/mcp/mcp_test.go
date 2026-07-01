@@ -33,7 +33,7 @@ func newTestSession(t *testing.T) *mcpsdk.ClientSession {
 		srs.Params{DayStartsAt: 3, NonMemorisedCardsInHand: 10},
 		time.UTC,
 		time.Now,
-		srs.NewMathRand(1),
+		srs.NewMathRand(),
 	)
 	srv := NewServer("stella-test", "0.0.0", cards.NewService(db, scheduler, cfg))
 

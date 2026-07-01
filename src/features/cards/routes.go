@@ -20,4 +20,5 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	app.Get("/decks/:id/export", h.ExportDeck)
 	app.Get("/decks/:id/facts", h.DeckDetail)
 	app.Post("/decks/:id/cards", h.AddCardToDeck)
+	app.Get("/decks/:id", h.RenderDeckPage)
 }

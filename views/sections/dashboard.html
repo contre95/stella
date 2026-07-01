@@ -5,18 +5,18 @@
   </div>
 
   <!-- Stats grid -->
-  <dl class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-    <div class="glass lift rounded-2xl p-5">
+  <dl class="grid grid-cols-3 gap-2 sm:gap-4 sm:grid-cols-3">
+    <div class="glass lift rounded-2xl p-3 sm:p-5">
       <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Due today</dt>
-      <dd class="mt-2 text-3xl font-bold text-gradient">{{.DueToday}}</dd>
+      <dd class="mt-2 text-2xl sm:text-3xl font-bold text-gradient">{{.DueToday}}</dd>
     </div>
-    <div class="glass lift rounded-2xl p-5">
+    <div class="glass lift rounded-2xl p-3 sm:p-5">
       <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Total cards</dt>
-      <dd class="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{{.TotalCards}}</dd>
+      <dd class="mt-2 text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">{{.TotalCards}}</dd>
     </div>
-    <div class="glass lift rounded-2xl p-5">
+    <div class="glass lift rounded-2xl p-3 sm:p-5">
       <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Not yet memorised</dt>
-      <dd class="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{{.NewCards}}</dd>
+      <dd class="mt-2 text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">{{.NewCards}}</dd>
     </div>
   </dl>
 
@@ -91,24 +91,24 @@
   {{end}}
 
   {{if .Heatmap}}
-    <div class="glass mt-5 rounded-2xl p-5">
-      <div class="mb-4 flex items-center justify-between">
+    <div class="glass mt-5 rounded-2xl p-3">
+      <div class="mb-2 flex items-center justify-between">
         <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Study activity</h2>
         <span class="text-xs text-gray-400">
           {{.Heatmap.TotalDays}} day{{if ne .Heatmap.TotalDays 1}}s{{end}} studied
           {{if gt .Heatmap.CurrentStreak 0}}· <span class="text-gradient font-semibold">{{.Heatmap.CurrentStreak}}-day streak</span>{{end}}
         </span>
       </div>
-      <div class="overflow-x-auto pb-1">
-        <div style="min-width: max-content">
-          <div class="mb-1 flex gap-[3px]">
+      <div class="overflow-x-auto pb-0.5" id="heatmapContainer">
+        <div style="min-width: max-content; padding-right: 2px;">
+          <div class="mb-0.5 flex gap-[2px]">
             {{range .Heatmap.MonthLabels}}
-              <div class="heat-col text-[10px] leading-none text-gray-400">{{.}}</div>
+              <div class="heat-col text-[8px] sm:text-[10px] leading-tight text-gray-400">{{.}}</div>
             {{end}}
           </div>
-          <div class="flex gap-[3px]">
+          <div class="flex gap-[2px]">
             {{range .Heatmap.Weeks}}
-              <div class="flex flex-col gap-[3px]">
+              <div class="flex flex-col gap-[2px]">
                 {{range .}}
                   <div
                     class="heat heat-l{{.Level}}{{if .Empty}} heat-empty{{end}}{{if .Today}} heat-today{{end}}"
@@ -120,6 +120,14 @@
           </div>
         </div>
       </div>
+      <script>
+        document.addEventListener('DOMContentLoaded', function() {
+          const container = document.getElementById('heatmapContainer');
+          if (container) {
+            container.scrollLeft = container.scrollWidth;
+          }
+        });
+      </script>
       <div class="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-gray-400">
         Less
         <span class="heat heat-l0"></span>
@@ -131,7 +139,7 @@
       </div>
     </div>
     <style>
-      .heat { width: 12px; height: 12px; border-radius: 3px; }
+      .heat { width: 12px; height: 12px; border-radius: 1px; }
       .heat-col { width: 12px; white-space: nowrap; }
       .heat-empty { background: transparent !important; }
       .heat-today { box-shadow: 0 0 0 2px rgba(236, 72, 153, 0.9); }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/contre95/stella/src/features/config"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/template/html/v2"
 )
 
@@ -46,7 +47,7 @@ func NewServer(cm *config.Manager, registrars ...RouteRegistrar) *Server {
 		},
 	})
 
-	app.Use(HTMXMiddleware(), LogRequestsMiddleware())
+	app.Use(recover.New(), HTMXMiddleware(), LogRequestsMiddleware())
 	app.Static("/", "./public")
 	app.Static("/images", cm.Get().ImagePath)
 	app.Static("/audio", cm.Get().ImagePath)

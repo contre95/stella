@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -50,7 +49,7 @@ func main() {
 		schedulerParams(cfgManager.Get()),
 		time.Local,
 		time.Now,
-		srs.NewMathRand(rand.Int63()),
+		srs.NewMathRand(),
 	)
 
 	cardsService := cards.NewService(db, scheduler, cfgManager)

@@ -188,6 +188,11 @@ func (s *Service) ListDecks(ctx context.Context) ([]*srs.Deck, error) {
 	return s.repo.ListDecks(ctx)
 }
 
+// GetDeck retrieves a single deck by ID.
+func (s *Service) GetDeck(ctx context.Context, id string) (*srs.Deck, error) {
+	return s.repo.GetDeck(ctx, id)
+}
+
 // DeleteDeck removes a deck and all its facts (which cascade to cards).
 func (s *Service) DeleteDeck(ctx context.Context, id string) error {
 	return s.repo.DeleteDeck(ctx, id)
@@ -323,6 +328,13 @@ func (s *Service) ImportDeck(ctx context.Context, exp *DeckExport, nameOverride 
 	mediaPath := s.cfg.Get().ImagePath
 	imported := 0
 	for _, fe := range exp.Facts {
+		// Media filenames from an export must be bare names, never paths —
+		// they are later joined onto the media dir for reads and deletes.
+		for _, name := range []string{fe.ImageFront, fe.ImageBack, fe.AudioFront, fe.AudioBack} {
+			if name != "" && name != filepath.Base(name) {
+				return deck, imported, fmt.Errorf("invalid media filename in import: %q", name)
+			}
+		}
 		imgFront := fe.ImageFront
 		imgBack := fe.ImageBack
 		if len(fe.ImageFrontData) > 0 {

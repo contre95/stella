@@ -117,7 +117,7 @@ func (h *Handler) Add(c *fiber.Ctx) error {
 	reverse := c.FormValue("reverse") != ""
 	grade := -1
 	if g := c.FormValue("grade"); g != "" {
-		if parsed, err := strconv.Atoi(g); err == nil {
+		if parsed, err := strconv.Atoi(g); err == nil && parsed >= 0 && parsed <= 5 {
 			grade = parsed
 		}
 	}
@@ -220,6 +220,24 @@ func (h *Handler) DeckDetail(c *fiber.Ctx) error {
 	return respond.Partial(c, "components/deck_facts", fiber.Map{"DeckID": id, "Facts": facts})
 }
 
+// RenderDeckPage renders the full deck detail page.
+func (h *Handler) RenderDeckPage(c *fiber.Ctx) error {
+	id := c.Params("id")
+	deck, err := h.service.GetDeck(c.Context(), id)
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusNotFound, "Deck not found")
+	}
+	facts, err := h.service.ListFactsByDeck(c.Context(), id)
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return respond.Section(c, "deck_page", fiber.Map{
+		"Title": deck.Name,
+		"Deck":  deck,
+		"Facts": facts,
+	})
+}
+
 // ExportDeck returns a JSON file download for the given deck.
 func (h *Handler) ExportDeck(c *fiber.Ctx) error {
 	exp, err := h.service.ExportDeck(c.Context(), c.Params("id"))
@@ -277,7 +295,7 @@ func (h *Handler) AddCardToDeck(c *fiber.Ctx) error {
 	reverse := c.FormValue("reverse") != ""
 	grade := -1
 	if g := c.FormValue("grade"); g != "" {
-		if parsed, err := strconv.Atoi(g); err == nil {
+		if parsed, err := strconv.Atoi(g); err == nil && parsed >= 0 && parsed <= 5 {
 			grade = parsed
 		}
 	}

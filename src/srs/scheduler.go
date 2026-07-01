@@ -21,18 +21,18 @@ type Rand interface {
 	Uniform(low, high float64) float64
 }
 
-// mathRand is the production Rand backed by math/rand.
-type mathRand struct{ r *rand.Rand }
+// mathRand is the production Rand backed by math/rand's global source, which
+// is auto-seeded and safe for concurrent use across request handlers (a
+// per-instance *rand.Rand is not).
+type mathRand struct{}
 
-// NewMathRand returns a Rand seeded from seed.
-func NewMathRand(seed int64) Rand {
-	return &mathRand{r: rand.New(rand.NewSource(seed))}
-}
+// NewMathRand returns a Rand backed by the global math/rand source.
+func NewMathRand() Rand { return mathRand{} }
 
-func (m *mathRand) Choice(opts []int) int { return opts[m.r.Intn(len(opts))] }
+func (mathRand) Choice(opts []int) int { return opts[rand.Intn(len(opts))] }
 
-func (m *mathRand) Uniform(low, high float64) float64 {
-	return low + m.r.Float64()*(high-low)
+func (mathRand) Uniform(low, high float64) float64 {
+	return low + rand.Float64()*(high-low)
 }
 
 // Params are the scheduler tunables, ported from Mnemosyne's config keys. The
@@ -66,7 +66,7 @@ func NewScheduler(p Params, loc *time.Location, now func() time.Time, r Rand) *S
 		now = time.Now
 	}
 	if r == nil {
-		r = NewMathRand(time.Now().UnixNano())
+		r = NewMathRand()
 	}
 	return &Scheduler{Params: p, Loc: loc, Now: now, Rand: r}
 }

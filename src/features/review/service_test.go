@@ -22,7 +22,7 @@ func newTestService(t *testing.T, now time.Time) (*Service, *database.SqliteSRS)
 		srs.Params{DayStartsAt: 3, NonMemorisedCardsInHand: 10},
 		time.UTC,
 		func() time.Time { return now },
-		srs.NewMathRand(1),
+		srs.NewMathRand(),
 	)
 	return NewService(db, sch), db
 }

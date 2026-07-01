@@ -2,7 +2,6 @@ package main
 
 import (
 	"log/slog"
-	"math/rand"
 	"os"
 	"os/signal"
 	"syscall"
@@ -43,7 +42,7 @@ func main() {
 		schedulerParams(cfgManager.Get()),
 		time.Local,
 		time.Now,
-		srs.NewMathRand(rand.Int63()),
+		srs.NewMathRand(),
 	)
 
 	// 3. Feature services.

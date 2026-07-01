@@ -379,23 +379,34 @@
 
     /* ── Show question modal ──────────────────────────────────── */
     showQBtn.addEventListener('click', function () {
+      // Card content is user/import data — build the modal with DOM nodes and
+      // textContent so it can never be parsed as HTML.
       var isDark = document.documentElement.classList.contains('dark');
-      var html = '<div class="text-center">' +
-        '<span class="mb-4 inline-block text-xs font-semibold uppercase tracking-widest text-pink-500">' +
-          this.dataset.label +
-        '</span>';
+      var box = document.createElement('div');
+      box.className = 'text-center';
+      var label = document.createElement('span');
+      label.className = 'mb-4 inline-block text-xs font-semibold uppercase tracking-widest text-pink-500';
+      label.textContent = this.dataset.label;
+      box.appendChild(label);
       if (this.dataset.image) {
-        html += '<img src="/images/' + this.dataset.image + '" class="mx-auto mb-4 max-h-48 w-auto rounded-lg object-contain" />';
+        var img = document.createElement('img');
+        img.src = '/images/' + encodeURIComponent(this.dataset.image);
+        img.className = 'mx-auto mb-4 max-h-48 w-auto rounded-lg object-contain';
+        box.appendChild(img);
       }
       if (this.dataset.audio) {
-        html += '<audio controls src="/audio/' + this.dataset.audio + '" class="mx-auto mb-4 w-full max-w-xs"></audio>';
+        var aud = document.createElement('audio');
+        aud.controls = true;
+        aud.src = '/audio/' + encodeURIComponent(this.dataset.audio);
+        aud.className = 'mx-auto mb-4 w-full max-w-xs';
+        box.appendChild(aud);
       }
-      html += '<p class="text-xl font-medium leading-relaxed ' +
-        (isDark ? 'text-gray-100' : 'text-gray-800') +
-        '">' + this.dataset.text + '</p>' +
-        '</div>';
+      var text = document.createElement('p');
+      text.className = 'text-xl font-medium leading-relaxed ' + (isDark ? 'text-gray-100' : 'text-gray-800');
+      text.textContent = this.dataset.text;
+      box.appendChild(text);
       swalGlass.fire({
-        html: html,
+        html: box,
         showConfirmButton: true,
         confirmButtonText: 'Close',
         width: '32rem',
