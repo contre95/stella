@@ -59,6 +59,7 @@ func (h *Handler) RenderSession(c *fiber.Ctx) error {
 		"Remaining":     ci.Remaining,
 		"DeckName":      ci.DeckName,
 		"DeckColor":     ci.DeckColor,
+		"DeckImage":     ci.DeckImage,
 		"DeckFilter":    deckFilter,
 		"AutoplayAudio": h.cfg.Get().Cards.AutoplayAudio,
 	})
@@ -97,6 +98,7 @@ func (h *Handler) GradeCard(c *fiber.Ctx) error {
 		"Remaining":     ci.Remaining,
 		"DeckName":      ci.DeckName,
 		"DeckColor":     ci.DeckColor,
+		"DeckImage":     ci.DeckImage,
 		"DeckFilter":    deckFilter,
 		"AutoplayAudio": h.cfg.Get().Cards.AutoplayAudio,
 	})

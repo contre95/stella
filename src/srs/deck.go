@@ -9,6 +9,9 @@ type Deck struct {
 	Name        string
 	Color       string
 	Description string
+	// Image is the filename of the deck's cover picture in the media
+	// directory; empty means none.
+	Image string
 }
 
 // TruncatedName returns the first 12 runes of the name, appending ellipsis if

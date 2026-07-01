@@ -29,6 +29,7 @@ type Repository interface {
 	// Decks.
 	AddDeck(ctx context.Context, d *Deck) error
 	GetDeck(ctx context.Context, id string) (*Deck, error)
+	UpdateDeck(ctx context.Context, d *Deck) error
 	ListDecks(ctx context.Context) ([]*Deck, error)
 	DeleteDeck(ctx context.Context, id string) error // deletes deck and all its facts (cascades to cards)
 	ListFactsByDeck(ctx context.Context, deckID string) ([]*Fact, error)

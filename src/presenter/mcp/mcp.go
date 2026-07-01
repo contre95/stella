@@ -207,7 +207,7 @@ func (s *Server) createDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in C
 	if name == "" {
 		return nil, CreateDeckOutput{}, fmt.Errorf("name is required")
 	}
-	d, err := s.cards.AddDeck(ctx, name, "")
+	d, err := s.cards.AddDeck(ctx, name, "", "")
 	if err != nil {
 		return nil, CreateDeckOutput{}, fmt.Errorf("creating deck: %w", err)
 	}

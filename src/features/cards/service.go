@@ -193,9 +193,32 @@ func (s *Service) GetDeck(ctx context.Context, id string) (*srs.Deck, error) {
 	return s.repo.GetDeck(ctx, id)
 }
 
-// DeleteDeck removes a deck and all its facts (which cascade to cards).
+// DeleteDeck removes a deck and all its facts (which cascade to cards), along
+// with its cover picture file if it has one.
 func (s *Service) DeleteDeck(ctx context.Context, id string) error {
-	return s.repo.DeleteDeck(ctx, id)
+	deck, _ := s.repo.GetDeck(ctx, id)
+	if err := s.repo.DeleteDeck(ctx, id); err != nil {
+		return err
+	}
+	if deck != nil && deck.Image != "" {
+		os.Remove(filepath.Join(s.cfg.Get().ImagePath, deck.Image))
+	}
+	return nil
+}
+
+// SetDeckImage assigns an already-saved media filename as the deck's cover
+// picture and returns the previous filename so callers can clean it up.
+func (s *Service) SetDeckImage(ctx context.Context, id, filename string) (string, error) {
+	deck, err := s.repo.GetDeck(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	old := deck.Image
+	deck.Image = filename
+	if err := s.repo.UpdateDeck(ctx, deck); err != nil {
+		return "", err
+	}
+	return old, nil
 }
 
 var deckColors = []string{
@@ -204,11 +227,12 @@ var deckColors = []string{
 	"#6ee7b7", "#38bdf8", "#f97316", "#a855f7", "#14b8a6",
 }
 
-// AddDeck creates a new named deck with a random colour.
-func (s *Service) AddDeck(ctx context.Context, name, description string) (*srs.Deck, error) {
+// AddDeck creates a new named deck with a random colour. image is the filename
+// of an already-saved cover picture; empty means none.
+func (s *Service) AddDeck(ctx context.Context, name, description, image string) (*srs.Deck, error) {
 	all, _ := s.repo.ListDecks(ctx)
 	c := deckColors[len(all)%len(deckColors)]
-	d := &srs.Deck{ID: uuid.NewString(), Name: name, Color: c, Description: description}
+	d := &srs.Deck{ID: uuid.NewString(), Name: name, Color: c, Description: description, Image: image}
 	if err := s.repo.AddDeck(ctx, d); err != nil {
 		return nil, err
 	}
@@ -244,9 +268,11 @@ func (s *Service) ListFactsByDeck(ctx context.Context, deckID string) ([]*FactRo
 
 // DeckExport is the JSON-serialisable representation of a deck plus its facts.
 type DeckExport struct {
-	Name        string        `json:"name"`
-	Description string        `json:"description,omitempty"`
-	Facts       []FactExport  `json:"facts"`
+	Name        string       `json:"name"`
+	Description string       `json:"description,omitempty"`
+	Image       string       `json:"image,omitempty"`
+	ImageData   []byte       `json:"image_data,omitempty"`
+	Facts       []FactExport `json:"facts"`
 }
 
 // FactExport is the JSON-serialisable representation of a single fact.
@@ -274,7 +300,12 @@ func (s *Service) ExportDeck(ctx context.Context, deckID string) (*DeckExport, e
 	if err != nil {
 		return nil, err
 	}
-	exp := &DeckExport{Name: deck.Name, Description: deck.Description, Facts: make([]FactExport, 0, len(facts))}
+	exp := &DeckExport{Name: deck.Name, Description: deck.Description, Image: deck.Image, Facts: make([]FactExport, 0, len(facts))}
+	if deck.Image != "" {
+		if data, err := os.ReadFile(filepath.Join(s.cfg.Get().ImagePath, deck.Image)); err == nil {
+			exp.ImageData = data
+		}
+	}
 	for _, f := range facts {
 		cards, err := s.repo.CardsForFact(ctx, f.ID)
 		if err != nil {
@@ -321,11 +352,22 @@ func (s *Service) ImportDeck(ctx context.Context, exp *DeckExport, nameOverride 
 	if nameOverride != "" {
 		name = nameOverride
 	}
-	deck, err := s.AddDeck(ctx, name, exp.Description)
+	mediaPath := s.cfg.Get().ImagePath
+	if exp.Image != "" && exp.Image != filepath.Base(exp.Image) {
+		return nil, 0, fmt.Errorf("invalid media filename in import: %q", exp.Image)
+	}
+	cover := exp.Image
+	if len(exp.ImageData) > 0 {
+		name, err := saveImageData(mediaPath, exp.ImageData)
+		if err != nil {
+			return nil, 0, err
+		}
+		cover = name
+	}
+	deck, err := s.AddDeck(ctx, name, exp.Description, cover)
 	if err != nil {
 		return nil, 0, err
 	}
-	mediaPath := s.cfg.Get().ImagePath
 	imported := 0
 	for _, fe := range exp.Facts {
 		// Media filenames from an export must be bare names, never paths —

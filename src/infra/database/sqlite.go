@@ -57,7 +57,8 @@ CREATE TABLE IF NOT EXISTS decks (
 	id    TEXT PRIMARY KEY,
 	name  TEXT NOT NULL,
 	color TEXT NOT NULL DEFAULT '#8b5cf6',
-	description TEXT NOT NULL DEFAULT ''
+	description TEXT NOT NULL DEFAULT '',
+	image TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS facts (
@@ -110,6 +111,11 @@ CREATE INDEX IF NOT EXISTS idx_reviews_ts   ON reviews(timestamp);
 `
 	if _, err := s.db.Exec(schema); err != nil {
 		return fmt.Errorf("creating schema: %w", err)
+	}
+	// Databases created before deck cover pictures lack the image column.
+	if _, err := s.db.Exec(`ALTER TABLE decks ADD COLUMN image TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("migrating decks schema: %w", err)
 	}
 	return nil
 }
@@ -222,13 +228,13 @@ func (s *SqliteSRS) CardsForFact(ctx context.Context, factID string) ([]*srs.Car
 //
 
 func (s *SqliteSRS) AddDeck(ctx context.Context, d *srs.Deck) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO decks (id, name, color, description) VALUES (?, ?, ?, ?)`, d.ID, d.Name, d.Color, d.Description)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO decks (id, name, color, description, image) VALUES (?, ?, ?, ?, ?)`, d.ID, d.Name, d.Color, d.Description, d.Image)
 	return err
 }
 
 func (s *SqliteSRS) GetDeck(ctx context.Context, id string) (*srs.Deck, error) {
 	var d srs.Deck
-	err := s.db.QueryRowContext(ctx, `SELECT id, name, color, description FROM decks WHERE id=?`, id).Scan(&d.ID, &d.Name, &d.Color, &d.Description)
+	err := s.db.QueryRowContext(ctx, `SELECT id, name, color, description, image FROM decks WHERE id=?`, id).Scan(&d.ID, &d.Name, &d.Color, &d.Description, &d.Image)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, srs.ErrNotFound
 	}
@@ -238,8 +244,13 @@ func (s *SqliteSRS) GetDeck(ctx context.Context, id string) (*srs.Deck, error) {
 	return &d, nil
 }
 
+func (s *SqliteSRS) UpdateDeck(ctx context.Context, d *srs.Deck) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE decks SET name=?, color=?, description=?, image=? WHERE id=?`, d.Name, d.Color, d.Description, d.Image, d.ID)
+	return err
+}
+
 func (s *SqliteSRS) ListDecks(ctx context.Context) ([]*srs.Deck, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, color, description FROM decks ORDER BY name`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, color, description, image FROM decks ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +258,7 @@ func (s *SqliteSRS) ListDecks(ctx context.Context) ([]*srs.Deck, error) {
 	var decks []*srs.Deck
 	for rows.Next() {
 		var d srs.Deck
-		if err := rows.Scan(&d.ID, &d.Name, &d.Color, &d.Description); err != nil {
+		if err := rows.Scan(&d.ID, &d.Name, &d.Color, &d.Description, &d.Image); err != nil {
 			return nil, err
 		}
 		decks = append(decks, &d)

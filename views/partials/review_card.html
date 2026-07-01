@@ -53,6 +53,9 @@
         class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-10 overflow-hidden rounded-2xl glass-strong"
         style="transition: opacity 0.32s ease;"
       >
+        {{if and .DeckImage (not .Fact.ImageFront)}}
+        <img src="/images/{{.DeckImage}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover grayscale opacity-[0.13] dark:opacity-10" aria-hidden="true" />
+        {{end}}
         {{if .Fact.ImageFront}}
         <img src="/images/{{.Fact.ImageFront}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
         <div class="pointer-events-none absolute inset-0 bg-white/60 dark:bg-[#17161e]/70"></div>
@@ -92,6 +95,9 @@
         class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-10 overflow-hidden rounded-2xl glass-strong"
         style="display: none; opacity: 0; pointer-events: none;"
       >
+        {{if and .DeckImage (not .Fact.ImageBack)}}
+        <img src="/images/{{.DeckImage}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover grayscale opacity-[0.13] dark:opacity-10" aria-hidden="true" />
+        {{end}}
         {{if .Fact.ImageBack}}
         <img src="/images/{{.Fact.ImageBack}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
         <div class="pointer-events-none absolute inset-0 bg-white/60 dark:bg-[#17161e]/70"></div>

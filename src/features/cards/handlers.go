@@ -156,18 +156,40 @@ func (h *Handler) DeckOptions(c *fiber.Ctx) error {
 	return respond.Partial(c, "components/deck_options", fiber.Map{"Decks": decks})
 }
 
-// Delete removes a fact and returns the refreshed list.
+// deckGrid returns the card grid partial for a single deck.
+func (h *Handler) deckGrid(c *fiber.Ctx, deckID string) error {
+	facts, err := h.service.ListFactsByDeck(c.Context(), deckID)
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	deckImage := ""
+	if deck, err := h.service.GetDeck(c.Context(), deckID); err == nil {
+		deckImage = deck.Image
+	}
+	return respond.Partial(c, "components/deck_card_grid", fiber.Map{"DeckID": deckID, "Facts": facts, "DeckImage": deckImage})
+}
+
+// Delete removes a fact and returns the refreshed list. When called from a
+// deck page (?deck=<id>), it returns that deck's card grid instead.
 func (h *Handler) Delete(c *fiber.Ctx) error {
 	if err := h.service.DeleteFact(c.Context(), c.Params("id")); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
+	if deckID := c.Query("deck"); deckID != "" {
+		return h.deckGrid(c, deckID)
+	}
 	return h.List(c)
 }
 
-// Reset resets all cards for a fact back to unseen and returns the refreshed list.
+// Reset resets all cards for a fact back to unseen and returns the refreshed
+// list. When called from a deck page (?deck=<id>), it returns that deck's
+// card grid instead.
 func (h *Handler) Reset(c *fiber.Ctx) error {
 	if err := h.service.ResetFact(c.Context(), c.Params("id")); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	if deckID := c.Query("deck"); deckID != "" {
+		return h.deckGrid(c, deckID)
 	}
 	return h.List(c)
 }
@@ -204,10 +226,34 @@ func (h *Handler) AddDeck(c *fiber.Ctx) error {
 		name = string([]rune(name)[:12])
 	}
 	desc := strings.TrimSpace(c.FormValue("description"))
-	if _, err := h.service.AddDeck(c.Context(), name, desc); err != nil {
+	image, err := h.saveImage(c, "image")
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
+	}
+	if _, err := h.service.AddDeck(c.Context(), name, desc, image); err != nil {
+		h.removeMedia(image)
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return h.DeckList(c)
+}
+
+// SetDeckImage uploads a deck cover picture, replaces any previous one, and
+// re-renders the deck page.
+func (h *Handler) SetDeckImage(c *fiber.Ctx) error {
+	image, err := h.saveImage(c, "image")
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
+	}
+	if image == "" {
+		return respond.ToastErr(c, fiber.StatusBadRequest, "Image is required")
+	}
+	old, err := h.service.SetDeckImage(c.Context(), c.Params("id"), image)
+	if err != nil {
+		h.removeMedia(image)
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	h.removeMedia(old)
+	return h.RenderDeckPage(c)
 }
 
 // DeckDetail renders the facts belonging to a deck.
@@ -217,7 +263,11 @@ func (h *Handler) DeckDetail(c *fiber.Ctx) error {
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
-	return respond.Partial(c, "components/deck_facts", fiber.Map{"DeckID": id, "Facts": facts})
+	deckImage := ""
+	if deck, err := h.service.GetDeck(c.Context(), id); err == nil {
+		deckImage = deck.Image
+	}
+	return respond.Partial(c, "components/deck_facts", fiber.Map{"DeckID": id, "Facts": facts, "DeckImage": deckImage})
 }
 
 // RenderDeckPage renders the full deck detail page.
@@ -232,9 +282,11 @@ func (h *Handler) RenderDeckPage(c *fiber.Ctx) error {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return respond.Section(c, "deck_page", fiber.Map{
-		"Title": deck.Name,
-		"Deck":  deck,
-		"Facts": facts,
+		"Title":     deck.Name,
+		"Deck":      deck,
+		"DeckID":    deck.ID,
+		"DeckImage": deck.Image,
+		"Facts":     facts,
 	})
 }
 
@@ -284,7 +336,7 @@ func (h *Handler) ImportDeck(c *fiber.Ctx) error {
 }
 
 // AddCardToDeck creates a card assigned to a specific deck and returns the
-// refreshed deck facts partial.
+// refreshed deck card grid partial.
 func (h *Handler) AddCardToDeck(c *fiber.Ctx) error {
 	id := c.Params("id")
 	front := strings.TrimSpace(c.FormValue("front"))
@@ -322,5 +374,5 @@ func (h *Handler) AddCardToDeck(c *fiber.Ctx) error {
 		h.removeMedia(imgFront, imgBack, audFront, audBack)
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
-	return h.DeckDetail(c)
+	return h.deckGrid(c, id)
 }

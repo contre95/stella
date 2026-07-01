@@ -9,6 +9,7 @@
       hx-post="/decks"
       hx-target="#deck-list"
       hx-swap="innerHTML"
+      hx-encoding="multipart/form-data"
       _="on htmx:afterRequest call me.reset()"
       class="glass flex flex-1 flex-col gap-3 rounded-2xl p-4"
     >
@@ -32,6 +33,15 @@
           Create
         </button>
       </div>
+      <label class="flex items-center gap-3">
+        <span class="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Cover <span class="font-normal normal-case">(optional)</span></span>
+        <input
+          type="file"
+          name="image"
+          accept=".jpg,.jpeg,.png,.gif,.webp"
+          class="glass-input min-w-0 flex-1 rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"
+        />
+      </label>
     </form>
 
     <form

@@ -20,6 +20,8 @@
               {{template "sections/cards" .}}
             {{else if eq .Section "decks"}}
               {{template "sections/decks" .}}
+            {{else if eq .Section "deck_page"}}
+              {{template "sections/deck_page" .}}
             {{else}}
               {{template "sections/dashboard" .}}
             {{end}}
