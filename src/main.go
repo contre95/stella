@@ -32,7 +32,7 @@ func main() {
 	slog.SetDefault(logging.SetupLogger(cfgManager))
 
 	// 2. Infra: database + scheduler.
-	db, err := database.NewSqliteSRS(cfgManager.Get().Database.Path)
+	db, err := database.NewSqliteSRS(cfgManager.Get().DbPath)
 	if err != nil {
 		slog.Error("failed to open database", "err", err)
 		os.Exit(1)

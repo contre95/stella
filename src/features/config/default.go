@@ -4,8 +4,8 @@ package config
 // default here so a fresh install is valid without hand-editing the file.
 func defaultConfig() Config {
 	return Config{
-		DataPath:   "./data",
-		ImagesPath: "./data/images",
+		DbPath:    "./data/stella.db",
+		ImagePath: "./data/images",
 		Server: Server{
 			Port:      8080,
 			AppName:   "Stella",
@@ -13,9 +13,6 @@ func defaultConfig() Config {
 		},
 		MCP: MCP{
 			Port: 8859,
-		},
-		Database: Database{
-			Path: "./data/stella.db",
 		},
 		Logger: Logger{
 			Level: "info",

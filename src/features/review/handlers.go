@@ -84,7 +84,7 @@ func (h *Handler) GradeCard(c *fiber.Ctx) error {
 	}
 	if ci == nil {
 		c.Set("HX-Retarget", "#contenido")
-		c.Set("HX-Reswap", "innerHTML")
+		c.Set("HX-Reswap", "outerHTML")
 		c.Set("HX-Push-Url", "/review/done")
 		return c.Render("sections/review_done", fiber.Map{"Title": "Review Complete"})
 	}

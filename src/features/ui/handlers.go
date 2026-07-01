@@ -33,6 +33,18 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 	})
 }
 
+// SidebarStats returns the deck/card counts for the sidebar.
+func (h *Handler) SidebarStats(c *fiber.Ctx) error {
+	stats, err := h.reviewSvc.Stats(c.Context())
+	if err != nil {
+		return c.SendString("")
+	}
+	return c.Render("partials/sidebar_stats", fiber.Map{
+		"DeckCount":  stats.DeckCount,
+		"TotalCards": stats.TotalCards,
+	})
+}
+
 // About renders a placeholder section used to exercise HTMX navigation.
 func (h *Handler) About(c *fiber.Ctx) error {
 	return respond.Section(c, "about", fiber.Map{"Title": "About"})

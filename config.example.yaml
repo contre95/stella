@@ -1,6 +1,6 @@
-dataPath: ./data
+dbPath: ./data/stella.db
 # Directory where uploaded card images are stored.
-imagesPath: ./data/images
+imagePath: ./data/images
 server:
   port: 8080
   appName: Stella
@@ -8,8 +8,6 @@ server:
 mcp:
   # Port for the MCP HTTP server (StreamableHTTP transport).
   port: 8859
-database:
-  path: ./data/stella.db
 logger:
   level: info
   debug: false

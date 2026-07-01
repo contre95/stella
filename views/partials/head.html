@@ -7,8 +7,11 @@
   <meta name="theme-color" content="#f7f2fb" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#07070b" media="(prefers-color-scheme: dark)" />
   <title>{{if .Title}}{{.Title}} · {{end}}Stella</title>
-  <link rel="manifest" href="/manifest.json" />
-  <link rel="icon" href="/icons/stella.svg" type="image/svg+xml" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png" />
+  <link rel="icon" href="/favicon-32x32.png" sizes="32x32" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -214,6 +217,21 @@
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-thumb { background: rgba(219, 39, 119, 0.3); border-radius: 9999px; }
     ::-webkit-scrollbar-thumb:hover { background: rgba(219, 39, 119, 0.5); }
+
+    /* ── Nav active state ───────────────────────────────────────── */
+    aside .nav-link.nav-active {
+      background-image: linear-gradient(to right, rgba(236,72,153,.15), rgba(236,72,153,.05));
+      color: #be185d;
+      box-shadow: inset 0 0 0 1px rgba(236,72,153,.2);
+      font-weight: 600;
+    }
+    .dark aside .nav-link.nav-active {
+      background-image: linear-gradient(to right, rgba(236,72,153,.20), rgba(236,72,153,.05));
+      color: #f9a8d4;
+      box-shadow: inset 0 0 0 1px rgba(244,114,182,.2);
+    }
+    nav .nav-link.nav-active { color: #db2777; font-weight: 600; }
+    .dark nav .nav-link.nav-active { color: #f472b6; }
   </style>
   <script>
     if (localStorage.getItem("theme") === "dark") {

@@ -39,7 +39,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	db, err := database.NewSqliteSRS(cfgManager.Get().Database.Path)
+	db, err := database.NewSqliteSRS(cfgManager.Get().DbPath)
 	if err != nil {
 		slog.Error("failed to open database", "err", err)
 		os.Exit(1)

@@ -1,4 +1,4 @@
-<div class="flex flex-col items-center justify-center py-24 text-center">
+<div id="contenido" class="flex flex-col items-center justify-center py-24 text-center">
   <div class="mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-pink-400 to-pink-600 shadow-xl shadow-pink-500/30">
     <span class="text-4xl text-white">✦</span>
   </div>
@@ -11,7 +11,7 @@
       href="/cards"
       hx-get="/cards"
       hx-target="#contenido"
-      hx-swap="innerHTML"
+      hx-swap="outerHTML"
       hx-push-url="true"
       class="btn-ghost rounded-xl px-4 py-2 text-sm font-medium"
     >Add cards</a>
@@ -19,7 +19,7 @@
       href="/"
       hx-get="/"
       hx-target="#contenido"
-      hx-swap="innerHTML"
+      hx-swap="outerHTML"
       hx-push-url="true"
       class="btn-primary rounded-xl px-4 py-2 text-sm font-semibold"
     >Dashboard</a>

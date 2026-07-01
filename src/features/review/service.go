@@ -13,6 +13,7 @@ type Stats struct {
 	DueToday   int
 	TotalCards int
 	NewCards   int
+	DeckCount  int
 }
 
 // CardInSession pairs a card with its parent fact and session metadata.
@@ -132,7 +133,11 @@ func (s *Service) Stats(ctx context.Context) (*Stats, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Stats{DueToday: due, TotalCards: total, NewCards: newCards}, nil
+	decks, err := s.repo.ListDecks(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &Stats{DueToday: due, TotalCards: total, NewCards: newCards, DeckCount: len(decks)}, nil
 }
 
 func (s *Service) pickNext(ctx context.Context, now int64, deckIDs []string) (*srs.Card, error) {

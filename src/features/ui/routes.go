@@ -6,4 +6,5 @@ import "github.com/gofiber/fiber/v2"
 func (h *Handler) RegisterRoutes(app *fiber.App) {
 	app.Get("/", h.Dashboard)
 	app.Get("/about", h.About)
+	app.Get("/sidebar-stats", h.SidebarStats)
 }

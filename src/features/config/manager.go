@@ -49,7 +49,7 @@ func (m *Manager) load() error {
 		return fmt.Errorf("reading config: %w", err)
 	}
 	// Start from the defaults so keys omitted from the file keep their default
-	// value instead of being zeroed (e.g. a missing imagesPath must not become "").
+	// value instead of being zeroed (e.g. a missing imagePath must not become "").
 	cfg := defaultConfig()
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return fmt.Errorf("parsing config: %w", err)
@@ -89,7 +89,7 @@ func (m *Manager) Save() error {
 }
 
 func (m *Manager) ensureDirs() error {
-	for _, d := range []string{m.cfg.DataPath, m.cfg.ImagesPath, filepath.Dir(m.cfg.Database.Path)} {
+	for _, d := range []string{m.cfg.ImagePath, filepath.Dir(m.cfg.DbPath)} {
 		if d == "" {
 			continue
 		}

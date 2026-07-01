@@ -2,13 +2,12 @@ package config
 
 // Config is the root application configuration, loaded from YAML.
 type Config struct {
-	DataPath   string   `yaml:"dataPath" validate:"required"`
-	ImagesPath string   `yaml:"imagesPath"`
-	Server     Server   `yaml:"server"`
-	MCP        MCP      `yaml:"mcp"`
-	Database   Database `yaml:"database"`
-	Logger     Logger   `yaml:"logger"`
-	Review     Review   `yaml:"review"`
+	DbPath     string `yaml:"dbPath" validate:"required"`
+	ImagePath  string `yaml:"imagePath"`
+	Server     Server `yaml:"server"`
+	MCP        MCP    `yaml:"mcp"`
+	Logger     Logger `yaml:"logger"`
+	Review     Review `yaml:"review"`
 }
 
 // Server holds HTTP server settings.
@@ -21,11 +20,6 @@ type Server struct {
 // MCP holds the Model Context Protocol server settings.
 type MCP struct {
 	Port int `yaml:"port" validate:"required"`
-}
-
-// Database holds storage settings.
-type Database struct {
-	Path string `yaml:"path" validate:"required"`
 }
 
 // Logger holds logging settings.

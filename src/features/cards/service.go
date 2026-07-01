@@ -26,9 +26,9 @@ func NewService(repo srs.Repository, scheduler *srs.Scheduler, cfg *config.Manag
 	return &Service{repo: repo, scheduler: scheduler, cfg: cfg}
 }
 
-// ImagesPath returns the directory where card images are stored.
-func (s *Service) ImagesPath() string {
-	return s.cfg.Get().ImagesPath
+// ImagePath returns the directory where card images are stored.
+func (s *Service) ImagePath() string {
+	return s.cfg.Get().ImagePath
 }
 
 // saveImageData writes raw image bytes to a new file in imagesPath and returns
@@ -252,7 +252,7 @@ func (s *Service) ExportDeck(ctx context.Context, deckID string) (*DeckExport, e
 			}
 		}
 		fe := FactExport{Front: f.Front, Back: f.Back, ImageFront: f.ImageFront, ImageBack: f.ImageBack, Reverse: hasReverse}
-		imagesPath := s.cfg.Get().ImagesPath
+		imagesPath := s.cfg.Get().ImagePath
 		if f.ImageFront != "" {
 			if data, err := os.ReadFile(filepath.Join(imagesPath, f.ImageFront)); err == nil {
 				fe.ImageFrontData = data
@@ -279,7 +279,7 @@ func (s *Service) ImportDeck(ctx context.Context, exp *DeckExport, nameOverride 
 	if err != nil {
 		return nil, 0, err
 	}
-	imagesPath := s.cfg.Get().ImagesPath
+	imagesPath := s.cfg.Get().ImagePath
 	imported := 0
 	for _, fe := range exp.Facts {
 		imgFront := fe.ImageFront

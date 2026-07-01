@@ -96,17 +96,17 @@ func (s *Server) createCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in C
 	imgBack, err := s.saveImageFromURL(in.ImageBack)
 	if err != nil {
 		if imgFront != "" {
-			os.Remove(filepath.Join(s.cards.ImagesPath(), imgFront))
+			os.Remove(filepath.Join(s.cards.ImagePath(), imgFront))
 		}
 		return nil, CreateCardOutput{}, fmt.Errorf("saving back image: %w", err)
 	}
 	fact, err := s.cards.AddFact(ctx, front, in.Back, in.DeckID, grade, in.Reverse, imgFront, imgBack)
 	if err != nil {
 		if imgFront != "" {
-			os.Remove(filepath.Join(s.cards.ImagesPath(), imgFront))
+			os.Remove(filepath.Join(s.cards.ImagePath(), imgFront))
 		}
 		if imgBack != "" {
-			os.Remove(filepath.Join(s.cards.ImagesPath(), imgBack))
+			os.Remove(filepath.Join(s.cards.ImagePath(), imgBack))
 		}
 		return nil, CreateCardOutput{}, fmt.Errorf("creating card: %w", err)
 	}
@@ -252,7 +252,7 @@ func (s *Server) saveImageFromURL(url string) (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported image type: %s", resp.Header.Get("Content-Type"))
 	}
-	imagesPath := s.cards.ImagesPath()
+	imagesPath := s.cards.ImagePath()
 	if err := os.MkdirAll(imagesPath, 0o755); err != nil {
 		return "", err
 	}

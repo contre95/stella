@@ -56,11 +56,11 @@ func (h *Handler) saveImage(c *fiber.Ctx, field string) (string, error) {
 	if !slices.Contains(allowedImageExts, ext) {
 		return "", fiber.NewError(fiber.StatusBadRequest, "image must be jpg, png, gif, or webp")
 	}
-	if err := os.MkdirAll(h.service.ImagesPath(), 0o755); err != nil {
+	if err := os.MkdirAll(h.service.ImagePath(), 0o755); err != nil {
 		return "", err
 	}
 	filename := uuid.NewString() + ext
-	dest := filepath.Join(h.service.ImagesPath(), filename)
+	dest := filepath.Join(h.service.ImagePath(), filename)
 	if err := c.SaveFile(file, dest); err != nil {
 		return "", err
 	}
@@ -92,18 +92,18 @@ func (h *Handler) Add(c *fiber.Ctx) error {
 	imgBack, err := h.saveImage(c, "image_back")
 	if err != nil {
 		if imgFront != "" {
-			os.Remove(filepath.Join(h.service.ImagesPath(), imgFront))
+			os.Remove(filepath.Join(h.service.ImagePath(), imgFront))
 		}
 		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
 	}
 	if _, err := h.service.AddFact(c.Context(), front, back, deckID, grade, reverse, imgFront, imgBack); err != nil {
 		if imgFront != "" {
-			if rmErr := os.Remove(filepath.Join(h.service.ImagesPath(), imgFront)); rmErr != nil {
+			if rmErr := os.Remove(filepath.Join(h.service.ImagePath(), imgFront)); rmErr != nil {
 				slog.Warn("failed to remove orphaned image", "file", imgFront, "err", rmErr)
 			}
 		}
 		if imgBack != "" {
-			if rmErr := os.Remove(filepath.Join(h.service.ImagesPath(), imgBack)); rmErr != nil {
+			if rmErr := os.Remove(filepath.Join(h.service.ImagePath(), imgBack)); rmErr != nil {
 				slog.Warn("failed to remove orphaned image", "file", imgBack, "err", rmErr)
 			}
 		}
@@ -253,18 +253,18 @@ func (h *Handler) AddCardToDeck(c *fiber.Ctx) error {
 	imgBack, err := h.saveImage(c, "image_back")
 	if err != nil {
 		if imgFront != "" {
-			os.Remove(filepath.Join(h.service.ImagesPath(), imgFront))
+			os.Remove(filepath.Join(h.service.ImagePath(), imgFront))
 		}
 		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
 	}
 	if _, err := h.service.AddFact(c.Context(), front, back, id, grade, reverse, imgFront, imgBack); err != nil {
 		if imgFront != "" {
-			if rmErr := os.Remove(filepath.Join(h.service.ImagesPath(), imgFront)); rmErr != nil {
+			if rmErr := os.Remove(filepath.Join(h.service.ImagePath(), imgFront)); rmErr != nil {
 				slog.Warn("failed to remove orphaned image", "file", imgFront, "err", rmErr)
 			}
 		}
 		if imgBack != "" {
-			if rmErr := os.Remove(filepath.Join(h.service.ImagesPath(), imgBack)); rmErr != nil {
+			if rmErr := os.Remove(filepath.Join(h.service.ImagePath(), imgBack)); rmErr != nil {
 				slog.Warn("failed to remove orphaned image", "file", imgBack, "err", rmErr)
 			}
 		}
