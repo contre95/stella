@@ -2,6 +2,7 @@ package review
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/contre95/stella/src/srs"
@@ -201,6 +202,130 @@ func forecastLabel(i int, now time.Time) string {
 		return "Today"
 	}
 	return now.AddDate(0, 0, i).Format("Mon")
+}
+
+// HeatCell is one day square in the study-activity heatmap.
+type HeatCell struct {
+	Level int    // 0 (none) .. 4 (most) intensity
+	Count int    // reviews that day
+	Title string // tooltip
+	Today bool
+	Empty bool // padding cell for a future day; rendered blank
+}
+
+// Heatmap is a GitHub-style contribution grid of study activity.
+type Heatmap struct {
+	Weeks         [][]HeatCell // week columns, each 7 cells (Sun..Sat)
+	MonthLabels   []string     // one per week column, "" unless the month starts there
+	TotalDays     int          // days with at least one review, within the window
+	TotalReviews  int          // reviews within the window
+	CurrentStreak int          // consecutive study days ending today
+}
+
+const heatmapWeeks = 53
+
+// StudyHeatmap builds a ~year-long study-activity heatmap from the review log,
+// bucketing each review into a study day (honouring day_starts_at, so a late
+// session before the day boundary counts toward the previous day).
+func (s *Service) StudyHeatmap(ctx context.Context) (*Heatmap, error) {
+	loc := s.scheduler.Loc
+	if loc == nil {
+		loc = time.Local
+	}
+	dayStarts := s.scheduler.Params.DayStartsAt
+
+	today := studyDay(time.Now().Unix(), loc, dayStarts)
+	startOfWeek := today.AddDate(0, 0, -int(today.Weekday())) // back to Sunday
+	gridStart := startOfWeek.AddDate(0, 0, -(heatmapWeeks-1)*7)
+
+	timestamps, err := s.repo.ReviewTimestampsSince(ctx, gridStart.Unix()-srs.DAY)
+	if err != nil {
+		return nil, err
+	}
+	counts := make(map[string]int, len(timestamps))
+	for _, ts := range timestamps {
+		counts[studyDay(ts, loc, dayStarts).Format("2006-01-02")]++
+	}
+
+	hm := &Heatmap{
+		Weeks:       make([][]HeatCell, heatmapWeeks),
+		MonthLabels: make([]string, heatmapWeeks),
+	}
+	prevMonth := time.Month(0)
+	cur := gridStart
+	for w := 0; w < heatmapWeeks; w++ {
+		if m := cur.Month(); m != prevMonth {
+			hm.MonthLabels[w] = cur.Format("Jan")
+			prevMonth = m
+		}
+		week := make([]HeatCell, 7)
+		for d := 0; d < 7; d++ {
+			var cell HeatCell
+			if cur.After(today) {
+				cell.Empty = true
+			} else {
+				n := counts[cur.Format("2006-01-02")]
+				cell.Count = n
+				cell.Level = heatLevel(n)
+				cell.Today = cur.Equal(today)
+				cell.Title = heatTitle(n, cur)
+				if n > 0 {
+					hm.TotalDays++
+					hm.TotalReviews += n
+				}
+			}
+			week[d] = cell
+			cur = cur.AddDate(0, 0, 1)
+		}
+		hm.Weeks[w] = week
+	}
+
+	// Current streak: consecutive study days ending today. Today counting as
+	// blank does not break it (you may not have studied yet).
+	d := today
+	if counts[d.Format("2006-01-02")] == 0 {
+		d = d.AddDate(0, 0, -1)
+	}
+	for counts[d.Format("2006-01-02")] > 0 {
+		hm.CurrentStreak++
+		d = d.AddDate(0, 0, -1)
+	}
+
+	return hm, nil
+}
+
+// studyDay maps a POSIX timestamp to midnight (local) of its study day.
+func studyDay(unix int64, loc *time.Location, dayStarts int) time.Time {
+	t := time.Unix(unix-int64(dayStarts)*srs.HOUR, 0).In(loc)
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, loc)
+}
+
+func heatLevel(n int) int {
+	switch {
+	case n <= 0:
+		return 0
+	case n <= 3:
+		return 1
+	case n <= 7:
+		return 2
+	case n <= 14:
+		return 3
+	default:
+		return 4
+	}
+}
+
+func heatTitle(n int, day time.Time) string {
+	date := day.Format("Mon, Jan 2")
+	switch n {
+	case 0:
+		return "No reviews · " + date
+	case 1:
+		return "1 review · " + date
+	default:
+		return fmt.Sprintf("%d reviews · %s", n, date)
+	}
 }
 
 func (s *Service) pickNext(ctx context.Context, now int64, deckIDs []string) (*srs.Card, error) {

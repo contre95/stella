@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS reviews (
 	timestamp          INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_reviews_card ON reviews(card_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_ts   ON reviews(timestamp);
 `
 	if _, err := s.db.Exec(schema); err != nil {
 		return fmt.Errorf("creating schema: %w", err)
@@ -299,6 +300,24 @@ func (s *SqliteSRS) AddReview(ctx context.Context, r *srs.Review) error {
 		r.ID, r.CardID, r.Grade, r.ScheduledInterval, r.ActualInterval,
 		r.ThinkingTime, r.Timestamp)
 	return err
+}
+
+func (s *SqliteSRS) ReviewTimestampsSince(ctx context.Context, from int64) ([]int64, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT timestamp FROM reviews WHERE timestamp>=? ORDER BY timestamp`, from)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []int64
+	for rows.Next() {
+		var ts int64
+		if err := rows.Scan(&ts); err != nil {
+			return nil, err
+		}
+		out = append(out, ts)
+	}
+	return out, rows.Err()
 }
 
 //

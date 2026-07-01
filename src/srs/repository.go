@@ -35,6 +35,9 @@ type Repository interface {
 
 	// Reviews (append-only log).
 	AddReview(ctx context.Context, r *Review) error
+	// ReviewTimestampsSince returns POSIX timestamps of reviews at or after
+	// `from`, ascending, for the study-activity heatmap.
+	ReviewTimestampsSince(ctx context.Context, from int64) ([]int64, error)
 
 	// Aggregate counts.
 	ActiveCount(ctx context.Context) (int, error)

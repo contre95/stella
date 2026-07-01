@@ -30,12 +30,18 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 		slog.Error("dashboard forecast", "err", err)
 		forecast = nil
 	}
+	heatmap, err := h.reviewSvc.StudyHeatmap(c.Context())
+	if err != nil {
+		slog.Error("dashboard heatmap", "err", err)
+		heatmap = nil
+	}
 	return respond.Section(c, "dashboard", fiber.Map{
 		"Title":      "Dashboard",
 		"DueToday":   stats.DueToday,
 		"TotalCards": stats.TotalCards,
 		"NewCards":   stats.NewCards,
 		"Forecast":   forecast,
+		"Heatmap":    heatmap,
 	})
 }
 

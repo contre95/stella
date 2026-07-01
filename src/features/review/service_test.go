@@ -8,6 +8,7 @@ import (
 
 	"github.com/contre95/stella/src/infra/database"
 	"github.com/contre95/stella/src/srs"
+	"github.com/google/uuid"
 )
 
 func newTestService(t *testing.T, now time.Time) (*Service, *database.SqliteSRS) {
@@ -128,6 +129,62 @@ func TestGrade_PersistsAndSchedulesFuture(t *testing.T) {
 	}
 	if card.NextRep <= now.Unix() {
 		t.Errorf("card should be scheduled in the future, next_rep=%d now=%d", card.NextRep, now.Unix())
+	}
+}
+
+func addReview(t *testing.T, db *database.SqliteSRS, ts int64) {
+	t.Helper()
+	if err := db.AddReview(context.Background(), &srs.Review{
+		ID: uuid.NewString(), CardID: "c", Grade: 5, Timestamp: ts,
+	}); err != nil {
+		t.Fatalf("add review: %v", err)
+	}
+}
+
+func TestStudyHeatmap(t *testing.T) {
+	svc, db := newTestService(t, time.Now())
+	now := time.Now()
+	// Three reviews today, one three days ago (a non-adjacent day).
+	addReview(t, db, now.Unix())
+	addReview(t, db, now.Unix())
+	addReview(t, db, now.Unix())
+	addReview(t, db, now.Add(-72*time.Hour).Unix())
+
+	hm, err := svc.StudyHeatmap(context.Background())
+	if err != nil {
+		t.Fatalf("heatmap: %v", err)
+	}
+	if len(hm.Weeks) != 53 {
+		t.Fatalf("weeks got %d want 53", len(hm.Weeks))
+	}
+	for _, wk := range hm.Weeks {
+		if len(wk) != 7 {
+			t.Fatalf("week length got %d want 7", len(wk))
+		}
+	}
+	if hm.TotalDays != 2 {
+		t.Errorf("TotalDays got %d want 2", hm.TotalDays)
+	}
+	if hm.TotalReviews != 4 {
+		t.Errorf("TotalReviews got %d want 4", hm.TotalReviews)
+	}
+	if hm.CurrentStreak != 1 {
+		t.Errorf("CurrentStreak got %d want 1", hm.CurrentStreak)
+	}
+
+	var today *HeatCell
+	for wi := range hm.Weeks {
+		for di := range hm.Weeks[wi] {
+			if hm.Weeks[wi][di].Today {
+				today = &hm.Weeks[wi][di]
+			}
+		}
+	}
+	if today == nil {
+		t.Fatal("no cell marked Today")
+	}
+	if today.Count != 3 || today.Level != 1 {
+		t.Errorf("today cell got count=%d level=%d want count=3 level=1", today.Count, today.Level)
 	}
 }
 

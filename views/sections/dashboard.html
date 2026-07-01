@@ -89,4 +89,62 @@
       </div>
     </div>
   {{end}}
+
+  {{if .Heatmap}}
+    <div class="glass mt-5 rounded-2xl p-5">
+      <div class="mb-4 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Study activity</h2>
+        <span class="text-xs text-gray-400">
+          {{.Heatmap.TotalDays}} day{{if ne .Heatmap.TotalDays 1}}s{{end}} studied
+          {{if gt .Heatmap.CurrentStreak 0}}· <span class="text-gradient font-semibold">{{.Heatmap.CurrentStreak}}-day streak</span>{{end}}
+        </span>
+      </div>
+      <div class="overflow-x-auto pb-1">
+        <div style="min-width: max-content">
+          <div class="mb-1 flex gap-[3px]">
+            {{range .Heatmap.MonthLabels}}
+              <div class="heat-col text-[10px] leading-none text-gray-400">{{.}}</div>
+            {{end}}
+          </div>
+          <div class="flex gap-[3px]">
+            {{range .Heatmap.Weeks}}
+              <div class="flex flex-col gap-[3px]">
+                {{range .}}
+                  <div
+                    class="heat heat-l{{.Level}}{{if .Empty}} heat-empty{{end}}{{if .Today}} heat-today{{end}}"
+                    {{if not .Empty}}title="{{.Title}}"{{end}}
+                  ></div>
+                {{end}}
+              </div>
+            {{end}}
+          </div>
+        </div>
+      </div>
+      <div class="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-gray-400">
+        Less
+        <span class="heat heat-l0"></span>
+        <span class="heat heat-l1"></span>
+        <span class="heat heat-l2"></span>
+        <span class="heat heat-l3"></span>
+        <span class="heat heat-l4"></span>
+        More
+      </div>
+    </div>
+    <style>
+      .heat { width: 12px; height: 12px; border-radius: 3px; }
+      .heat-col { width: 12px; white-space: nowrap; }
+      .heat-empty { background: transparent !important; }
+      .heat-today { box-shadow: 0 0 0 2px rgba(236, 72, 153, 0.9); }
+      .heat-l0 { background: rgba(17, 24, 39, 0.08); }
+      .heat-l1 { background: #fbcfe8; }
+      .heat-l2 { background: #f472b6; }
+      .heat-l3 { background: #db2777; }
+      .heat-l4 { background: #9d174d; }
+      .dark .heat-l0 { background: rgba(255, 255, 255, 0.06); }
+      .dark .heat-l1 { background: #831843; }
+      .dark .heat-l2 { background: #be185d; }
+      .dark .heat-l3 { background: #db2777; }
+      .dark .heat-l4 { background: #f472b6; }
+    </style>
+  {{end}}
 </div>
