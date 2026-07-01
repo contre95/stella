@@ -52,6 +52,16 @@ func NewServer(name, version string, cardsService *cards.Service) *mcpsdk.Server
 		Description: "List all decks ordered by name.",
 	}, s.listDecks)
 
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name:        "delete_card",
+		Description: "Delete a fact (and all its sister cards) by fact ID. Use list_recent_cards to find the factId.",
+	}, s.deleteCard)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name:        "delete_deck",
+		Description: "Delete a deck and all its facts (which cascade to their cards) by deck ID. Use list_decks to find the deckId.",
+	}, s.deleteDeck)
+
 	return srv
 }
 
@@ -64,6 +74,8 @@ type CreateCardInput struct {
 	DeckID     string `json:"deckId" jsonschema:"Deck id to file the card under. Required — use list_decks or create_deck first."`
 	ImageFront string `json:"imageFront,omitempty" jsonschema:"URL of an image to show on the front side. Downloaded and stored locally."`
 	ImageBack  string `json:"imageBack,omitempty" jsonschema:"URL of an image to show on the back side. Downloaded and stored locally."`
+	AudioFront string `json:"audioFront,omitempty" jsonschema:"URL of an audio file to play on the front side. Downloaded and stored locally. Supports mp3, ogg, wav, m4a, webm."`
+	AudioBack  string `json:"audioBack,omitempty" jsonschema:"URL of an audio file to play on the back side. Downloaded and stored locally. Supports mp3, ogg, wav, m4a, webm."`
 }
 
 // CreateCardOutput is the result schema for create_card.
@@ -95,19 +107,22 @@ func (s *Server) createCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in C
 	}
 	imgBack, err := s.saveImageFromURL(in.ImageBack)
 	if err != nil {
-		if imgFront != "" {
-			os.Remove(filepath.Join(s.cards.ImagePath(), imgFront))
-		}
+		s.removeMedia(imgFront)
 		return nil, CreateCardOutput{}, fmt.Errorf("saving back image: %w", err)
 	}
-	fact, err := s.cards.AddFact(ctx, front, in.Back, in.DeckID, grade, in.Reverse, imgFront, imgBack)
+	audFront, err := s.saveAudioFromURL(in.AudioFront)
 	if err != nil {
-		if imgFront != "" {
-			os.Remove(filepath.Join(s.cards.ImagePath(), imgFront))
-		}
-		if imgBack != "" {
-			os.Remove(filepath.Join(s.cards.ImagePath(), imgBack))
-		}
+		s.removeMedia(imgFront, imgBack)
+		return nil, CreateCardOutput{}, fmt.Errorf("saving front audio: %w", err)
+	}
+	audBack, err := s.saveAudioFromURL(in.AudioBack)
+	if err != nil {
+		s.removeMedia(imgFront, imgBack, audFront)
+		return nil, CreateCardOutput{}, fmt.Errorf("saving back audio: %w", err)
+	}
+	fact, err := s.cards.AddFact(ctx, front, in.Back, in.DeckID, grade, in.Reverse, imgFront, imgBack, audFront, audBack)
+	if err != nil {
+		s.removeMedia(imgFront, imgBack, audFront, audBack)
 		return nil, CreateCardOutput{}, fmt.Errorf("creating card: %w", err)
 	}
 	added := 1
@@ -223,6 +238,109 @@ func (s *Server) listDecks(ctx context.Context, _ *mcpsdk.CallToolRequest, _ Lis
 		out.Decks = append(out.Decks, DeckSummary{DeckID: d.ID, Name: d.Name})
 	}
 	return nil, out, nil
+}
+
+// DeleteCardInput is the argument schema for delete_card.
+type DeleteCardInput struct {
+	FactID string `json:"factId" jsonschema:"Fact ID to delete (along with all its sister cards). Required."`
+}
+
+// DeleteCardOutput is the result schema for delete_card.
+type DeleteCardOutput struct {
+	Deleted bool   `json:"deleted"`
+	FactID  string `json:"factId"`
+}
+
+func (s *Server) deleteCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in DeleteCardInput) (*mcpsdk.CallToolResult, DeleteCardOutput, error) {
+	if strings.TrimSpace(in.FactID) == "" {
+		return nil, DeleteCardOutput{}, fmt.Errorf("factId is required")
+	}
+	if err := s.cards.DeleteFact(ctx, in.FactID); err != nil {
+		return nil, DeleteCardOutput{}, fmt.Errorf("deleting card: %w", err)
+	}
+	return nil, DeleteCardOutput{Deleted: true, FactID: in.FactID}, nil
+}
+
+// DeleteDeckInput is the argument schema for delete_deck.
+type DeleteDeckInput struct {
+	DeckID string `json:"deckId" jsonschema:"Deck ID to delete (along with all its facts and cards). Required."`
+}
+
+// DeleteDeckOutput is the result schema for delete_deck.
+type DeleteDeckOutput struct {
+	Deleted bool   `json:"deleted"`
+	DeckID  string `json:"deckId"`
+}
+
+func (s *Server) deleteDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in DeleteDeckInput) (*mcpsdk.CallToolResult, DeleteDeckOutput, error) {
+	if strings.TrimSpace(in.DeckID) == "" {
+		return nil, DeleteDeckOutput{}, fmt.Errorf("deckId is required")
+	}
+	if err := s.cards.DeleteDeck(ctx, in.DeckID); err != nil {
+		return nil, DeleteDeckOutput{}, fmt.Errorf("deleting deck: %w", err)
+	}
+	return nil, DeleteDeckOutput{Deleted: true, DeckID: in.DeckID}, nil
+}
+
+// removeMedia deletes named media files from the media directory, silently
+// ignoring missing files and empty names.
+func (s *Server) removeMedia(filenames ...string) {
+	for _, f := range filenames {
+		if f != "" {
+			os.Remove(filepath.Join(s.cards.ImagePath(), f))
+		}
+	}
+}
+
+// saveAudioFromURL downloads a URL and saves it as a local audio file.
+// Returns the filename, or empty string if url is empty.
+func (s *Server) saveAudioFromURL(url string) (string, error) {
+	if url == "" {
+		return "", nil
+	}
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("downloading audio: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("downloading audio: HTTP %s", resp.Status)
+	}
+	var ext string
+	switch resp.Header.Get("Content-Type") {
+	case "audio/mpeg":
+		ext = ".mp3"
+	case "audio/ogg":
+		ext = ".ogg"
+	case "audio/wav", "audio/x-wav":
+		ext = ".wav"
+	case "audio/mp4", "audio/m4a", "audio/x-m4a":
+		ext = ".m4a"
+	case "audio/webm":
+		ext = ".webm"
+	case "audio/aac":
+		ext = ".aac"
+	case "audio/flac":
+		ext = ".flac"
+	default:
+		return "", fmt.Errorf("unsupported audio type: %s", resp.Header.Get("Content-Type"))
+	}
+	imagesPath := s.cards.ImagePath()
+	if err := os.MkdirAll(imagesPath, 0o755); err != nil {
+		return "", err
+	}
+	filename := uuid.NewString() + ext
+	dest := filepath.Join(imagesPath, filename)
+	f, err := os.Create(dest)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		os.Remove(dest)
+		return "", err
+	}
+	return filename, nil
 }
 
 // saveImageFromURL downloads a URL and saves it as a local image file.

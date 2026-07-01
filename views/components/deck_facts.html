@@ -42,6 +42,24 @@
         class="glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"
       />
     </label>
+    <label class="block">
+      <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Front audio <span class="font-normal normal-case">(optional)</span></span>
+      <input
+        type="file"
+        name="audio_front"
+        accept=".mp3,.ogg,.wav,.m4a,.webm,.aac,.flac"
+        class="glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"
+      />
+    </label>
+    <label class="block">
+      <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Back audio <span class="font-normal normal-case">(optional)</span></span>
+      <input
+        type="file"
+        name="audio_back"
+        accept=".mp3,.ogg,.wav,.m4a,.webm,.aac,.flac"
+        class="glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"
+      />
+    </label>
   </div>
   <div class="mt-4 flex items-center justify-between">
     <label class="flex items-center gap-2">
@@ -82,10 +100,13 @@
             hx-target="#deck-facts" hx-swap="innerHTML"
             hx-confirm="Delete this fact and its cards?">Delete</button>
         </div>
-        <div class="swipe-content flex px-4 py-3 gap-4 bg-white dark:bg-gray-950 hover:bg-white/70 dark:hover:bg-white/[0.04] transition-colors" ontouchstart="clTouchStart(event,this)" ontouchmove="clTouchMove(event,this)" ontouchend="clTouchEnd(event,this)">
+        <div class="swipe-content flex px-4 py-3 gap-4 bg-white dark:bg-gray-950 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" ontouchstart="clTouchStart(event,this)" ontouchmove="clTouchMove(event,this)" ontouchend="clTouchEnd(event,this)" onmousedown="clMouseDown(event,this)">
           <div class="w-1/3 min-w-0">
             {{if $fact.Fact.ImageFront}}
               <img src="/images/{{$fact.Fact.ImageFront}}" alt="" class="mb-1.5 h-16 w-full rounded object-cover" />
+            {{end}}
+            {{if $fact.Fact.AudioFront}}
+              <audio controls src="/audio/{{$fact.Fact.AudioFront}}" class="mb-1.5 h-8 w-full" preload="none"></audio>
             {{end}}
             <div class="font-medium text-gray-900 dark:text-gray-100 line-clamp-2 break-words">{{$fact.Fact.Front}}</div>
             {{if $fact.DeckName}}
@@ -99,6 +120,9 @@
           <div class="w-1/3 min-w-0 text-gray-500 dark:text-gray-400">
             {{if $fact.Fact.ImageBack}}
               <img src="/images/{{$fact.Fact.ImageBack}}" alt="" class="mb-1.5 h-16 w-full rounded object-cover" />
+            {{end}}
+            {{if $fact.Fact.AudioBack}}
+              <audio controls src="/audio/{{$fact.Fact.AudioBack}}" class="mb-1.5 h-8 w-full" preload="none"></audio>
             {{end}}
             <div class="line-clamp-2 break-words">{{$fact.Fact.Back}}</div>
           </div>
@@ -120,18 +144,16 @@
   </div>
   <script>
   (function(){
-    var REVEAL = 72;
     var SD = {};
-    function content(id){ return document.querySelector('.swipe-row[data-idx="'+id+'"] .swipe-content'); }
     function resetAll(){
-      document.querySelectorAll('.swipe-content[style]').forEach(function(e){
-        if(e.parentNode.dataset.idx){ e.style.transform = ''; e.style.transition = 'transform 0.2s ease'; }
+      document.querySelectorAll('.swipe-content').forEach(function(e){
+        e.style.transform = ''; e.style.transition = 'transform 0.2s ease';
       });
     }
     window.clTouchStart = function(e,node){
       var t = e.touches[0];
       var idx = node.parentNode.dataset.idx;
-      SD[idx] = { startX: t.clientX, startY: t.clientY, startTransform: node.style.transform || '' };
+      SD[idx] = { startX: t.clientX, startY: t.clientY };
       node.style.transition = 'none';
     };
     window.clTouchMove = function(e,node){
@@ -146,11 +168,7 @@
       var idx = node.parentNode.dataset.idx;
       var d = SD[idx]; if(!d) return;
       delete SD[idx];
-      var dx = e.changedTouches[0].clientX - d.startX;
-      if(Math.abs(dx) < 40){ node.style.transform = ''; node.style.transition = 'transform 0.2s ease'; return; }
-      var snap = dx > 0 ? REVEAL : -REVEAL;
-      node.style.transition = 'transform 0.2s ease';
-      node.style.transform = 'translateX(' + snap + 'px)';
+      clSnapRow(node, e.changedTouches[0].clientX - d.startX);
     };
     document.addEventListener('click',function(e){
       if(!e.target.closest('.swipe-row')) resetAll();

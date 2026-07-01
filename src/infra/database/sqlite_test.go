@@ -20,10 +20,17 @@ func newTestDB(t *testing.T) *SqliteSRS {
 	return db
 }
 
-func addFact(t *testing.T, db *SqliteSRS, id string) {
+func addDeck(t *testing.T, db *SqliteSRS, id string) {
+	t.Helper()
+	if err := db.AddDeck(context.Background(), &srs.Deck{ID: id, Name: "deck-" + id, Color: "#000"}); err != nil {
+		t.Fatalf("add deck: %v", err)
+	}
+}
+
+func addFact(t *testing.T, db *SqliteSRS, id, deckID string) {
 	t.Helper()
 	ctx := context.Background()
-	if err := db.AddFact(ctx, &srs.Fact{ID: id, Front: "f-" + id, Back: "b-" + id, Created: 1, Modified: 1}); err != nil {
+	if err := db.AddFact(ctx, &srs.Fact{ID: id, Front: "f-" + id, Back: "b-" + id, DeckID: deckID, Created: 1, Modified: 1}); err != nil {
 		t.Fatalf("add fact: %v", err)
 	}
 }
@@ -38,8 +45,9 @@ func addCard(t *testing.T, db *SqliteSRS, c *srs.Card) {
 func TestFactCardRoundTrip(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
-	addFact(t, db, "fact1")
-	card := &srs.Card{ID: "c1", FactID: "fact1", View: srs.ViewForward, Grade: srs.GradeUnseen, Easiness: 2.5, NextRep: -1, LastRep: -1, Active: true}
+	addDeck(t, db, "d1")
+	addFact(t, db, "fact1", "d1")
+	card := &srs.Card{ID: "c1", FactID: "fact1", DeckID: "d1", View: srs.ViewForward, Grade: srs.GradeUnseen, Easiness: 2.5, NextRep: -1, LastRep: -1, Active: true}
 	addCard(t, db, card)
 
 	got, err := db.GetCard(ctx, "c1")
@@ -73,16 +81,17 @@ func TestGetCardNotFound(t *testing.T) {
 func TestQueueQueries(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
-	addFact(t, db, "f1")
-	addFact(t, db, "f2")
-	addFact(t, db, "f3")
+	addDeck(t, db, "d1")
+	addFact(t, db, "f1", "d1")
+	addFact(t, db, "f2", "d1")
+	addFact(t, db, "f3", "d1")
 
 	// Unseen card.
-	addCard(t, db, &srs.Card{ID: "unseen", FactID: "f1", View: srs.ViewForward, Grade: srs.GradeUnseen, Easiness: 2.5, Active: true})
+	addCard(t, db, &srs.Card{ID: "unseen", FactID: "f1", DeckID: "d1", View: srs.ViewForward, Grade: srs.GradeUnseen, Easiness: 2.5, Active: true})
 	// Retained card due in the past.
-	addCard(t, db, &srs.Card{ID: "due", FactID: "f2", View: srs.ViewForward, Grade: 4, Easiness: 2.5, NextRep: 500, LastRep: 100, Active: true})
+	addCard(t, db, &srs.Card{ID: "due", FactID: "f2", DeckID: "d1", View: srs.ViewForward, Grade: 4, Easiness: 2.5, NextRep: 500, LastRep: 100, Active: true})
 	// Retained card due in the future.
-	addCard(t, db, &srs.Card{ID: "future", FactID: "f3", View: srs.ViewForward, Grade: 4, Easiness: 2.5, NextRep: 5000, LastRep: 100, Active: true})
+	addCard(t, db, &srs.Card{ID: "future", FactID: "f3", DeckID: "d1", View: srs.ViewForward, Grade: 4, Easiness: 2.5, NextRep: 5000, LastRep: 100, Active: true})
 
 	if n, _ := db.ActiveCount(ctx); n != 3 {
 		t.Errorf("ActiveCount got %d want 3", n)
@@ -111,12 +120,13 @@ func TestQueueQueries(t *testing.T) {
 func TestRelearnVsNewMemorising(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
-	addFact(t, db, "f1")
-	addFact(t, db, "f2")
+	addDeck(t, db, "d1")
+	addFact(t, db, "f1", "d1")
+	addFact(t, db, "f2", "d1")
 	// grade 1, lapses>0 => relearn.
-	addCard(t, db, &srs.Card{ID: "relearn", FactID: "f1", View: srs.ViewForward, Grade: 1, Easiness: 2.5, Lapses: 2, Active: true})
+	addCard(t, db, &srs.Card{ID: "relearn", FactID: "f1", DeckID: "d1", View: srs.ViewForward, Grade: 1, Easiness: 2.5, Lapses: 2, Active: true})
 	// grade 1, lapses=0 => new memorising.
-	addCard(t, db, &srs.Card{ID: "newmem", FactID: "f2", View: srs.ViewForward, Grade: 1, Easiness: 2.5, Lapses: 0, Active: true})
+	addCard(t, db, &srs.Card{ID: "newmem", FactID: "f2", DeckID: "d1", View: srs.ViewForward, Grade: 1, Easiness: 2.5, Lapses: 0, Active: true})
 
 	relearn, _ := db.CardsToRelearn(ctx, 1, "-interval", nil)
 	if len(relearn) != 1 || relearn[0].ID != "relearn" {
@@ -131,10 +141,11 @@ func TestRelearnVsNewMemorising(t *testing.T) {
 func TestSisterCardCountAndCascade(t *testing.T) {
 	db := newTestDB(t)
 	ctx := context.Background()
-	addFact(t, db, "f1")
+	addDeck(t, db, "d1")
+	addFact(t, db, "f1", "d1")
 	// Two sister cards of the same fact, both retained and due the same day.
-	addCard(t, db, &srs.Card{ID: "fwd", FactID: "f1", View: srs.ViewForward, Grade: 4, Easiness: 2.5, NextRep: 1000, Active: true})
-	addCard(t, db, &srs.Card{ID: "rev", FactID: "f1", View: srs.ViewReverse, Grade: 4, Easiness: 2.5, NextRep: 1500, Active: true})
+	addCard(t, db, &srs.Card{ID: "fwd", FactID: "f1", DeckID: "d1", View: srs.ViewForward, Grade: 4, Easiness: 2.5, NextRep: 1000, Active: true})
+	addCard(t, db, &srs.Card{ID: "rev", FactID: "f1", DeckID: "d1", View: srs.ViewReverse, Grade: 4, Easiness: 2.5, NextRep: 1500, Active: true})
 
 	// From fwd's perspective, the reverse sister is scheduled in [1000, 2000).
 	n, err := db.SisterCardCountScheduledBetween(ctx, "f1", "fwd", 1000, 2000)

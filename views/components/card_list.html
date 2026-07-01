@@ -24,6 +24,9 @@
             {{if $fact.Fact.ImageFront}}
               <img src="/images/{{$fact.Fact.ImageFront}}" alt="" class="mb-1.5 h-16 w-full rounded object-cover" />
             {{end}}
+            {{if $fact.Fact.AudioFront}}
+              <audio controls src="/audio/{{$fact.Fact.AudioFront}}" class="mb-1.5 h-8 w-full" preload="none"></audio>
+            {{end}}
             <div class="font-medium text-gray-900 dark:text-gray-100 line-clamp-2 break-words">{{$fact.Fact.Front}}</div>
             {{if $fact.DeckName}}
               <div class="deck-badge mt-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset"
@@ -36,6 +39,9 @@
           <div class="w-1/3 min-w-0 text-gray-500 dark:text-gray-400">
             {{if $fact.Fact.ImageBack}}
               <img src="/images/{{$fact.Fact.ImageBack}}" alt="" class="mb-1.5 h-16 w-full rounded object-cover" />
+            {{end}}
+            {{if $fact.Fact.AudioBack}}
+              <audio controls src="/audio/{{$fact.Fact.AudioBack}}" class="mb-1.5 h-8 w-full" preload="none"></audio>
             {{end}}
             <div class="line-clamp-2 break-words">{{$fact.Fact.Back}}</div>
           </div>
@@ -57,25 +63,12 @@
   </div>
   <script>
   (function(){
-    var REVEAL = 72;
     var SD = {};
-    var MD = null; // mouse drag state
-
     function resetAll(){
       document.querySelectorAll('.swipe-content').forEach(function(e){
-        var row = e.closest('.swipe-row');
-        if(row && row.dataset.idx){ e.style.transform = ''; e.style.transition = 'transform 0.2s ease'; }
+        e.style.transform = ''; e.style.transition = 'transform 0.2s ease';
       });
     }
-
-    function snapRow(node, dx) {
-      if(Math.abs(dx) < 40){ node.style.transform = ''; node.style.transition = 'transform 0.2s ease'; return; }
-      var snap = dx > 0 ? REVEAL : -REVEAL;
-      node.style.transition = 'transform 0.2s ease';
-      node.style.transform = 'translateX(' + snap + 'px)';
-    }
-
-    // Touch
     window.clTouchStart = function(e,node){
       var t = e.touches[0];
       var idx = node.closest('.swipe-row').dataset.idx;
@@ -95,32 +88,8 @@
       var idx = node.closest('.swipe-row').dataset.idx;
       var d = SD[idx]; if(!d) return;
       delete SD[idx];
-      snapRow(node, e.changedTouches[0].clientX - d.startX);
+      clSnapRow(node, e.changedTouches[0].clientX - d.startX);
     };
-
-    // Mouse
-    window.clMouseDown = function(e,node){
-      if(e.button !== 0) return;
-      MD = { node: node, startX: e.clientX, moved: false };
-      node.style.transition = 'none';
-      node.style.userSelect = 'none';
-    };
-    document.addEventListener('mousemove', function(e){
-      if(!MD) return;
-      var dx = e.clientX - MD.startX;
-      if(Math.abs(dx) > 4) MD.moved = true;
-      if(MD.moved) MD.node.style.transform = 'translateX(' + dx + 'px)';
-    });
-    document.addEventListener('mouseup', function(e){
-      if(!MD) return;
-      var node = MD.node;
-      var dx = e.clientX - MD.startX;
-      var moved = MD.moved;
-      node.style.userSelect = '';
-      MD = null;
-      if(moved) snapRow(node, dx);
-    });
-
     document.addEventListener('click',function(e){
       if(!e.target.closest('.swipe-row')) resetAll();
     });

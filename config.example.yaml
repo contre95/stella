@@ -7,7 +7,7 @@ server:
   bodyLimit: 10485760
 mcp:
   # Port for the MCP HTTP server (StreamableHTTP transport).
-  port: 8859
+  port: 8858
 logger:
   level: info
   debug: false
@@ -22,3 +22,6 @@ review:
   randomiseScheduledCards: false
   # Shuffle the order unseen cards are introduced.
   randomiseNewCards: false
+cards:
+  # Automatically play audio when a card (front or back) is shown.
+  autoplayAudio: true

@@ -12,7 +12,7 @@ func defaultConfig() Config {
 			BodyLimit: 10 * 1024 * 1024,
 		},
 		MCP: MCP{
-			Port: 8859,
+			Port: 8858,
 		},
 		Logger: Logger{
 			Level: "info",
@@ -24,6 +24,9 @@ func defaultConfig() Config {
 			MaxScheduledIntervalDays: 0,
 			RandomiseScheduledCards:  false,
 			RandomiseNewCards:        false,
+		},
+		Cards: Cards{
+			AutoplayAudio: true,
 		},
 	}
 }

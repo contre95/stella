@@ -43,32 +43,13 @@ func NewSqliteSRS(path string) (*SqliteSRS, error) {
 	if err := s.createTables(); err != nil {
 		return nil, err
 	}
-	if err := s.migrate(); err != nil {
-		return nil, err
-	}
 	return s, nil
 }
 
 // Close releases the database handle.
 func (s *SqliteSRS) Close() error { return s.db.Close() }
 
-// migrate applies additive schema changes that cannot be expressed with
-// CREATE TABLE IF NOT EXISTS (e.g., new columns on existing tables).
-func (s *SqliteSRS) migrate() error {
-	for _, col := range []string{"image_front", "image_back"} {
-		_, err := s.db.Exec(`ALTER TABLE facts ADD COLUMN ` + col + ` TEXT NOT NULL DEFAULT ''`)
-		if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-			return fmt.Errorf("migrating facts.%s: %w", col, err)
-		}
-	}
-	for _, col := range []string{"color", "description"} {
-		_, err := s.db.Exec(`ALTER TABLE decks ADD COLUMN ` + col + ` TEXT NOT NULL DEFAULT ''`)
-		if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-			return fmt.Errorf("migrating decks.%s: %w", col, err)
-		}
-	}
-	return nil
-}
+
 
 func (s *SqliteSRS) createTables() error {
 	const schema = `
@@ -80,20 +61,23 @@ CREATE TABLE IF NOT EXISTS decks (
 );
 
 CREATE TABLE IF NOT EXISTS facts (
-	id         TEXT PRIMARY KEY,
-	front      TEXT NOT NULL,
-	back       TEXT NOT NULL,
+	id          TEXT PRIMARY KEY,
+	front       TEXT NOT NULL,
+	back        TEXT NOT NULL,
 	image_front TEXT NOT NULL DEFAULT '',
 	image_back  TEXT NOT NULL DEFAULT '',
-	deck_id    TEXT NOT NULL DEFAULT '',
-	created    INTEGER NOT NULL,
-	modified   INTEGER NOT NULL
+	audio_front TEXT NOT NULL DEFAULT '',
+	audio_back  TEXT NOT NULL DEFAULT '',
+	deck_id     TEXT NOT NULL,
+	created     INTEGER NOT NULL,
+	modified    INTEGER NOT NULL,
+	FOREIGN KEY (deck_id) REFERENCES decks(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS cards (
 	id                   TEXT PRIMARY KEY,
 	fact_id              TEXT NOT NULL,
-	deck_id              TEXT NOT NULL DEFAULT '',
+	deck_id              TEXT NOT NULL,
 	card_view            TEXT NOT NULL,
 	grade                INTEGER NOT NULL,
 	easiness             REAL NOT NULL,
@@ -105,7 +89,8 @@ CREATE TABLE IF NOT EXISTS cards (
 	last_rep             INTEGER NOT NULL,
 	next_rep             INTEGER NOT NULL,
 	active               INTEGER NOT NULL,
-	FOREIGN KEY (fact_id) REFERENCES facts(id) ON DELETE CASCADE
+	FOREIGN KEY (fact_id) REFERENCES facts(id) ON DELETE CASCADE,
+	FOREIGN KEY (deck_id) REFERENCES decks(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_cards_due  ON cards(active, grade, next_rep);
@@ -134,17 +119,17 @@ CREATE INDEX IF NOT EXISTS idx_reviews_card ON reviews(card_id);
 
 func (s *SqliteSRS) AddFact(ctx context.Context, f *srs.Fact) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO facts (id, front, back, image_front, image_back, deck_id, created, modified)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		f.ID, f.Front, f.Back, f.ImageFront, f.ImageBack, f.DeckID, f.Created, f.Modified)
+		`INSERT INTO facts (id, front, back, image_front, image_back, audio_front, audio_back, deck_id, created, modified)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		f.ID, f.Front, f.Back, f.ImageFront, f.ImageBack, f.AudioFront, f.AudioBack, f.DeckID, f.Created, f.Modified)
 	return err
 }
 
 func (s *SqliteSRS) GetFact(ctx context.Context, id string) (*srs.Fact, error) {
 	var f srs.Fact
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, front, back, image_front, image_back, deck_id, created, modified FROM facts WHERE id=?`, id).
-		Scan(&f.ID, &f.Front, &f.Back, &f.ImageFront, &f.ImageBack, &f.DeckID, &f.Created, &f.Modified)
+		`SELECT id, front, back, image_front, image_back, audio_front, audio_back, deck_id, created, modified FROM facts WHERE id=?`, id).
+		Scan(&f.ID, &f.Front, &f.Back, &f.ImageFront, &f.ImageBack, &f.AudioFront, &f.AudioBack, &f.DeckID, &f.Created, &f.Modified)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, srs.ErrNotFound
 	}
@@ -156,7 +141,7 @@ func (s *SqliteSRS) GetFact(ctx context.Context, id string) (*srs.Fact, error) {
 
 func (s *SqliteSRS) ListFacts(ctx context.Context) ([]*srs.Fact, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, front, back, image_front, image_back, deck_id, created, modified FROM facts ORDER BY created DESC`)
+		`SELECT id, front, back, image_front, image_back, audio_front, audio_back, deck_id, created, modified FROM facts ORDER BY created DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +149,7 @@ func (s *SqliteSRS) ListFacts(ctx context.Context) ([]*srs.Fact, error) {
 	var facts []*srs.Fact
 	for rows.Next() {
 		var f srs.Fact
-		if err := rows.Scan(&f.ID, &f.Front, &f.Back, &f.ImageFront, &f.ImageBack, &f.DeckID, &f.Created, &f.Modified); err != nil {
+		if err := rows.Scan(&f.ID, &f.Front, &f.Back, &f.ImageFront, &f.ImageBack, &f.AudioFront, &f.AudioBack, &f.DeckID, &f.Created, &f.Modified); err != nil {
 			return nil, err
 		}
 		facts = append(facts, &f)
@@ -174,8 +159,8 @@ func (s *SqliteSRS) ListFacts(ctx context.Context) ([]*srs.Fact, error) {
 
 func (s *SqliteSRS) UpdateFact(ctx context.Context, f *srs.Fact) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE facts SET front=?, back=?, image_front=?, image_back=?, deck_id=?, modified=? WHERE id=?`,
-		f.Front, f.Back, f.ImageFront, f.ImageBack, f.DeckID, f.Modified, f.ID)
+		`UPDATE facts SET front=?, back=?, image_front=?, image_back=?, audio_front=?, audio_back=?, deck_id=?, modified=? WHERE id=?`,
+		f.Front, f.Back, f.ImageFront, f.ImageBack, f.AudioFront, f.AudioBack, f.DeckID, f.Modified, f.ID)
 	return err
 }
 
@@ -286,7 +271,7 @@ func (s *SqliteSRS) DeleteDeck(ctx context.Context, id string) error {
 
 func (s *SqliteSRS) ListFactsByDeck(ctx context.Context, deckID string) ([]*srs.Fact, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, front, back, image_front, image_back, deck_id, created, modified FROM facts WHERE deck_id=? ORDER BY created DESC`, deckID)
+		`SELECT id, front, back, image_front, image_back, audio_front, audio_back, deck_id, created, modified FROM facts WHERE deck_id=? ORDER BY created DESC`, deckID)
 	if err != nil {
 		return nil, err
 	}
@@ -294,7 +279,7 @@ func (s *SqliteSRS) ListFactsByDeck(ctx context.Context, deckID string) ([]*srs.
 	var facts []*srs.Fact
 	for rows.Next() {
 		var f srs.Fact
-		if err := rows.Scan(&f.ID, &f.Front, &f.Back, &f.ImageFront, &f.ImageBack, &f.DeckID, &f.Created, &f.Modified); err != nil {
+		if err := rows.Scan(&f.ID, &f.Front, &f.Back, &f.ImageFront, &f.ImageBack, &f.AudioFront, &f.AudioBack, &f.DeckID, &f.Created, &f.Modified); err != nil {
 			return nil, err
 		}
 		facts = append(facts, &f)

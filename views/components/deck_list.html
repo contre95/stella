@@ -1,7 +1,7 @@
 {{if .Decks}}
   <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
     {{range .Decks}}
-      <div class="deck-card glass lift rounded-2xl p-4">
+      <div class="deck-card glass lift rounded-2xl p-4" style="box-shadow:none">
         <div class="flex items-start justify-between gap-3">
           <div
             class="cursor-pointer flex-1 hover:text-pink-600 dark:hover:text-pink-400 transition-colors"
@@ -40,17 +40,13 @@
               hx-swap="innerHTML"
               hx-trigger="confirmed"
               onclick="(function(btn) {
-                Swal.fire({
+                swalGlass.fire({
                   title: 'Delete deck?',
                   text: 'This will permanently delete the deck and all its cards.',
                   icon: 'warning',
                   showCancelButton: true,
-                  confirmButtonColor: '#db2777',
-                  cancelButtonColor: '#6b7280',
                   confirmButtonText: 'Yes, delete it',
                   cancelButtonText: 'Cancel',
-                  background: document.documentElement.classList.contains('dark') ? '#111827' : '#ffffff',
-                  color: document.documentElement.classList.contains('dark') ? '#f9fafb' : '#111827'
                 }).then(function(result) {
                   if (result.isConfirmed) htmx.trigger(btn, 'confirmed');
                 });

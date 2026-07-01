@@ -49,6 +49,7 @@ func NewServer(cm *config.Manager, registrars ...RouteRegistrar) *Server {
 	app.Use(HTMXMiddleware(), LogRequestsMiddleware())
 	app.Static("/", "./public")
 	app.Static("/images", cm.Get().ImagePath)
+	app.Static("/audio", cm.Get().ImagePath)
 	app.Get("/health", func(c *fiber.Ctx) error { return c.SendString("OK") })
 
 	for _, r := range registrars {

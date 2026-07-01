@@ -232,6 +232,61 @@
     }
     nav .nav-link.nav-active { color: #db2777; font-weight: 600; }
     .dark nav .nav-link.nav-active { color: #f472b6; }
+
+    /* ── SweetAlert2 glass theme ──────────────────────────────── */
+    .swal2-container { backdrop-filter: blur(6px) !important; -webkit-backdrop-filter: blur(6px) !important; }
+    .swal2-popup {
+      font-family: "Inter", ui-sans-serif, system-ui, sans-serif !important;
+      background: rgba(255,255,255,0.88) !important;
+      border: 1px solid rgba(255,255,255,0.72) !important;
+      box-shadow: 0 24px 64px rgba(24,16,48,0.18) !important;
+      backdrop-filter: blur(28px) saturate(160%) !important;
+      -webkit-backdrop-filter: blur(28px) saturate(160%) !important;
+      border-radius: 1.25rem !important;
+      padding: 2rem !important;
+    }
+    html.dark .swal2-popup {
+      background: rgba(17,16,28,0.90) !important;
+      border-color: rgba(255,255,255,0.1) !important;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.6) !important;
+    }
+    .swal2-title {
+      font-size: 1.1rem !important; font-weight: 700 !important;
+      color: #111827 !important; letter-spacing: -0.01em !important;
+      padding: 0 0 0.125rem !important;
+    }
+    html.dark .swal2-title { color: #f9fafb !important; }
+    .swal2-html-container {
+      font-size: 0.875rem !important; color: #6b7280 !important;
+      margin: 0.25rem 0 0 !important; line-height: 1.5 !important;
+    }
+    html.dark .swal2-html-container { color: #9ca3af !important; }
+    .swal2-actions { gap: 0.5rem !important; margin-top: 1.5rem !important; padding: 0 !important; }
+    .swal2-confirm.swal2-styled {
+      background-image: linear-gradient(135deg,#f472b6 0%,#db2777 55%,#be185d 100%) !important;
+      background-color: transparent !important;
+      box-shadow: 0 8px 20px -6px rgba(219,39,119,0.55) !important;
+      border-radius: 0.75rem !important; padding: 0.5rem 1.25rem !important;
+      font-size: 0.875rem !important; font-weight: 600 !important;
+      border: none !important; transition: filter .15s ease, box-shadow .15s ease !important;
+    }
+    .swal2-confirm.swal2-styled:hover { filter: brightness(1.07) !important; box-shadow: 0 10px 24px -6px rgba(219,39,119,0.65) !important; }
+    .swal2-cancel.swal2-styled {
+      background: rgba(255,255,255,0.65) !important;
+      border: 1px solid rgba(17,24,39,0.12) !important;
+      color: #374151 !important; border-radius: 0.75rem !important;
+      padding: 0.5rem 1.25rem !important; font-size: 0.875rem !important;
+      font-weight: 600 !important; transition: background .15s ease !important;
+    }
+    .swal2-cancel.swal2-styled:hover { background: rgba(255,255,255,0.88) !important; }
+    html.dark .swal2-cancel.swal2-styled {
+      background: rgba(255,255,255,0.07) !important;
+      border-color: rgba(255,255,255,0.12) !important; color: #e5e7eb !important;
+    }
+    html.dark .swal2-cancel.swal2-styled:hover { background: rgba(255,255,255,0.13) !important; }
+    .swal2-icon { width: 3.5rem !important; height: 3.5rem !important; margin: 0 auto 1rem !important; }
+    .swal2-icon .swal2-icon-content { font-size: 2rem !important; }
+    .swal2-icon.swal2-warning { border-color: #f59e0b !important; color: #f59e0b !important; }
   </style>
   <script>
     if (localStorage.getItem("theme") === "dark") {

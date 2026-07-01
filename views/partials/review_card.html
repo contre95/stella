@@ -44,7 +44,7 @@
     <!-- The card itself (gets drag-transformed) -->
     <div
       id="flip-card"
-      class="absolute inset-0 cursor-pointer shadow-[0_24px_60px_-15px_rgba(24,16,48,0.4)]"
+      class="absolute inset-0 cursor-pointer"
       style="will-change: transform;"
     >
       <!-- Front face (question) -->
@@ -63,6 +63,22 @@
         {{if .Fact.ImageFront}}
         <div class="relative z-10 flex-1 flex items-center justify-center min-h-0 w-full mb-3">
           <img src="/images/{{.Fact.ImageFront}}" alt="" class="max-h-full w-auto max-w-full rounded-lg object-contain pointer-events-none" />
+        </div>
+        {{end}}
+        {{$frontAudio := ""}}{{if eq .Card.View "forward"}}{{$frontAudio = .Fact.AudioFront}}{{else}}{{$frontAudio = .Fact.AudioBack}}{{end}}
+        {{if $frontAudio}}
+        <div id="player-front" class="relative z-10 mt-3 w-full max-w-xs mx-auto flex items-center gap-3 rounded-2xl px-3.5 py-2.5 bg-white/50 border border-white/60 dark:bg-white/[0.06] dark:border-white/[0.10]" style="backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);">
+          <audio id="audio-front" src="/audio/{{$frontAudio}}" preload="auto"></audio>
+          <button type="button" id="play-btn-front" class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white" style="background:linear-gradient(135deg,#f472b6 0%,#db2777 55%,#be185d 100%);box-shadow:0 4px 12px -2px rgba(219,39,119,0.45);"></button>
+          <div class="flex-1 flex flex-col gap-1.5 min-w-0">
+            <div id="track-front" class="h-1.5 rounded-full cursor-pointer overflow-hidden bg-black/[0.07] dark:bg-white/[0.12]">
+              <div id="fill-front" class="h-full rounded-full pointer-events-none" style="width:0%;background:linear-gradient(90deg,#f472b6,#db2777);transition:width 0.1s linear;"></div>
+            </div>
+            <div class="flex justify-between">
+              <span id="cur-front" class="text-xs font-medium text-gray-400 dark:text-gray-500">0:00</span>
+              <span id="dur-front" class="text-xs font-medium text-gray-400 dark:text-gray-500">-:--</span>
+            </div>
+          </div>
         </div>
         {{end}}
         <p class="relative z-10 text-center text-xl font-medium leading-relaxed text-gray-800 dark:text-gray-100 sm:text-2xl">
@@ -84,6 +100,22 @@
         {{if .Fact.ImageBack}}
         <div class="relative z-10 flex-1 flex items-center justify-center min-h-0 w-full mb-3">
           <img src="/images/{{.Fact.ImageBack}}" alt="" class="max-h-full w-auto max-w-full rounded-lg object-contain pointer-events-none" />
+        </div>
+        {{end}}
+        {{$backAudio := ""}}{{if eq .Card.View "forward"}}{{$backAudio = .Fact.AudioBack}}{{else}}{{$backAudio = .Fact.AudioFront}}{{end}}
+        {{if $backAudio}}
+        <div id="player-back" class="relative z-10 mt-3 w-full max-w-xs mx-auto flex items-center gap-3 rounded-2xl px-3.5 py-2.5 bg-white/50 border border-white/60 dark:bg-white/[0.06] dark:border-white/[0.10]" style="backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);">
+          <audio id="audio-back" src="/audio/{{$backAudio}}" preload="auto"></audio>
+          <button type="button" id="play-btn-back" class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white" style="background:linear-gradient(135deg,#f472b6 0%,#db2777 55%,#be185d 100%);box-shadow:0 4px 12px -2px rgba(219,39,119,0.45);"></button>
+          <div class="flex-1 flex flex-col gap-1.5 min-w-0">
+            <div id="track-back" class="h-1.5 rounded-full cursor-pointer overflow-hidden bg-black/[0.07] dark:bg-white/[0.12]">
+              <div id="fill-back" class="h-full rounded-full pointer-events-none" style="width:0%;background:linear-gradient(90deg,#f472b6,#db2777);transition:width 0.1s linear;"></div>
+            </div>
+            <div class="flex justify-between">
+              <span id="cur-back" class="text-xs font-medium text-gray-400 dark:text-gray-500">0:00</span>
+              <span id="dur-back" class="text-xs font-medium text-gray-400 dark:text-gray-500">-:--</span>
+            </div>
+          </div>
         </div>
         {{end}}
         <p class="relative z-10 text-center text-xl font-medium leading-relaxed text-gray-900 dark:text-white sm:text-2xl">
@@ -134,6 +166,7 @@
     id="show-question-btn"
     data-label="{{if eq .Card.View "forward"}}Question{{else}}Reverse{{end}}"
     data-image="{{if eq .Card.View "forward"}}{{.Fact.ImageFront}}{{else}}{{.Fact.ImageBack}}{{end}}"
+    data-audio="{{if eq .Card.View "forward"}}{{.Fact.AudioFront}}{{else}}{{.Fact.AudioBack}}{{end}}"
     data-text="{{if eq .Card.View "forward"}}{{.Fact.Front}}{{else}}{{.Fact.Back}}{{end}}"
     class="hidden mt-2 shrink-0 w-full text-center text-xs font-medium text-gray-400 hover:text-pink-500 transition-colors dark:text-gray-500 dark:hover:text-pink-400"
   >Show question</button>
@@ -155,11 +188,64 @@
     var revealed    = false;
     var dragging    = false;
     var startX = 0, startY = 0, curDX = 0, curDY = 0;
+    var audioFront  = document.getElementById('audio-front');
+    var audioBack   = document.getElementById('audio-back');
+
+    var PLAY_ICON  = '<svg viewBox="0 0 10 10" fill="currentColor" style="width:10px;height:10px;margin-left:1px"><path d="M2 1.5v7l6-3.5z"/></svg>';
+    var PAUSE_ICON = '<svg viewBox="0 0 10 10" fill="currentColor" style="width:10px;height:10px"><rect x="1.5" y="1" width="2.5" height="8" rx="0.8"/><rect x="6" y="1" width="2.5" height="8" rx="0.8"/></svg>';
+
+    function initPlayer(audioEl, suffix) {
+      var btn     = document.getElementById('play-btn-' + suffix);
+      var track   = document.getElementById('track-' + suffix);
+      var fill    = document.getElementById('fill-' + suffix);
+      var cur     = document.getElementById('cur-' + suffix);
+      var dur     = document.getElementById('dur-' + suffix);
+      var wrapper = document.getElementById('player-' + suffix);
+      if (!btn || !track) return;
+      wrapper.addEventListener('touchstart', function(e) { e.stopPropagation(); }, { passive: true });
+      wrapper.addEventListener('touchend',   function(e) { e.stopPropagation(); });
+      function fmt(s) {
+        if (!isFinite(s) || isNaN(s)) return '-:--';
+        var m = Math.floor(s / 60), sec = Math.floor(s % 60);
+        return m + ':' + (sec < 10 ? '0' : '') + sec;
+      }
+      function sync() {
+        var pct = audioEl.duration ? (audioEl.currentTime / audioEl.duration) * 100 : 0;
+        fill.style.width = pct + '%';
+        if (cur) cur.textContent = fmt(audioEl.currentTime);
+        if (dur) dur.textContent = fmt(audioEl.duration);
+        btn.innerHTML = audioEl.paused ? PLAY_ICON : PAUSE_ICON;
+      }
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (audioEl.paused) audioEl.play().catch(function(){});
+        else audioEl.pause();
+      });
+      track.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (!audioEl.duration) return;
+        var rect = track.getBoundingClientRect();
+        audioEl.currentTime = ((e.clientX - rect.left) / rect.width) * audioEl.duration;
+      });
+      audioEl.addEventListener('timeupdate', sync);
+      audioEl.addEventListener('durationchange', sync);
+      audioEl.addEventListener('play', sync);
+      audioEl.addEventListener('pause', sync);
+      audioEl.addEventListener('ended', function() { audioEl.currentTime = 0; sync(); });
+      sync();
+    }
+
+    if (audioFront) initPlayer(audioFront, 'front');
+    if (audioBack)  initPlayer(audioBack,  'back');
+
+    var autoplayAudio = {{.AutoplayAudio}};
+    if (autoplayAudio && audioFront) audioFront.play().catch(function(){});
 
     /* ── Reveal (fade) ─────────────────────────────────────────── */
     function reveal() {
       if (revealed) return;
       revealed = true;
+      if (audioFront) { audioFront.pause(); audioFront.currentTime = 0; }
       cardFront.style.opacity       = '0';
       cardFront.style.pointerEvents = 'none';
       cardBack.style.display        = 'flex';
@@ -171,6 +257,7 @@
       tapBtn.classList.add('hidden');
       gradeBtn.classList.remove('hidden');
       showQBtn.classList.remove('hidden');
+      if (autoplayAudio && audioBack) audioBack.play().catch(function(){});
     }
 
     flipCard.addEventListener('click', function () {
@@ -300,19 +387,17 @@
       if (this.dataset.image) {
         html += '<img src="/images/' + this.dataset.image + '" class="mx-auto mb-4 max-h-48 w-auto rounded-lg object-contain" />';
       }
+      if (this.dataset.audio) {
+        html += '<audio controls src="/audio/' + this.dataset.audio + '" class="mx-auto mb-4 w-full max-w-xs"></audio>';
+      }
       html += '<p class="text-xl font-medium leading-relaxed ' +
         (isDark ? 'text-gray-100' : 'text-gray-800') +
         '">' + this.dataset.text + '</p>' +
         '</div>';
-      Swal.fire({
+      swalGlass.fire({
         html: html,
         showConfirmButton: true,
         confirmButtonText: 'Close',
-        confirmButtonColor: '#db2777',
-        background: isDark ? '#17161e' : '#fff',
-        color: isDark ? '#e5e7eb' : '#111827',
-        customClass: { confirmButton: 'rounded-2xl px-6 py-3 text-sm font-bold' },
-        padding: '2rem',
         width: '32rem',
       });
     });

@@ -16,6 +16,7 @@ import (
 )
 
 var allowedImageExts = []string{".jpg", ".jpeg", ".png", ".gif", ".webp"}
+var allowedAudioExts = []string{".mp3", ".ogg", ".wav", ".m4a", ".webm", ".aac", ".flac"}
 
 // Handler is the transport layer for the cards feature.
 type Handler struct {
@@ -67,6 +68,41 @@ func (h *Handler) saveImage(c *fiber.Ctx, field string) (string, error) {
 	return filename, nil
 }
 
+// removeMedia deletes named media files from the media directory, logging
+// any errors. Empty filenames are silently skipped.
+func (h *Handler) removeMedia(filenames ...string) {
+	for _, f := range filenames {
+		if f == "" {
+			continue
+		}
+		if err := os.Remove(filepath.Join(h.service.ImagePath(), f)); err != nil {
+			slog.Warn("failed to remove orphaned media", "file", f, "err", err)
+		}
+	}
+}
+
+// saveAudio saves the uploaded audio file from the given form field and returns
+// its filename, or an empty string if no audio was uploaded.
+func (h *Handler) saveAudio(c *fiber.Ctx, field string) (string, error) {
+	file, err := c.FormFile(field)
+	if err != nil || file == nil {
+		return "", nil
+	}
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	if !slices.Contains(allowedAudioExts, ext) {
+		return "", fiber.NewError(fiber.StatusBadRequest, "audio must be mp3, ogg, wav, m4a, webm, aac, or flac")
+	}
+	if err := os.MkdirAll(h.service.ImagePath(), 0o755); err != nil {
+		return "", err
+	}
+	filename := uuid.NewString() + ext
+	dest := filepath.Join(h.service.ImagePath(), filename)
+	if err := c.SaveFile(file, dest); err != nil {
+		return "", err
+	}
+	return filename, nil
+}
+
 // Add creates a fact and returns the refreshed list.
 func (h *Handler) Add(c *fiber.Ctx) error {
 	front := strings.TrimSpace(c.FormValue("front"))
@@ -91,22 +127,21 @@ func (h *Handler) Add(c *fiber.Ctx) error {
 	}
 	imgBack, err := h.saveImage(c, "image_back")
 	if err != nil {
-		if imgFront != "" {
-			os.Remove(filepath.Join(h.service.ImagePath(), imgFront))
-		}
+		h.removeMedia(imgFront)
 		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
 	}
-	if _, err := h.service.AddFact(c.Context(), front, back, deckID, grade, reverse, imgFront, imgBack); err != nil {
-		if imgFront != "" {
-			if rmErr := os.Remove(filepath.Join(h.service.ImagePath(), imgFront)); rmErr != nil {
-				slog.Warn("failed to remove orphaned image", "file", imgFront, "err", rmErr)
-			}
-		}
-		if imgBack != "" {
-			if rmErr := os.Remove(filepath.Join(h.service.ImagePath(), imgBack)); rmErr != nil {
-				slog.Warn("failed to remove orphaned image", "file", imgBack, "err", rmErr)
-			}
-		}
+	audFront, err := h.saveAudio(c, "audio_front")
+	if err != nil {
+		h.removeMedia(imgFront, imgBack)
+		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
+	}
+	audBack, err := h.saveAudio(c, "audio_back")
+	if err != nil {
+		h.removeMedia(imgFront, imgBack, audFront)
+		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
+	}
+	if _, err := h.service.AddFact(c.Context(), front, back, deckID, grade, reverse, imgFront, imgBack, audFront, audBack); err != nil {
+		h.removeMedia(imgFront, imgBack, audFront, audBack)
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return h.List(c)
@@ -252,22 +287,21 @@ func (h *Handler) AddCardToDeck(c *fiber.Ctx) error {
 	}
 	imgBack, err := h.saveImage(c, "image_back")
 	if err != nil {
-		if imgFront != "" {
-			os.Remove(filepath.Join(h.service.ImagePath(), imgFront))
-		}
+		h.removeMedia(imgFront)
 		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
 	}
-	if _, err := h.service.AddFact(c.Context(), front, back, id, grade, reverse, imgFront, imgBack); err != nil {
-		if imgFront != "" {
-			if rmErr := os.Remove(filepath.Join(h.service.ImagePath(), imgFront)); rmErr != nil {
-				slog.Warn("failed to remove orphaned image", "file", imgFront, "err", rmErr)
-			}
-		}
-		if imgBack != "" {
-			if rmErr := os.Remove(filepath.Join(h.service.ImagePath(), imgBack)); rmErr != nil {
-				slog.Warn("failed to remove orphaned image", "file", imgBack, "err", rmErr)
-			}
-		}
+	audFront, err := h.saveAudio(c, "audio_front")
+	if err != nil {
+		h.removeMedia(imgFront, imgBack)
+		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
+	}
+	audBack, err := h.saveAudio(c, "audio_back")
+	if err != nil {
+		h.removeMedia(imgFront, imgBack, audFront)
+		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
+	}
+	if _, err := h.service.AddFact(c.Context(), front, back, id, grade, reverse, imgFront, imgBack, audFront, audBack); err != nil {
+		h.removeMedia(imgFront, imgBack, audFront, audBack)
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return h.DeckDetail(c)

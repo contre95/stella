@@ -4,3 +4,55 @@
   hx-swap-oob="beforeend"
   class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"
 ></div>
+<script>
+  // Global glass-themed SweetAlert2 mixin
+  window.swalGlass = Swal.mixin({ buttonsStyling: true });
+
+  // Intercept hx-confirm to use SweetAlert instead of browser confirm()
+  document.addEventListener('htmx:confirm', function(e) {
+    if (!e.detail.question) return;
+    e.preventDefault();
+    swalGlass.fire({
+      title: 'Are you sure?',
+      text: e.detail.question,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Confirm',
+      cancelButtonText: 'Cancel',
+    }).then(function(r) { if (r.isConfirmed) e.detail.issueRequest(true); });
+  });
+
+  // Shared mouse-swipe logic for swipeable card rows (runs once — avoids accumulation on HTMX swaps)
+  var _swipeMD = null;
+  window.clSnapRow = function(node, dx) {
+    var REVEAL = 72;
+    if (Math.abs(dx) < 40) { node.style.transform = ''; node.style.transition = 'transform 0.2s ease'; return; }
+    var snap = dx > 0 ? REVEAL : -REVEAL;
+    node.style.transition = 'transform 0.2s ease';
+    node.style.transform = 'translateX(' + snap + 'px)';
+  };
+  window.clMouseDown = function(e, node) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    _swipeMD = { node: node, startX: e.clientX, moved: false };
+    node.style.transition = 'none';
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'grabbing';
+  };
+  document.addEventListener('mousemove', function(e) {
+    if (!_swipeMD) return;
+    var dx = e.clientX - _swipeMD.startX;
+    if (Math.abs(dx) > 4) _swipeMD.moved = true;
+    if (_swipeMD.moved) _swipeMD.node.style.transform = 'translateX(' + dx + 'px)';
+  });
+  document.addEventListener('mouseup', function(e) {
+    if (!_swipeMD) return;
+    var node = _swipeMD.node;
+    var dx = e.clientX - _swipeMD.startX;
+    var moved = _swipeMD.moved;
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+    _swipeMD = null;
+    if (moved) clSnapRow(node, dx);
+  });
+</script>

@@ -8,6 +8,13 @@ type Config struct {
 	MCP        MCP    `yaml:"mcp"`
 	Logger     Logger `yaml:"logger"`
 	Review     Review `yaml:"review"`
+	Cards      Cards  `yaml:"cards"`
+}
+
+// Cards holds card display settings.
+type Cards struct {
+	// AutoplayAudio automatically plays audio when a card is shown.
+	AutoplayAudio bool `yaml:"autoplayAudio"`
 }
 
 // Server holds HTTP server settings.

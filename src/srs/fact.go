@@ -4,12 +4,14 @@ package srs
 // In the Q/A + reverse model a fact has a front and a back; the forward card
 // quizzes front->back and the optional reverse card quizzes back->front.
 type Fact struct {
-	ID       string
-	Front    string
-	Back     string
+	ID         string
+	Front      string
+	Back       string
 	ImageFront string // filename for the front side; empty means no image
 	ImageBack  string // filename for the back side; empty means no image
-	DeckID   string
-	Created  int64 // POSIX seconds
-	Modified int64 // POSIX seconds
+	AudioFront string // filename for the front side audio; empty means no audio
+	AudioBack  string // filename for the back side audio; empty means no audio
+	DeckID     string
+	Created    int64 // POSIX seconds
+	Modified   int64 // POSIX seconds
 }

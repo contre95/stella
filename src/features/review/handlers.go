@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/contre95/stella/src/features/config"
 	"github.com/contre95/stella/src/features/hosting/respond"
 	"github.com/gofiber/fiber/v2"
 )
@@ -11,11 +12,12 @@ import (
 // Handler is the HTTP transport for the review feature.
 type Handler struct {
 	service *Service
+	cfg     *config.Manager
 }
 
 // NewHandler constructs the review handler.
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, cfg *config.Manager) *Handler {
+	return &Handler{service: service, cfg: cfg}
 }
 
 // parseDeckFilter splits the "decks" query param into a slice of IDs.
@@ -51,13 +53,14 @@ func (h *Handler) RenderSession(c *fiber.Ctx) error {
 		return respond.Section(c, "review_done", fiber.Map{"Title": "Review"})
 	}
 	return respond.Section(c, "review", fiber.Map{
-		"Title":      "Review",
-		"Card":       ci.Card,
-		"Fact":       ci.Fact,
-		"Remaining":  ci.Remaining,
-		"DeckName":   ci.DeckName,
-		"DeckColor":  ci.DeckColor,
-		"DeckFilter": deckFilter,
+		"Title":         "Review",
+		"Card":          ci.Card,
+		"Fact":          ci.Fact,
+		"Remaining":     ci.Remaining,
+		"DeckName":      ci.DeckName,
+		"DeckColor":     ci.DeckColor,
+		"DeckFilter":    deckFilter,
+		"AutoplayAudio": h.cfg.Get().Cards.AutoplayAudio,
 	})
 }
 
@@ -89,12 +92,13 @@ func (h *Handler) GradeCard(c *fiber.Ctx) error {
 		return c.Render("sections/review_done", fiber.Map{"Title": "Review Complete"})
 	}
 	return c.Render("partials/review_card", fiber.Map{
-		"Card":       ci.Card,
-		"Fact":       ci.Fact,
-		"Remaining":  ci.Remaining,
-		"DeckName":   ci.DeckName,
-		"DeckColor":  ci.DeckColor,
-		"DeckFilter": deckFilter,
+		"Card":          ci.Card,
+		"Fact":          ci.Fact,
+		"Remaining":     ci.Remaining,
+		"DeckName":      ci.DeckName,
+		"DeckColor":     ci.DeckColor,
+		"DeckFilter":    deckFilter,
+		"AutoplayAudio": h.cfg.Get().Cards.AutoplayAudio,
 	})
 }
 

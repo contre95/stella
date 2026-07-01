@@ -53,7 +53,7 @@ func main() {
 	// 4. Handlers.
 	uiHandler := ui.NewHandler(reviewService)
 	cardsHandler := cards.NewHandler(cardsService)
-	reviewHandler := review.NewHandler(reviewService)
+	reviewHandler := review.NewHandler(reviewService, cfgManager)
 
 	// 5. Routes + server.
 	server := hosting.NewServer(cfgManager, uiHandler, cardsHandler, reviewHandler)

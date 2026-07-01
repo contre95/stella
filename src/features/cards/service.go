@@ -3,6 +3,7 @@ package cards
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,6 +30,19 @@ func NewService(repo srs.Repository, scheduler *srs.Scheduler, cfg *config.Manag
 // ImagePath returns the directory where card images are stored.
 func (s *Service) ImagePath() string {
 	return s.cfg.Get().ImagePath
+}
+
+// saveAudioData writes raw audio bytes to a new file in mediaPath and returns
+// the generated filename. ext must include the leading dot (e.g. ".mp3").
+func saveAudioData(mediaPath string, data []byte, ext string) (string, error) {
+	if err := os.MkdirAll(mediaPath, 0o755); err != nil {
+		return "", err
+	}
+	filename := uuid.NewString() + ext
+	if err := os.WriteFile(filepath.Join(mediaPath, filename), data, 0o644); err != nil {
+		return "", err
+	}
+	return filename, nil
 }
 
 // saveImageData writes raw image bytes to a new file in imagesPath and returns
@@ -61,10 +75,21 @@ func saveImageData(imagesPath string, data []byte) (string, error) {
 // reverse card is added when reverse is true and a back exists. When grade >= 0
 // the cards are given that initial grade (counted as a first repetition);
 // grade < 0 leaves them unseen for the review process to grade.
-// imageFront and imageBack are filenames of already-saved images (empty means no image).
-func (s *Service) AddFact(ctx context.Context, front, back, deckID string, grade int, reverse bool, imageFront, imageBack string) (*srs.Fact, error) {
+// imageFront/imageBack and audioFront/audioBack are filenames of already-saved
+// media files; empty means none.
+func (s *Service) AddFact(ctx context.Context, front, back, deckID string, grade int, reverse bool, imageFront, imageBack, audioFront, audioBack string) (*srs.Fact, error) {
 	front = strings.TrimSpace(front)
 	back = strings.TrimSpace(back)
+	deckID = strings.TrimSpace(deckID)
+	if deckID == "" {
+		return nil, fmt.Errorf("deckID is required: every card must belong to a deck")
+	}
+	if _, err := s.repo.GetDeck(ctx, deckID); err != nil {
+		if errors.Is(err, srs.ErrNotFound) {
+			return nil, fmt.Errorf("deck %q not found", deckID)
+		}
+		return nil, fmt.Errorf("looking up deck: %w", err)
+	}
 	now := time.Now().Unix()
 	fact := &srs.Fact{
 		ID:         uuid.NewString(),
@@ -72,6 +97,8 @@ func (s *Service) AddFact(ctx context.Context, front, back, deckID string, grade
 		Back:       back,
 		ImageFront: imageFront,
 		ImageBack:  imageBack,
+		AudioFront: audioFront,
+		AudioBack:  audioBack,
 		DeckID:     deckID,
 		Created:    now,
 		Modified:   now,
@@ -225,6 +252,10 @@ type FactExport struct {
 	ImageBack      string `json:"image_back,omitempty"`
 	ImageFrontData []byte `json:"image_front_data,omitempty"`
 	ImageBackData  []byte `json:"image_back_data,omitempty"`
+	AudioFront     string `json:"audio_front,omitempty"`
+	AudioBack      string `json:"audio_back,omitempty"`
+	AudioFrontData []byte `json:"audio_front_data,omitempty"`
+	AudioBackData  []byte `json:"audio_back_data,omitempty"`
 	Reverse        bool   `json:"reverse"`
 }
 
@@ -251,16 +282,26 @@ func (s *Service) ExportDeck(ctx context.Context, deckID string) (*DeckExport, e
 				break
 			}
 		}
-		fe := FactExport{Front: f.Front, Back: f.Back, ImageFront: f.ImageFront, ImageBack: f.ImageBack, Reverse: hasReverse}
-		imagesPath := s.cfg.Get().ImagePath
+		fe := FactExport{Front: f.Front, Back: f.Back, ImageFront: f.ImageFront, ImageBack: f.ImageBack, AudioFront: f.AudioFront, AudioBack: f.AudioBack, Reverse: hasReverse}
+		mediaPath := s.cfg.Get().ImagePath
 		if f.ImageFront != "" {
-			if data, err := os.ReadFile(filepath.Join(imagesPath, f.ImageFront)); err == nil {
+			if data, err := os.ReadFile(filepath.Join(mediaPath, f.ImageFront)); err == nil {
 				fe.ImageFrontData = data
 			}
 		}
 		if f.ImageBack != "" {
-			if data, err := os.ReadFile(filepath.Join(imagesPath, f.ImageBack)); err == nil {
+			if data, err := os.ReadFile(filepath.Join(mediaPath, f.ImageBack)); err == nil {
 				fe.ImageBackData = data
+			}
+		}
+		if f.AudioFront != "" {
+			if data, err := os.ReadFile(filepath.Join(mediaPath, f.AudioFront)); err == nil {
+				fe.AudioFrontData = data
+			}
+		}
+		if f.AudioBack != "" {
+			if data, err := os.ReadFile(filepath.Join(mediaPath, f.AudioBack)); err == nil {
+				fe.AudioBackData = data
 			}
 		}
 		exp.Facts = append(exp.Facts, fe)
@@ -279,26 +320,50 @@ func (s *Service) ImportDeck(ctx context.Context, exp *DeckExport, nameOverride 
 	if err != nil {
 		return nil, 0, err
 	}
-	imagesPath := s.cfg.Get().ImagePath
+	mediaPath := s.cfg.Get().ImagePath
 	imported := 0
 	for _, fe := range exp.Facts {
 		imgFront := fe.ImageFront
 		imgBack := fe.ImageBack
 		if len(fe.ImageFrontData) > 0 {
-			name, err := saveImageData(imagesPath, fe.ImageFrontData)
+			name, err := saveImageData(mediaPath, fe.ImageFrontData)
 			if err != nil {
 				return deck, imported, err
 			}
 			imgFront = name
 		}
 		if len(fe.ImageBackData) > 0 {
-			name, err := saveImageData(imagesPath, fe.ImageBackData)
+			name, err := saveImageData(mediaPath, fe.ImageBackData)
 			if err != nil {
 				return deck, imported, err
 			}
 			imgBack = name
 		}
-		if _, err := s.AddFact(ctx, fe.Front, fe.Back, deck.ID, -1, fe.Reverse, imgFront, imgBack); err != nil {
+		audFront := fe.AudioFront
+		audBack := fe.AudioBack
+		if len(fe.AudioFrontData) > 0 {
+			ext := filepath.Ext(fe.AudioFront)
+			if ext == "" {
+				ext = ".mp3"
+			}
+			name, err := saveAudioData(mediaPath, fe.AudioFrontData, ext)
+			if err != nil {
+				return deck, imported, err
+			}
+			audFront = name
+		}
+		if len(fe.AudioBackData) > 0 {
+			ext := filepath.Ext(fe.AudioBack)
+			if ext == "" {
+				ext = ".mp3"
+			}
+			name, err := saveAudioData(mediaPath, fe.AudioBackData, ext)
+			if err != nil {
+				return deck, imported, err
+			}
+			audBack = name
+		}
+		if _, err := s.AddFact(ctx, fe.Front, fe.Back, deck.ID, -1, fe.Reverse, imgFront, imgBack, audFront, audBack); err != nil {
 			return deck, imported, err
 		}
 		imported++
