@@ -1,6 +1,7 @@
 # Local runtime data and config
 /data/
 /config.yaml
+.claude/
 *.db
 *.db-journal
 

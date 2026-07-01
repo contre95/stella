@@ -1,18 +1,61 @@
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0f0f0f" media="(prefers-color-scheme: dark)" />
   <title>{{if .Title}}{{.Title}} · {{end}}Stella</title>
-  <!-- TODO(step 6): replace Tailwind Play CDN with the npm build + committed public/css output. -->
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/icons/stella.svg" type="image/svg+xml" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    tailwind.config = { darkMode: "class" };
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            pink: {
+              50:  "#fdf2f8",
+              100: "#fce7f3",
+              200: "#fbcfe8",
+              300: "#f9a8d4",
+              400: "#f472b6",
+              500: "#ec4899",
+              600: "#db2777",
+              700: "#be185d",
+              800: "#9d174d",
+              900: "#831843",
+              950: "#500724",
+            }
+          }
+        }
+      }
+    };
   </script>
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    *, *::before, *::after { -webkit-tap-highlight-color: transparent; }
+    html { touch-action: manipulation; }
+    body { overscroll-behavior-y: contain; }
+    .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+    /* Kutty-style focus ring for inputs */
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #db2777;
+      box-shadow: 0 0 0 3px rgba(219, 39, 119, 0.12);
+    }
+  </style>
   <script>
-    // Restore persisted theme before paint.
     if (localStorage.getItem("theme") === "dark") {
       document.documentElement.classList.add("dark");
+    }
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
     }
   </script>
 </head>

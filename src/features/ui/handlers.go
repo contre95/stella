@@ -1,24 +1,35 @@
 package ui
 
 import (
+	"log/slog"
+
 	"github.com/contre95/stella/src/features/hosting/respond"
+	"github.com/contre95/stella/src/features/review"
 	"github.com/gofiber/fiber/v2"
 )
 
 // Handler renders the top-level pages (dashboard, about).
-type Handler struct{}
+type Handler struct {
+	reviewSvc *review.Service
+}
 
 // NewHandler constructs the UI handler.
-func NewHandler() *Handler { return &Handler{} }
+func NewHandler(reviewSvc *review.Service) *Handler {
+	return &Handler{reviewSvc: reviewSvc}
+}
 
-// Dashboard renders the overview page. Counts are placeholders until the
-// review feature and database land.
+// Dashboard renders the overview page with live aggregate stats.
 func (h *Handler) Dashboard(c *fiber.Ctx) error {
+	stats, err := h.reviewSvc.Stats(c.Context())
+	if err != nil {
+		slog.Error("dashboard stats", "err", err)
+		stats = &review.Stats{}
+	}
 	return respond.Section(c, "dashboard", fiber.Map{
 		"Title":      "Dashboard",
-		"DueToday":   0,
-		"TotalCards": 0,
-		"NewCards":   0,
+		"DueToday":   stats.DueToday,
+		"TotalCards": stats.TotalCards,
+		"NewCards":   stats.NewCards,
 	})
 }
 

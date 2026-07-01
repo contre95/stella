@@ -30,22 +30,26 @@ type Repository interface {
 	AddDeck(ctx context.Context, d *Deck) error
 	GetDeck(ctx context.Context, id string) (*Deck, error)
 	ListDecks(ctx context.Context) ([]*Deck, error)
+	DeleteDeck(ctx context.Context, id string) error // deletes deck and all its facts (cascades to cards)
+	ListFactsByDeck(ctx context.Context, deckID string) ([]*Fact, error)
 
 	// Reviews (append-only log).
 	AddReview(ctx context.Context, r *Review) error
 
 	// Aggregate counts.
 	ActiveCount(ctx context.Context) (int, error)
-	ScheduledCount(ctx context.Context, now int64) (int, error)
-	NonMemorisedCount(ctx context.Context) (int, error)
+	// deckIDs filters to specific decks; nil or empty means all decks.
+	ScheduledCount(ctx context.Context, now int64, deckIDs []string) (int, error)
+	NonMemorisedCount(ctx context.Context, deckIDs []string) (int, error)
 
 	// Queue selection. sortKey is one of "", "interval", "-interval",
 	// "next_rep", "random"; an empty limit (<=0) means no limit.
-	CardsDueForRetRep(ctx context.Context, now int64, sortKey string, limit int) ([]*Card, error)
-	CardsToRelearn(ctx context.Context, grade int, sortKey string) ([]*Card, error)
-	CardsNewMemorising(ctx context.Context, grade int) ([]*Card, error)
-	CardsUnseen(ctx context.Context, sortKey string, limit int) ([]*Card, error)
-	CardsLearnAhead(ctx context.Context, now int64, sortKey string, limit int) ([]*Card, error)
+	// deckIDs filters to specific decks; nil or empty means all decks.
+	CardsDueForRetRep(ctx context.Context, now int64, sortKey string, limit int, deckIDs []string) ([]*Card, error)
+	CardsToRelearn(ctx context.Context, grade int, sortKey string, deckIDs []string) ([]*Card, error)
+	CardsNewMemorising(ctx context.Context, grade int, deckIDs []string) ([]*Card, error)
+	CardsUnseen(ctx context.Context, sortKey string, limit int, deckIDs []string) ([]*Card, error)
+	CardsLearnAhead(ctx context.Context, now int64, sortKey string, limit int, deckIDs []string) ([]*Card, error)
 	// SisterCardCountScheduledBetween counts retained sister cards (same fact,
 	// excluding excludeCardID) due in [from, to).
 	SisterCardCountScheduledBetween(ctx context.Context, factID, excludeCardID string, from, to int64) (int, error)

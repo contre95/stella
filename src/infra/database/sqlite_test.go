@@ -87,22 +87,22 @@ func TestQueueQueries(t *testing.T) {
 	if n, _ := db.ActiveCount(ctx); n != 3 {
 		t.Errorf("ActiveCount got %d want 3", n)
 	}
-	if n, _ := db.NonMemorisedCount(ctx); n != 1 {
+	if n, _ := db.NonMemorisedCount(ctx, nil); n != 1 {
 		t.Errorf("NonMemorisedCount got %d want 1", n)
 	}
-	if n, _ := db.ScheduledCount(ctx, 1000); n != 1 {
+	if n, _ := db.ScheduledCount(ctx, 1000, nil); n != 1 {
 		t.Errorf("ScheduledCount got %d want 1", n)
 	}
 
-	unseen, _ := db.CardsUnseen(ctx, "", -1)
+	unseen, _ := db.CardsUnseen(ctx, "", -1, nil)
 	if len(unseen) != 1 || unseen[0].ID != "unseen" {
 		t.Errorf("CardsUnseen got %v", ids(unseen))
 	}
-	due, _ := db.CardsDueForRetRep(ctx, 1000, "interval", -1)
+	due, _ := db.CardsDueForRetRep(ctx, 1000, "interval", -1, nil)
 	if len(due) != 1 || due[0].ID != "due" {
 		t.Errorf("CardsDueForRetRep got %v", ids(due))
 	}
-	ahead, _ := db.CardsLearnAhead(ctx, 1000, "next_rep", -1)
+	ahead, _ := db.CardsLearnAhead(ctx, 1000, "next_rep", -1, nil)
 	if len(ahead) != 1 || ahead[0].ID != "future" {
 		t.Errorf("CardsLearnAhead got %v", ids(ahead))
 	}
@@ -118,11 +118,11 @@ func TestRelearnVsNewMemorising(t *testing.T) {
 	// grade 1, lapses=0 => new memorising.
 	addCard(t, db, &srs.Card{ID: "newmem", FactID: "f2", View: srs.ViewForward, Grade: 1, Easiness: 2.5, Lapses: 0, Active: true})
 
-	relearn, _ := db.CardsToRelearn(ctx, 1, "-interval")
+	relearn, _ := db.CardsToRelearn(ctx, 1, "-interval", nil)
 	if len(relearn) != 1 || relearn[0].ID != "relearn" {
 		t.Errorf("CardsToRelearn got %v", ids(relearn))
 	}
-	newmem, _ := db.CardsNewMemorising(ctx, 1)
+	newmem, _ := db.CardsNewMemorising(ctx, 1, nil)
 	if len(newmem) != 1 || newmem[0].ID != "newmem" {
 		t.Errorf("CardsNewMemorising got %v", ids(newmem))
 	}

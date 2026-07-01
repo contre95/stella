@@ -1,69 +1,98 @@
 <div>
-  <h1 class="text-2xl font-bold tracking-tight">Cards</h1>
-  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-    Add a fact; each becomes a forward card (and an optional reverse).
-  </p>
+  <div class="mb-6">
+    <h1 class="text-xl font-bold text-gray-900 dark:text-white">Cards</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+      Add a fact; each becomes a forward card (and an optional reverse).
+    </p>
+  </div>
 
+  <!-- Add card form -->
   <form
     hx-post="/cards"
     hx-target="#card-list"
     hx-swap="innerHTML"
+    hx-encoding="multipart/form-data"
     _="on htmx:afterRequest call me.reset()"
-    class="mt-6 grid gap-4 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950 sm:grid-cols-2"
+    class="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-[#141414] sm:p-6"
   >
-    <label class="block">
-      <span class="text-sm font-medium text-gray-700 dark:text-gray-200">Front</span>
-      <input
-        name="front"
-        required
-        placeholder="Question / prompt"
-        class="mt-1 w-full rounded-lg border-gray-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-900"
-      />
-    </label>
+    <div class="grid gap-4 sm:grid-cols-2">
+      <label class="block">
+        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Front</span>
+        <input
+          name="front"
+          required
+          placeholder="Question / prompt"
+          class="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500"
+        />
+      </label>
 
-    <label class="block">
-      <span class="text-sm font-medium text-gray-700 dark:text-gray-200">Back</span>
-      <input
-        name="back"
-        placeholder="Answer"
-        class="mt-1 w-full rounded-lg border-gray-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-900"
-      />
-    </label>
+      <label class="block">
+        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Back</span>
+        <input
+          name="back"
+          placeholder="Answer"
+          class="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500"
+        />
+      </label>
 
-    <label class="block">
-      <span class="text-sm font-medium text-gray-700 dark:text-gray-200">Initial grade</span>
-      <select
-        name="grade"
-        class="mt-1 w-full rounded-lg border-gray-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-900"
-      >
-        <option value="-1" selected>Unseen (grade in review)</option>
-        <option value="0">0 — blackout</option>
-        <option value="1">1 — wrong, familiar</option>
-        <option value="2">2 — wrong, easy recall</option>
-        <option value="3">3 — right, hard</option>
-        <option value="4">4 — right, hesitant</option>
-        <option value="5">5 — perfect</option>
-      </select>
-    </label>
+      <label class="block">
+        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Initial grade</span>
+        <select
+          name="grade"
+          class="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 transition dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+        >
+          <option value="-1" selected>Unseen (grade in review)</option>
+          <option value="0">0 — blackout</option>
+          <option value="1">1 — wrong, familiar</option>
+          <option value="2">2 — wrong, easy recall</option>
+          <option value="3">3 — right, hard</option>
+          <option value="4">4 — right, hesitant</option>
+          <option value="5">5 — perfect</option>
+        </select>
+      </label>
 
-    <label class="flex items-center gap-2 self-end pb-2">
-      <input
-        type="checkbox"
-        name="reverse"
-        class="size-4 rounded border-gray-300 text-indigo-600 dark:border-gray-600"
-      />
-      <span class="text-sm font-medium text-gray-700 dark:text-gray-200">Also add reverse card</span>
-    </label>
+      <label class="block">
+        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Deck</span>
+        <select
+          name="deckId"
+          required
+          hx-get="/decks/list-options"
+          hx-trigger="load"
+          hx-swap="innerHTML"
+          class="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 transition dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+        >
+          <option value="" disabled selected>Select a deck</option>
+        </select>
+      </label>
 
-    <div class="flex justify-end sm:col-span-2">
+      <label class="block sm:col-span-2">
+        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Image <span class="font-normal normal-case">(optional — jpg, png, gif, webp)</span></span>
+        <input
+          type="file"
+          name="image"
+          accept=".jpg,.jpeg,.png,.gif,.webp"
+          class="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 transition file:mr-3 file:rounded file:border-0 file:bg-pink-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:file:bg-pink-950/40 dark:file:text-pink-400"
+        />
+      </label>
+    </div>
+
+    <div class="mt-4 flex items-center justify-between">
+      <label class="flex items-center gap-2">
+        <input
+          type="checkbox"
+          name="reverse"
+          class="h-4 w-4 rounded border-gray-300 text-pink-600 dark:border-gray-600"
+        />
+        <span class="text-sm text-gray-600 dark:text-gray-300">Also add reverse card</span>
+      </label>
       <button
         type="submit"
-        class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+        class="rounded-lg bg-pink-600 px-4 py-2 text-sm font-semibold text-white hover:bg-pink-500 transition-colors"
       >
         Add card
       </button>
     </div>
   </form>
 
-  <div id="card-list" hx-get="/cards/list" hx-trigger="load" class="mt-6"></div>
+  <div id="card-list" hx-get="/cards/list" hx-trigger="load" class="mt-5"></div>
 </div>

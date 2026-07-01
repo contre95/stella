@@ -37,6 +37,16 @@ func NewServer(name, version string, cardsService *cards.Service) *mcpsdk.Server
 			"scheduling status of each of their sister cards.",
 	}, s.listRecentCards)
 
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name:        "create_deck",
+		Description: "Create a new named deck. Returns the deck id to use when creating cards.",
+	}, s.createDeck)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name:        "list_decks",
+		Description: "List all decks ordered by name.",
+	}, s.listDecks)
+
 	return srv
 }
 
@@ -46,7 +56,7 @@ type CreateCardInput struct {
 	Back    string `json:"back,omitempty" jsonschema:"The back side / answer of the card."`
 	Reverse bool   `json:"reverse,omitempty" jsonschema:"Also create a reverse card quizzing back -> front. Ignored when back is empty."`
 	Grade   *int   `json:"grade,omitempty" jsonschema:"Initial self-grade 0-5 (0 = blackout, 5 = perfect recall), counted as a first repetition. Omit to leave the card unseen so the review process grades it."`
-	DeckID  string `json:"deckId,omitempty" jsonschema:"Optional deck id to file the card under."`
+	DeckID  string `json:"deckId" jsonschema:"Deck id to file the card under. Required — use list_decks or create_deck first."`
 }
 
 // CreateCardOutput is the result schema for create_card.
@@ -62,6 +72,9 @@ func (s *Server) createCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in C
 	if front == "" {
 		return nil, CreateCardOutput{}, fmt.Errorf("front is required")
 	}
+	if strings.TrimSpace(in.DeckID) == "" {
+		return nil, CreateCardOutput{}, fmt.Errorf("deckId is required — use list_decks or create_deck first")
+	}
 	grade := srs.GradeUnseen
 	if in.Grade != nil {
 		grade = *in.Grade
@@ -69,7 +82,7 @@ func (s *Server) createCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in C
 			return nil, CreateCardOutput{}, fmt.Errorf("grade must be between 0 and 5")
 		}
 	}
-	fact, err := s.cards.AddFact(ctx, front, in.Back, in.DeckID, grade, in.Reverse)
+	fact, err := s.cards.AddFact(ctx, front, in.Back, in.DeckID, grade, in.Reverse, "")
 	if err != nil {
 		return nil, CreateCardOutput{}, fmt.Errorf("creating card: %w", err)
 	}
@@ -95,6 +108,7 @@ type FactSummary struct {
 	FactID string        `json:"factId"`
 	Front  string        `json:"front"`
 	Back   string        `json:"back"`
+	DeckID string        `json:"deckId,omitempty"`
 	Cards  []CardSummary `json:"cards"`
 }
 
@@ -131,8 +145,58 @@ func (s *Server) listRecentCards(ctx context.Context, _ *mcpsdk.CallToolRequest,
 			FactID: r.Fact.ID,
 			Front:  r.Fact.Front,
 			Back:   r.Fact.Back,
+			DeckID: r.Fact.DeckID,
 			Cards:  sisters,
 		})
+	}
+	return nil, out, nil
+}
+
+// CreateDeckInput is the argument schema for create_deck.
+type CreateDeckInput struct {
+	Name string `json:"name" jsonschema:"Name of the deck. Required."`
+}
+
+// CreateDeckOutput is the result schema for create_deck.
+type CreateDeckOutput struct {
+	DeckID string `json:"deckId"`
+	Name   string `json:"name"`
+}
+
+func (s *Server) createDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in CreateDeckInput) (*mcpsdk.CallToolResult, CreateDeckOutput, error) {
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, CreateDeckOutput{}, fmt.Errorf("name is required")
+	}
+	d, err := s.cards.AddDeck(ctx, name)
+	if err != nil {
+		return nil, CreateDeckOutput{}, fmt.Errorf("creating deck: %w", err)
+	}
+	return nil, CreateDeckOutput{DeckID: d.ID, Name: d.Name}, nil
+}
+
+// ListDecksInput is the argument schema for list_decks.
+type ListDecksInput struct{}
+
+// DeckSummary is one deck in list_decks output.
+type DeckSummary struct {
+	DeckID string `json:"deckId"`
+	Name   string `json:"name"`
+}
+
+// ListDecksOutput is the result schema for list_decks.
+type ListDecksOutput struct {
+	Decks []DeckSummary `json:"decks"`
+}
+
+func (s *Server) listDecks(ctx context.Context, _ *mcpsdk.CallToolRequest, _ ListDecksInput) (*mcpsdk.CallToolResult, ListDecksOutput, error) {
+	decks, err := s.cards.ListDecks(ctx)
+	if err != nil {
+		return nil, ListDecksOutput{}, fmt.Errorf("listing decks: %w", err)
+	}
+	out := ListDecksOutput{Decks: make([]DeckSummary, 0, len(decks))}
+	for _, d := range decks {
+		out.Decks = append(out.Decks, DeckSummary{DeckID: d.ID, Name: d.Name})
 	}
 	return nil, out, nil
 }

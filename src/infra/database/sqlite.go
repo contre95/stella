@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/contre95/stella/src/srs"
 	_ "github.com/mattn/go-sqlite3"
@@ -42,11 +43,24 @@ func NewSqliteSRS(path string) (*SqliteSRS, error) {
 	if err := s.createTables(); err != nil {
 		return nil, err
 	}
+	if err := s.migrate(); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
 // Close releases the database handle.
 func (s *SqliteSRS) Close() error { return s.db.Close() }
+
+// migrate applies additive schema changes that cannot be expressed with
+// CREATE TABLE IF NOT EXISTS (e.g., new columns on existing tables).
+func (s *SqliteSRS) migrate() error {
+	_, err := s.db.Exec(`ALTER TABLE facts ADD COLUMN image TEXT NOT NULL DEFAULT ''`)
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("migrating facts.image: %w", err)
+	}
+	return nil
+}
 
 func (s *SqliteSRS) createTables() error {
 	const schema = `
@@ -59,6 +73,7 @@ CREATE TABLE IF NOT EXISTS facts (
 	id       TEXT PRIMARY KEY,
 	front    TEXT NOT NULL,
 	back     TEXT NOT NULL,
+	image    TEXT NOT NULL DEFAULT '',
 	deck_id  TEXT NOT NULL DEFAULT '',
 	created  INTEGER NOT NULL,
 	modified INTEGER NOT NULL
@@ -108,17 +123,17 @@ CREATE INDEX IF NOT EXISTS idx_reviews_card ON reviews(card_id);
 
 func (s *SqliteSRS) AddFact(ctx context.Context, f *srs.Fact) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO facts (id, front, back, deck_id, created, modified)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		f.ID, f.Front, f.Back, f.DeckID, f.Created, f.Modified)
+		`INSERT INTO facts (id, front, back, image, deck_id, created, modified)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		f.ID, f.Front, f.Back, f.Image, f.DeckID, f.Created, f.Modified)
 	return err
 }
 
 func (s *SqliteSRS) GetFact(ctx context.Context, id string) (*srs.Fact, error) {
 	var f srs.Fact
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, front, back, deck_id, created, modified FROM facts WHERE id=?`, id).
-		Scan(&f.ID, &f.Front, &f.Back, &f.DeckID, &f.Created, &f.Modified)
+		`SELECT id, front, back, image, deck_id, created, modified FROM facts WHERE id=?`, id).
+		Scan(&f.ID, &f.Front, &f.Back, &f.Image, &f.DeckID, &f.Created, &f.Modified)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, srs.ErrNotFound
 	}
@@ -130,7 +145,7 @@ func (s *SqliteSRS) GetFact(ctx context.Context, id string) (*srs.Fact, error) {
 
 func (s *SqliteSRS) ListFacts(ctx context.Context) ([]*srs.Fact, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, front, back, deck_id, created, modified FROM facts ORDER BY created DESC`)
+		`SELECT id, front, back, image, deck_id, created, modified FROM facts ORDER BY created DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +153,7 @@ func (s *SqliteSRS) ListFacts(ctx context.Context) ([]*srs.Fact, error) {
 	var facts []*srs.Fact
 	for rows.Next() {
 		var f srs.Fact
-		if err := rows.Scan(&f.ID, &f.Front, &f.Back, &f.DeckID, &f.Created, &f.Modified); err != nil {
+		if err := rows.Scan(&f.ID, &f.Front, &f.Back, &f.Image, &f.DeckID, &f.Created, &f.Modified); err != nil {
 			return nil, err
 		}
 		facts = append(facts, &f)
@@ -148,8 +163,8 @@ func (s *SqliteSRS) ListFacts(ctx context.Context) ([]*srs.Fact, error) {
 
 func (s *SqliteSRS) UpdateFact(ctx context.Context, f *srs.Fact) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE facts SET front=?, back=?, deck_id=?, modified=? WHERE id=?`,
-		f.Front, f.Back, f.DeckID, f.Modified, f.ID)
+		`UPDATE facts SET front=?, back=?, image=?, deck_id=?, modified=? WHERE id=?`,
+		f.Front, f.Back, f.Image, f.DeckID, f.Modified, f.ID)
 	return err
 }
 
@@ -202,7 +217,7 @@ func (s *SqliteSRS) DeleteCard(ctx context.Context, id string) error {
 }
 
 func (s *SqliteSRS) CardsForFact(ctx context.Context, factID string) ([]*srs.Card, error) {
-	return s.queryCards(ctx, `fact_id=?`, "rowid", -1, factID)
+	return s.queryCards(ctx, `fact_id=?`, "rowid", -1, nil, factID)
 }
 
 //
@@ -243,6 +258,39 @@ func (s *SqliteSRS) ListDecks(ctx context.Context) ([]*srs.Deck, error) {
 	return decks, rows.Err()
 }
 
+func (s *SqliteSRS) DeleteDeck(ctx context.Context, id string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM facts WHERE deck_id=?`, id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM decks WHERE id=?`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *SqliteSRS) ListFactsByDeck(ctx context.Context, deckID string) ([]*srs.Fact, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, front, back, image, deck_id, created, modified FROM facts WHERE deck_id=? ORDER BY created DESC`, deckID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var facts []*srs.Fact
+	for rows.Next() {
+		var f srs.Fact
+		if err := rows.Scan(&f.ID, &f.Front, &f.Back, &f.Image, &f.DeckID, &f.Created, &f.Modified); err != nil {
+			return nil, err
+		}
+		facts = append(facts, &f)
+	}
+	return facts, rows.Err()
+}
+
 //
 // Reviews.
 //
@@ -265,37 +313,38 @@ func (s *SqliteSRS) ActiveCount(ctx context.Context) (int, error) {
 	return s.count(ctx, `SELECT count(*) FROM cards WHERE active=1`)
 }
 
-func (s *SqliteSRS) ScheduledCount(ctx context.Context, now int64) (int, error) {
-	return s.count(ctx,
-		`SELECT count(*) FROM cards WHERE active=1 AND grade>=2 AND next_rep<=?`, now)
+func (s *SqliteSRS) ScheduledCount(ctx context.Context, now int64, deckIDs []string) (int, error) {
+	q, args := buildCountQuery(`SELECT count(*) FROM cards WHERE active=1 AND grade>=2 AND next_rep<=?`, []any{now}, deckIDs)
+	return s.count(ctx, q, args...)
 }
 
-func (s *SqliteSRS) NonMemorisedCount(ctx context.Context) (int, error) {
-	return s.count(ctx, `SELECT count(*) FROM cards WHERE active=1 AND grade<2`)
+func (s *SqliteSRS) NonMemorisedCount(ctx context.Context, deckIDs []string) (int, error) {
+	q, args := buildCountQuery(`SELECT count(*) FROM cards WHERE active=1 AND grade<2`, nil, deckIDs)
+	return s.count(ctx, q, args...)
 }
 
 //
 // Queue selection.
 //
 
-func (s *SqliteSRS) CardsDueForRetRep(ctx context.Context, now int64, sortKey string, limit int) ([]*srs.Card, error) {
-	return s.queryCards(ctx, `active=1 AND grade>=2 AND ?>=next_rep`, sortClause(sortKey), limit, now)
+func (s *SqliteSRS) CardsDueForRetRep(ctx context.Context, now int64, sortKey string, limit int, deckIDs []string) ([]*srs.Card, error) {
+	return s.queryCards(ctx, `active=1 AND grade>=2 AND ?>=next_rep`, sortClause(sortKey), limit, deckIDs, now)
 }
 
-func (s *SqliteSRS) CardsToRelearn(ctx context.Context, grade int, sortKey string) ([]*srs.Card, error) {
-	return s.queryCards(ctx, `active=1 AND grade=? AND lapses>0`, sortClause(sortKey), -1, grade)
+func (s *SqliteSRS) CardsToRelearn(ctx context.Context, grade int, sortKey string, deckIDs []string) ([]*srs.Card, error) {
+	return s.queryCards(ctx, `active=1 AND grade=? AND lapses>0`, sortClause(sortKey), -1, deckIDs, grade)
 }
 
-func (s *SqliteSRS) CardsNewMemorising(ctx context.Context, grade int) ([]*srs.Card, error) {
-	return s.queryCards(ctx, `active=1 AND grade=? AND lapses=0`, sortClause(""), -1, grade)
+func (s *SqliteSRS) CardsNewMemorising(ctx context.Context, grade int, deckIDs []string) ([]*srs.Card, error) {
+	return s.queryCards(ctx, `active=1 AND grade=? AND lapses=0`, sortClause(""), -1, deckIDs, grade)
 }
 
-func (s *SqliteSRS) CardsUnseen(ctx context.Context, sortKey string, limit int) ([]*srs.Card, error) {
-	return s.queryCards(ctx, `active=1 AND grade=-1`, sortClause(sortKey), limit)
+func (s *SqliteSRS) CardsUnseen(ctx context.Context, sortKey string, limit int, deckIDs []string) ([]*srs.Card, error) {
+	return s.queryCards(ctx, `active=1 AND grade=-1`, sortClause(sortKey), limit, deckIDs)
 }
 
-func (s *SqliteSRS) CardsLearnAhead(ctx context.Context, now int64, sortKey string, limit int) ([]*srs.Card, error) {
-	return s.queryCards(ctx, `active=1 AND grade>=2 AND ?<next_rep`, sortClause(sortKey), limit, now)
+func (s *SqliteSRS) CardsLearnAhead(ctx context.Context, now int64, sortKey string, limit int, deckIDs []string) ([]*srs.Card, error) {
+	return s.queryCards(ctx, `active=1 AND grade>=2 AND ?<next_rep`, sortClause(sortKey), limit, deckIDs, now)
 }
 
 func (s *SqliteSRS) SisterCardCountScheduledBetween(ctx context.Context, factID, excludeCardID string, from, to int64) (int, error) {
@@ -316,11 +365,16 @@ func (s *SqliteSRS) count(ctx context.Context, query string, args ...any) (int, 
 }
 
 // queryCards runs a card SELECT with the given WHERE clause, ORDER BY clause,
-// and limit (<=0 meaning unlimited). order must come from sortClause; where is a
-// constant string so only the bound args are user-controlled.
-func (s *SqliteSRS) queryCards(ctx context.Context, where, order string, limit int, args ...any) ([]*srs.Card, error) {
+// limit (<=0 meaning unlimited), and optional deck filter. where is a constant
+// string; only bound args are user-controlled.
+func (s *SqliteSRS) queryCards(ctx context.Context, where, order string, limit int, deckIDs []string, args ...any) ([]*srs.Card, error) {
 	if limit <= 0 {
 		limit = -1 // SQLite: negative LIMIT means no limit.
+	}
+	if len(deckIDs) > 0 {
+		clause, deckArgs := inClause(deckIDs)
+		where += " AND deck_id IN " + clause
+		args = append(args, deckArgs...)
 	}
 	query := `SELECT ` + cardColumns + ` FROM cards WHERE ` + where + ` ORDER BY ` + order + ` LIMIT ?`
 	args = append(args, limit)
@@ -338,6 +392,28 @@ func (s *SqliteSRS) queryCards(ctx context.Context, where, order string, limit i
 		cards = append(cards, c)
 	}
 	return cards, rows.Err()
+}
+
+// inClause builds a SQL IN placeholder string and corresponding args slice.
+func inClause(ids []string) (string, []any) {
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	return "(" + strings.Join(placeholders, ",") + ")", args
+}
+
+// buildCountQuery appends an optional deck_id IN filter to a count query.
+func buildCountQuery(base string, baseArgs []any, deckIDs []string) (string, []any) {
+	args := append([]any{}, baseArgs...)
+	if len(deckIDs) > 0 {
+		clause, deckArgs := inClause(deckIDs)
+		base += " AND deck_id IN " + clause
+		args = append(args, deckArgs...)
+	}
+	return base, args
 }
 
 // rowScanner is satisfied by both *sql.Row and *sql.Rows.

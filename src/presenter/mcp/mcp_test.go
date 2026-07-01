@@ -66,6 +66,21 @@ func decodeStructured(t *testing.T, res *mcpsdk.CallToolResult, v any) {
 	}
 }
 
+// createTestDeck creates a deck via MCP and returns its ID.
+func createTestDeck(t *testing.T, cs *mcpsdk.ClientSession) string {
+	t.Helper()
+	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
+		Name:      "create_deck",
+		Arguments: map[string]any{"name": "Test Deck"},
+	})
+	if err != nil {
+		t.Fatalf("create_deck: %v", err)
+	}
+	var out CreateDeckOutput
+	decodeStructured(t, res, &out)
+	return out.DeckID
+}
+
 func TestListTools(t *testing.T) {
 	cs := newTestSession(t)
 	res, err := cs.ListTools(context.Background(), nil)
@@ -86,10 +101,11 @@ func TestListTools(t *testing.T) {
 func TestCreateCardForwardAndReverse(t *testing.T) {
 	cs := newTestSession(t)
 	ctx := context.Background()
+	deckID := createTestDeck(t, cs)
 
 	res, err := cs.CallTool(ctx, &mcpsdk.CallToolParams{
 		Name:      "create_card",
-		Arguments: map[string]any{"front": "Capital of France?", "back": "Paris", "reverse": true},
+		Arguments: map[string]any{"front": "Capital of France?", "back": "Paris", "reverse": true, "deckId": deckID},
 	})
 	if err != nil {
 		t.Fatalf("call create_card: %v", err)
@@ -109,9 +125,10 @@ func TestCreateCardForwardAndReverse(t *testing.T) {
 
 func TestCreateCardForwardOnly(t *testing.T) {
 	cs := newTestSession(t)
+	deckID := createTestDeck(t, cs)
 	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 		Name:      "create_card",
-		Arguments: map[string]any{"front": "2 + 2", "back": "4"},
+		Arguments: map[string]any{"front": "2 + 2", "back": "4", "deckId": deckID},
 	})
 	if err != nil {
 		t.Fatalf("call create_card: %v", err)
@@ -139,9 +156,10 @@ func TestCreateCardEmptyFrontIsToolError(t *testing.T) {
 
 func TestCreateCardRejectsBadGrade(t *testing.T) {
 	cs := newTestSession(t)
+	deckID := createTestDeck(t, cs)
 	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 		Name:      "create_card",
-		Arguments: map[string]any{"front": "q", "back": "a", "grade": 9},
+		Arguments: map[string]any{"front": "q", "back": "a", "grade": 9, "deckId": deckID},
 	})
 	if err != nil {
 		t.Fatalf("call create_card: %v", err)
@@ -155,10 +173,11 @@ func TestListRecentCards(t *testing.T) {
 	cs := newTestSession(t)
 	ctx := context.Background()
 
+	deckID := createTestDeck(t, cs)
 	for _, q := range []string{"a", "b", "c"} {
 		if _, err := cs.CallTool(ctx, &mcpsdk.CallToolParams{
 			Name:      "create_card",
-			Arguments: map[string]any{"front": q, "back": q + "!"},
+			Arguments: map[string]any{"front": q, "back": q + "!", "deckId": deckID},
 		}); err != nil {
 			t.Fatalf("seed create_card %q: %v", q, err)
 		}

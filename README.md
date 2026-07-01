@@ -30,22 +30,57 @@ handlers (transport) -> service (logic) -> domain interfaces <- infra (adapters)
 
 ## Run
 
+### Locally (two processes)
+
 ```bash
-go run ./src          # boots on :8080 (config.yaml auto-created on first run)
-curl localhost:8080/health   # -> OK
+# Terminal 1 — web UI on :8858
+go run ./src
+
+# Terminal 2 — MCP server on :8859
+go run ./src/cmd/mcp
 ```
+
+Both read the same `config.yaml` and share the same SQLite database. SQLite
+serialises concurrent writes with a busy timeout so running them in parallel
+is safe.
 
 Config path is overridable via `STELLA_CONFIG_PATH`.
 
-## MCP server
-
-A second binary speaks the [Model Context Protocol](https://modelcontextprotocol.io)
-over stdio, so an MCP client (Claude, editors, …) can create and browse cards. It
-is a transport over the same cards service and reads the same `config.yaml`/SQLite
-database as the web app.
+### Docker (both in one container)
 
 ```bash
-go build -o stella-mcp ./src/cmd/mcp
+# Build
+docker build -t stella .
+
+# Run — mount a volume so the database survives restarts
+docker run -d \
+  -p 8858:8858 \
+  -p 8859:8859 \
+  -v stella-data:/app/data \
+  --name stella \
+  stella
+```
+
+The entrypoint starts both binaries. If either crashes the container exits
+(use `--restart unless-stopped` for production).
+
+Port summary:
+
+| Port | Service        |
+|------|----------------|
+| 8858 | Web UI (HTTP)  |
+| 8859 | MCP (StreamableHTTP) |
+
+### MCP server
+
+The MCP server speaks the [Model Context Protocol](https://modelcontextprotocol.io)
+over **StreamableHTTP** on port `8859`. Connect an MCP client to
+`http://<host>:8859`.
+
+For Claude Code (pointing at a local instance):
+
+```bash
+claude mcp add stella --transport http http://localhost:8859
 ```
 
 Tools:
@@ -54,17 +89,6 @@ Tools:
   `reverse` (also quiz back→front), `grade` (0–5 initial self-grade; omit to leave
   unseen) and `deckId` are optional.
 - `list_recent_cards` — list recent facts with each sister card's scheduling status.
-
-Register it with a client by pointing at the built binary, e.g. for Claude Code:
-
-```bash
-claude mcp add stella -e STELLA_CONFIG_PATH=/abs/path/to/config.yaml -- /abs/path/to/stella-mcp
-```
-
-The MCP server and the web app can run at once against the same DB (SQLite serialises
-writes with a busy timeout). Because the client controls the binary's working
-directory, use **absolute** paths for `database.path` (and `dataPath`) in the
-config you point `STELLA_CONFIG_PATH` at.
 
 ## Status
 

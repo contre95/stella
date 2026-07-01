@@ -12,6 +12,7 @@ import (
 	"github.com/contre95/stella/src/features/config"
 	"github.com/contre95/stella/src/features/hosting"
 	"github.com/contre95/stella/src/features/logging"
+	"github.com/contre95/stella/src/features/review"
 	"github.com/contre95/stella/src/features/ui"
 	"github.com/contre95/stella/src/infra/database"
 	"github.com/contre95/stella/src/srs"
@@ -47,13 +48,15 @@ func main() {
 
 	// 3. Feature services.
 	cardsService := cards.NewService(db, scheduler, cfgManager)
+	reviewService := review.NewService(db, scheduler)
 
 	// 4. Handlers.
-	uiHandler := ui.NewHandler()
+	uiHandler := ui.NewHandler(reviewService)
 	cardsHandler := cards.NewHandler(cardsService)
+	reviewHandler := review.NewHandler(reviewService)
 
 	// 5. Routes + server.
-	server := hosting.NewServer(cfgManager, uiHandler, cardsHandler)
+	server := hosting.NewServer(cfgManager, uiHandler, cardsHandler, reviewHandler)
 
 	go func() {
 		if err := server.Start(); err != nil {

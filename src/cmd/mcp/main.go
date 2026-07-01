@@ -1,15 +1,16 @@
-// Command mcp runs Stella's Model Context Protocol server over stdio, exposing
-// card operations to MCP clients. It is a second composition root alongside the
-// web server in src/main.go, wiring the same cards service onto the same SQLite
-// database.
+// Command mcp runs Stella's Model Context Protocol server over HTTP
+// (StreamableHTTP transport), exposing card operations to MCP clients.
+// It is a second composition root alongside the web server in src/main.go,
+// wiring the same cards service onto the same SQLite database.
 package main
 
 import (
 	"context"
 	"errors"
-	"io"
+	"fmt"
 	"log/slog"
 	"math/rand"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,7 +18,7 @@ import (
 
 	"github.com/contre95/stella/src/features/cards"
 	"github.com/contre95/stella/src/features/config"
-	"github.com/contre95/stella/src/features/mcp"
+	"github.com/contre95/stella/src/presenter/mcp"
 	"github.com/contre95/stella/src/infra/database"
 	"github.com/contre95/stella/src/srs"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -26,8 +27,6 @@ import (
 const version = "0.1.0"
 
 func main() {
-	// Logs go to stderr: stdout is the JSON-RPC channel for the stdio transport,
-	// so anything else written there corrupts the protocol stream.
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
 
 	configPath := os.Getenv(config.EnvConfigPath)
@@ -57,18 +56,29 @@ func main() {
 	cardsService := cards.NewService(db, scheduler, cfgManager)
 	srv := mcp.NewServer(cfgManager.Get().Server.AppName, version, cardsService)
 
+	handler := mcpsdk.NewStreamableHTTPHandler(func(_ *http.Request) *mcpsdk.Server {
+		return srv
+	}, nil)
+
+	addr := fmt.Sprintf(":%d", cfgManager.Get().MCP.Port)
+	httpServer := &http.Server{Addr: addr, Handler: handler}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	slog.Info("stella mcp server starting (stdio)")
-	// Run blocks until the client disconnects or we're signalled. A client
-	// closing the stdio stream surfaces as io.EOF and a signal as context
-	// cancellation; both are normal shutdowns, not failures.
-	err = srv.Run(ctx, &mcpsdk.StdioTransport{})
-	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, context.Canceled) {
-		slog.Error("mcp server stopped", "err", err)
-		os.Exit(1)
-	}
+	go func() {
+		slog.Info("stella mcp server starting", "addr", addr)
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("mcp server stopped", "err", err)
+			os.Exit(1)
+		}
+	}()
+
+	<-ctx.Done()
+	slog.Info("shutting down mcp server")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = httpServer.Shutdown(shutdownCtx)
 	slog.Info("stella mcp server stopped")
 }
 

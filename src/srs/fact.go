@@ -7,6 +7,7 @@ type Fact struct {
 	ID       string
 	Front    string
 	Back     string
+	Image    string // filename relative to the configured images path; empty means no image
 	DeckID   string
 	Created  int64 // POSIX seconds
 	Modified int64 // POSIX seconds
