@@ -1,7 +1,11 @@
 package cards
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -25,6 +29,32 @@ func NewService(repo srs.Repository, scheduler *srs.Scheduler, cfg *config.Manag
 // ImagesPath returns the directory where card images are stored.
 func (s *Service) ImagesPath() string {
 	return s.cfg.Get().ImagesPath
+}
+
+// saveImageData writes raw image bytes to a new file in imagesPath and returns
+// the generated filename. The extension is inferred from the content.
+func saveImageData(imagesPath string, data []byte) (string, error) {
+	if err := os.MkdirAll(imagesPath, 0o755); err != nil {
+		return "", err
+	}
+	var ext string
+	switch {
+	case len(data) > 2 && data[0] == 0xff && data[1] == 0xd8:
+		ext = ".jpg"
+	case len(data) > 4 && bytes.Equal(data[:4], []byte("\x89PNG")):
+		ext = ".png"
+	case len(data) > 3 && bytes.Equal(data[:3], []byte("GIF")):
+		ext = ".gif"
+	case len(data) > 11 && bytes.Equal(data[:4], []byte("RIFF")) && bytes.Equal(data[8:12], []byte("WEBP")):
+		ext = ".webp"
+	default:
+		return "", fmt.Errorf("unrecognised image format")
+	}
+	filename := uuid.NewString() + ext
+	if err := os.WriteFile(filepath.Join(imagesPath, filename), data, 0o644); err != nil {
+		return "", err
+	}
+	return filename, nil
 }
 
 // AddFact creates a fact and its sister cards. A forward card is always made; a
@@ -150,11 +180,13 @@ type DeckExport struct {
 
 // FactExport is the JSON-serialisable representation of a single fact.
 type FactExport struct {
-	Front      string `json:"front"`
-	Back       string `json:"back"`
-	ImageFront string `json:"image_front,omitempty"`
-	ImageBack  string `json:"image_back,omitempty"`
-	Reverse    bool   `json:"reverse"`
+	Front          string `json:"front"`
+	Back           string `json:"back"`
+	ImageFront     string `json:"image_front,omitempty"`
+	ImageBack      string `json:"image_back,omitempty"`
+	ImageFrontData []byte `json:"image_front_data,omitempty"`
+	ImageBackData  []byte `json:"image_back_data,omitempty"`
+	Reverse        bool   `json:"reverse"`
 }
 
 // ExportDeck returns a DeckExport for the given deck ID.
@@ -180,7 +212,19 @@ func (s *Service) ExportDeck(ctx context.Context, deckID string) (*DeckExport, e
 				break
 			}
 		}
-		exp.Facts = append(exp.Facts, FactExport{Front: f.Front, Back: f.Back, ImageFront: f.ImageFront, ImageBack: f.ImageBack, Reverse: hasReverse})
+		fe := FactExport{Front: f.Front, Back: f.Back, ImageFront: f.ImageFront, ImageBack: f.ImageBack, Reverse: hasReverse}
+		imagesPath := s.cfg.Get().ImagesPath
+		if f.ImageFront != "" {
+			if data, err := os.ReadFile(filepath.Join(imagesPath, f.ImageFront)); err == nil {
+				fe.ImageFrontData = data
+			}
+		}
+		if f.ImageBack != "" {
+			if data, err := os.ReadFile(filepath.Join(imagesPath, f.ImageBack)); err == nil {
+				fe.ImageBackData = data
+			}
+		}
+		exp.Facts = append(exp.Facts, fe)
 	}
 	return exp, nil
 }
@@ -196,9 +240,26 @@ func (s *Service) ImportDeck(ctx context.Context, exp *DeckExport, nameOverride 
 	if err != nil {
 		return nil, 0, err
 	}
+	imagesPath := s.cfg.Get().ImagesPath
 	imported := 0
 	for _, fe := range exp.Facts {
-		if _, err := s.AddFact(ctx, fe.Front, fe.Back, deck.ID, -1, fe.Reverse, fe.ImageFront, fe.ImageBack); err != nil {
+		imgFront := fe.ImageFront
+		imgBack := fe.ImageBack
+		if len(fe.ImageFrontData) > 0 {
+			name, err := saveImageData(imagesPath, fe.ImageFrontData)
+			if err != nil {
+				return deck, imported, err
+			}
+			imgFront = name
+		}
+		if len(fe.ImageBackData) > 0 {
+			name, err := saveImageData(imagesPath, fe.ImageBackData)
+			if err != nil {
+				return deck, imported, err
+			}
+			imgBack = name
+		}
+		if _, err := s.AddFact(ctx, fe.Front, fe.Back, deck.ID, -1, fe.Reverse, imgFront, imgBack); err != nil {
 			return deck, imported, err
 		}
 		imported++

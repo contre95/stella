@@ -35,13 +35,13 @@
     <!-- The card itself (gets drag-transformed) -->
     <div
       id="flip-card"
-      class="absolute inset-0 cursor-pointer overflow-hidden rounded-2xl shadow-[0_24px_60px_-15px_rgba(24,16,48,0.4)]"
+      class="absolute inset-0 cursor-pointer shadow-[0_24px_60px_-15px_rgba(24,16,48,0.4)]"
       style="will-change: transform;"
     >
       <!-- Front face (question) -->
       <div
         id="card-front"
-        class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-10{{if not .Fact.ImageFront}} glass-strong{{end}}"
+        class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-10 overflow-hidden rounded-2xl glass-strong"
         style="transition: opacity 0.32s ease;"
       >
         {{if .Fact.ImageFront}}
@@ -59,13 +59,12 @@
         <p class="relative z-10 text-center text-xl font-medium leading-relaxed text-gray-800 dark:text-gray-100 sm:text-2xl">
           {{if eq .Card.View "forward"}}{{.Fact.Front}}{{else}}{{.Fact.Back}}{{end}}
         </p>
-        <p class="relative z-10 mt-auto pt-8 text-center text-xs text-gray-400 dark:text-gray-500">tap to reveal · swipe</p>
       </div>
 
       <!-- Back face (answer) -->
       <div
         id="card-back"
-        class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-10{{if not .Fact.ImageBack}} glass-strong{{end}}"
+        class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-10 overflow-hidden rounded-2xl glass-strong"
         style="display: none; opacity: 0; pointer-events: none;"
       >
         {{if .Fact.ImageBack}}
@@ -85,44 +84,40 @@
     </div>
   </div>
 
-  <!-- Grade buttons — hidden until flipped -->
-  <div id="grade-buttons" class="mt-3 hidden shrink-0 grid grid-cols-4 gap-2">
+  <!-- Button area — fixed height so the card above never resizes -->
+  <div class="mt-3 shrink-0" style="min-height: 56px;">
+    <!-- Tap to reveal — shown before flip -->
+    <button id="tap-to-reveal-btn"
+      class="w-full rounded-2xl py-4 text-sm font-bold transition-colors bg-white/60 text-gray-600 ring-1 ring-inset ring-gray-300/50 hover:bg-white/80 dark:bg-white/10 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/20 cursor-pointer"
+      style="min-height: 56px;">Show Answer</button>
+
+    <!-- Grade buttons — shown after flip -->
+    <div id="grade-buttons" class="hidden grid grid-cols-4 gap-2 transition duration-300">
     <button
       data-grade="0"
-      hx-post="/review/{{.Card.ID}}/grade{{if .DeckFilter}}?decks={{.DeckFilter}}{{end}}"
-      hx-vals='{"grade":"0"}'
-      hx-target="#review-card-wrap"
-      hx-swap="outerHTML"
+      data-url="/review/{{.Card.ID}}/grade{{if .DeckFilter}}?decks={{.DeckFilter}}{{end}}"
       class="rounded-2xl py-4 text-sm font-bold transition-colors bg-red-500/15 text-red-600 ring-1 ring-inset ring-red-500/20 active:bg-red-500/25 dark:text-red-400"
       style="min-height: 56px;"
     >Again</button>
     <button
       data-grade="2"
-      hx-post="/review/{{.Card.ID}}/grade{{if .DeckFilter}}?decks={{.DeckFilter}}{{end}}"
-      hx-vals='{"grade":"2"}'
-      hx-target="#review-card-wrap"
-      hx-swap="outerHTML"
+      data-url="/review/{{.Card.ID}}/grade{{if .DeckFilter}}?decks={{.DeckFilter}}{{end}}"
       class="rounded-2xl py-4 text-sm font-bold transition-colors bg-orange-500/15 text-orange-600 ring-1 ring-inset ring-orange-500/20 active:bg-orange-500/25 dark:text-orange-400"
       style="min-height: 56px;"
     >Hard</button>
     <button
       data-grade="4"
-      hx-post="/review/{{.Card.ID}}/grade{{if .DeckFilter}}?decks={{.DeckFilter}}{{end}}"
-      hx-vals='{"grade":"4"}'
-      hx-target="#review-card-wrap"
-      hx-swap="outerHTML"
+      data-url="/review/{{.Card.ID}}/grade{{if .DeckFilter}}?decks={{.DeckFilter}}{{end}}"
       class="rounded-2xl py-4 text-sm font-bold transition-colors bg-emerald-500/15 text-emerald-600 ring-1 ring-inset ring-emerald-500/20 active:bg-emerald-500/25 dark:text-emerald-400"
       style="min-height: 56px;"
     >Good</button>
     <button
       data-grade="5"
-      hx-post="/review/{{.Card.ID}}/grade{{if .DeckFilter}}?decks={{.DeckFilter}}{{end}}"
-      hx-vals='{"grade":"5"}'
-      hx-target="#review-card-wrap"
-      hx-swap="outerHTML"
+      data-url="/review/{{.Card.ID}}/grade{{if .DeckFilter}}?decks={{.DeckFilter}}{{end}}"
       class="rounded-2xl py-4 text-sm font-bold transition-colors bg-pink-500/15 text-pink-600 ring-1 ring-inset ring-pink-500/20 active:bg-pink-500/25 dark:text-pink-400"
       style="min-height: 56px;"
     >Easy</button>
+    </div>
   </div>
 
   <!-- Show question button — shown after reveal -->
@@ -134,11 +129,6 @@
     class="hidden mt-2 shrink-0 w-full text-center text-xs font-medium text-gray-400 hover:text-pink-500 transition-colors dark:text-gray-500 dark:hover:text-pink-400"
   >Show question</button>
 
-  <!-- Swipe hint line — shown after reveal -->
-  <p id="swipe-hint" class="hidden mt-2 shrink-0 text-center text-xs text-gray-300 dark:text-gray-700">
-    ← again &nbsp;·&nbsp; good → &nbsp;·&nbsp; ↑ hard &nbsp;·&nbsp; ↓ easy
-  </p>
-
   <script>
   (function () {
     var wrap        = document.getElementById('review-card-wrap');
@@ -147,7 +137,7 @@
     var cardFront   = document.getElementById('card-front');
     var cardBack    = document.getElementById('card-back');
     var gradeBtn    = document.getElementById('grade-buttons');
-    var swipeHint   = document.getElementById('swipe-hint');
+    var tapBtn      = document.getElementById('tap-to-reveal-btn');
     var showQBtn    = document.getElementById('show-question-btn');
     var lblAgain    = document.getElementById('drag-label-again');
     var lblGood     = document.getElementById('drag-label-good');
@@ -169,14 +159,15 @@
       cardBack.style.opacity        = '1';
       cardBack.style.pointerEvents  = 'auto';
       flipCard.style.cursor = 'default';
+      tapBtn.classList.add('hidden');
       gradeBtn.classList.remove('hidden');
       showQBtn.classList.remove('hidden');
-      swipeHint.classList.remove('hidden');
     }
 
     flipCard.addEventListener('click', function () {
       if (!dragging) reveal();
     });
+    tapBtn.addEventListener('click', reveal);
 
     /* ── Touch handling ────────────────────────────────────────── */
     cardOuter.addEventListener('touchstart', function (e) {
@@ -228,18 +219,17 @@
       setLabels(0, 0, 0, 0);
 
       if (!revealed) {
-        reveal();
         snapBack();
         return;
       }
 
       var THRESHOLD = 90;
       if (Math.abs(dx) >= Math.abs(dy)) {
-        if      (dx < -THRESHOLD) { flyOut(-1,  0); grade(0); e.preventDefault(); return; }
-        else if (dx >  THRESHOLD) { flyOut( 1,  0); grade(4); e.preventDefault(); return; }
+        if      (dx < -THRESHOLD) { flyOut(-1,  0); gradeCard(0); e.preventDefault(); return; }
+        else if (dx >  THRESHOLD) { flyOut( 1,  0); gradeCard(4); e.preventDefault(); return; }
       } else {
-        if      (dy < -THRESHOLD) { flyOut( 0, -1); grade(2); e.preventDefault(); return; }
-        else if (dy >  THRESHOLD) { flyOut( 0,  1); grade(5); e.preventDefault(); return; }
+        if      (dy < -THRESHOLD) { flyOut( 0, -1); gradeCard(2); e.preventDefault(); return; }
+        else if (dy >  THRESHOLD) { flyOut( 0,  1); gradeCard(5); e.preventDefault(); return; }
       }
 
       snapBack();
@@ -267,12 +257,29 @@
       flipCard.style.opacity = '0';
     }
 
-    function grade(g) {
+    function gradeCard(g) {
       setTimeout(function () {
         var btn = wrap.querySelector('[data-grade="' + g + '"]');
-        if (btn) btn.click();
+        if (btn) {
+          htmx.ajax('POST', btn.dataset.url, {
+            target: '#review-card-wrap',
+            swap: 'outerHTML',
+            values: {grade: g.toString()}
+          });
+        }
       }, 230);
     }
+
+    gradeBtn.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-grade]');
+      if (!btn || !revealed) return;
+      e.preventDefault();
+      var g = parseInt(btn.dataset.grade);
+      var dirs = {0: [-1,0], 2: [0,-1], 4: [1,0], 5: [0,1]};
+      var dir = dirs[g];
+      if (dir) flyOut(dir[0], dir[1]);
+      gradeCard(g);
+    });
 
     /* ── Show question modal ──────────────────────────────────── */
     showQBtn.addEventListener('click', function () {
