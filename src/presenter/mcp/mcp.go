@@ -6,10 +6,15 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/contre95/stella/src/features/cards"
 	"github.com/contre95/stella/src/srs"
+	"github.com/google/uuid"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -52,11 +57,13 @@ func NewServer(name, version string, cardsService *cards.Service) *mcpsdk.Server
 
 // CreateCardInput is the argument schema for create_card.
 type CreateCardInput struct {
-	Front   string `json:"front" jsonschema:"The front side / question of the card. Required."`
-	Back    string `json:"back,omitempty" jsonschema:"The back side / answer of the card."`
-	Reverse bool   `json:"reverse,omitempty" jsonschema:"Also create a reverse card quizzing back -> front. Ignored when back is empty."`
-	Grade   *int   `json:"grade,omitempty" jsonschema:"Initial self-grade 0-5 (0 = blackout, 5 = perfect recall), counted as a first repetition. Omit to leave the card unseen so the review process grades it."`
-	DeckID  string `json:"deckId" jsonschema:"Deck id to file the card under. Required — use list_decks or create_deck first."`
+	Front      string `json:"front" jsonschema:"The front side / question of the card. Required."`
+	Back       string `json:"back,omitempty" jsonschema:"The back side / answer of the card."`
+	Reverse    bool   `json:"reverse,omitempty" jsonschema:"Also create a reverse card quizzing back -> front. Ignored when back is empty."`
+	Grade      *int   `json:"grade,omitempty" jsonschema:"Initial self-grade 0-5 (0 = blackout, 5 = perfect recall), counted as a first repetition. Omit to leave the card unseen so the review process grades it."`
+	DeckID     string `json:"deckId" jsonschema:"Deck id to file the card under. Required — use list_decks or create_deck first."`
+	ImageFront string `json:"imageFront,omitempty" jsonschema:"URL of an image to show on the front side. Downloaded and stored locally."`
+	ImageBack  string `json:"imageBack,omitempty" jsonschema:"URL of an image to show on the back side. Downloaded and stored locally."`
 }
 
 // CreateCardOutput is the result schema for create_card.
@@ -82,8 +89,25 @@ func (s *Server) createCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in C
 			return nil, CreateCardOutput{}, fmt.Errorf("grade must be between 0 and 5")
 		}
 	}
-	fact, err := s.cards.AddFact(ctx, front, in.Back, in.DeckID, grade, in.Reverse, "", "")
+	imgFront, err := s.saveImageFromURL(in.ImageFront)
 	if err != nil {
+		return nil, CreateCardOutput{}, fmt.Errorf("saving front image: %w", err)
+	}
+	imgBack, err := s.saveImageFromURL(in.ImageBack)
+	if err != nil {
+		if imgFront != "" {
+			os.Remove(filepath.Join(s.cards.ImagesPath(), imgFront))
+		}
+		return nil, CreateCardOutput{}, fmt.Errorf("saving back image: %w", err)
+	}
+	fact, err := s.cards.AddFact(ctx, front, in.Back, in.DeckID, grade, in.Reverse, imgFront, imgBack)
+	if err != nil {
+		if imgFront != "" {
+			os.Remove(filepath.Join(s.cards.ImagesPath(), imgFront))
+		}
+		if imgBack != "" {
+			os.Remove(filepath.Join(s.cards.ImagesPath(), imgBack))
+		}
 		return nil, CreateCardOutput{}, fmt.Errorf("creating card: %w", err)
 	}
 	added := 1
@@ -199,4 +223,49 @@ func (s *Server) listDecks(ctx context.Context, _ *mcpsdk.CallToolRequest, _ Lis
 		out.Decks = append(out.Decks, DeckSummary{DeckID: d.ID, Name: d.Name})
 	}
 	return nil, out, nil
+}
+
+// saveImageFromURL downloads a URL and saves it as a local image file.
+// Returns the filename, or empty string if url is empty.
+func (s *Server) saveImageFromURL(url string) (string, error) {
+	if url == "" {
+		return "", nil
+	}
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("downloading image: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("downloading image: HTTP %s", resp.Status)
+	}
+	var ext string
+	switch resp.Header.Get("Content-Type") {
+	case "image/jpeg":
+		ext = ".jpg"
+	case "image/png":
+		ext = ".png"
+	case "image/gif":
+		ext = ".gif"
+	case "image/webp":
+		ext = ".webp"
+	default:
+		return "", fmt.Errorf("unsupported image type: %s", resp.Header.Get("Content-Type"))
+	}
+	imagesPath := s.cards.ImagesPath()
+	if err := os.MkdirAll(imagesPath, 0o755); err != nil {
+		return "", err
+	}
+	filename := uuid.NewString() + ext
+	dest := filepath.Join(imagesPath, filename)
+	f, err := os.Create(dest)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		os.Remove(dest)
+		return "", err
+	}
+	return filename, nil
 }

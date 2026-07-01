@@ -41,32 +41,44 @@
       <!-- Front face (question) -->
       <div
         id="card-front"
-        class="glass-strong absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-10"
+        class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-10{{if not .Fact.ImageFront}} glass-strong{{end}}"
         style="transition: opacity 0.32s ease;"
       >
-        <span class="mb-6 text-xs font-semibold uppercase tracking-widest text-pink-500/80 dark:text-pink-300/70">
+        {{if .Fact.ImageFront}}
+        <img src="/images/{{.Fact.ImageFront}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
+        <div class="pointer-events-none absolute inset-0 bg-white/60 dark:bg-[#17161e]/70"></div>
+        {{end}}
+        <span class="relative z-10 mb-3 text-xs font-semibold uppercase tracking-widest text-pink-500/80 dark:text-pink-300/70">
           {{if eq .Card.View "forward"}}Question{{else}}Reverse{{end}}
         </span>
         {{if .Fact.ImageFront}}
-          <img src="/images/{{.Fact.ImageFront}}" alt="" class="mb-4 max-h-36 w-auto rounded-lg object-contain" />
+        <div class="relative z-10 flex-1 flex items-center justify-center min-h-0 w-full mb-3">
+          <img src="/images/{{.Fact.ImageFront}}" alt="" class="max-h-full w-auto max-w-full rounded-lg object-contain pointer-events-none" />
+        </div>
         {{end}}
-        <p class="text-center text-xl font-medium leading-relaxed text-gray-800 dark:text-gray-100 sm:text-2xl">
+        <p class="relative z-10 text-center text-xl font-medium leading-relaxed text-gray-800 dark:text-gray-100 sm:text-2xl">
           {{if eq .Card.View "forward"}}{{.Fact.Front}}{{else}}{{.Fact.Back}}{{end}}
         </p>
-        <p class="mt-auto pt-8 text-center text-xs text-gray-400 dark:text-gray-500">tap to reveal · swipe</p>
+        <p class="relative z-10 mt-auto pt-8 text-center text-xs text-gray-400 dark:text-gray-500">tap to reveal · swipe</p>
       </div>
 
       <!-- Back face (answer) -->
       <div
         id="card-back"
-        class="glass-strong absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-10"
-        style="opacity: 0; pointer-events: none; transition: opacity 0.32s ease;"
+        class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-10{{if not .Fact.ImageBack}} glass-strong{{end}}"
+        style="display: none; opacity: 0; pointer-events: none;"
       >
-        <span class="mb-6 text-xs font-semibold uppercase tracking-widest text-emerald-500/80 dark:text-emerald-300/70">Answer</span>
         {{if .Fact.ImageBack}}
-          <img src="/images/{{.Fact.ImageBack}}" alt="" class="mb-4 max-h-36 w-auto rounded-lg object-contain" />
+        <img src="/images/{{.Fact.ImageBack}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
+        <div class="pointer-events-none absolute inset-0 bg-white/60 dark:bg-[#17161e]/70"></div>
         {{end}}
-        <p class="text-center text-xl font-medium leading-relaxed text-gray-900 dark:text-white sm:text-2xl">
+        <span class="relative z-10 mb-3 text-xs font-semibold uppercase tracking-widest text-emerald-500/80 dark:text-emerald-300/70">Answer</span>
+        {{if .Fact.ImageBack}}
+        <div class="relative z-10 flex-1 flex items-center justify-center min-h-0 w-full mb-3">
+          <img src="/images/{{.Fact.ImageBack}}" alt="" class="max-h-full w-auto max-w-full rounded-lg object-contain pointer-events-none" />
+        </div>
+        {{end}}
+        <p class="relative z-10 text-center text-xl font-medium leading-relaxed text-gray-900 dark:text-white sm:text-2xl">
           {{if eq .Card.View "forward"}}{{.Fact.Back}}{{else}}{{.Fact.Front}}{{end}}
         </p>
       </div>
@@ -113,6 +125,15 @@
     >Easy</button>
   </div>
 
+  <!-- Show question button — shown after reveal -->
+  <button
+    id="show-question-btn"
+    data-label="{{if eq .Card.View "forward"}}Question{{else}}Reverse{{end}}"
+    data-image="{{if eq .Card.View "forward"}}{{.Fact.ImageFront}}{{else}}{{.Fact.ImageBack}}{{end}}"
+    data-text="{{if eq .Card.View "forward"}}{{.Fact.Front}}{{else}}{{.Fact.Back}}{{end}}"
+    class="hidden mt-2 shrink-0 w-full text-center text-xs font-medium text-gray-400 hover:text-pink-500 transition-colors dark:text-gray-500 dark:hover:text-pink-400"
+  >Show question</button>
+
   <!-- Swipe hint line — shown after reveal -->
   <p id="swipe-hint" class="hidden mt-2 shrink-0 text-center text-xs text-gray-300 dark:text-gray-700">
     ← again &nbsp;·&nbsp; good → &nbsp;·&nbsp; ↑ hard &nbsp;·&nbsp; ↓ easy
@@ -127,6 +148,7 @@
     var cardBack    = document.getElementById('card-back');
     var gradeBtn    = document.getElementById('grade-buttons');
     var swipeHint   = document.getElementById('swipe-hint');
+    var showQBtn    = document.getElementById('show-question-btn');
     var lblAgain    = document.getElementById('drag-label-again');
     var lblGood     = document.getElementById('drag-label-good');
     var lblUp       = document.getElementById('drag-label-up');
@@ -141,10 +163,14 @@
       revealed = true;
       cardFront.style.opacity       = '0';
       cardFront.style.pointerEvents = 'none';
+      cardBack.style.display        = 'flex';
+      void cardBack.offsetHeight;
+      cardBack.style.transition     = 'opacity 0.32s ease';
       cardBack.style.opacity        = '1';
       cardBack.style.pointerEvents  = 'auto';
       flipCard.style.cursor = 'default';
       gradeBtn.classList.remove('hidden');
+      showQBtn.classList.remove('hidden');
       swipeHint.classList.remove('hidden');
     }
 
@@ -247,6 +273,33 @@
         if (btn) btn.click();
       }, 230);
     }
+
+    /* ── Show question modal ──────────────────────────────────── */
+    showQBtn.addEventListener('click', function () {
+      var isDark = document.documentElement.classList.contains('dark');
+      var html = '<div class="text-center">' +
+        '<span class="mb-4 inline-block text-xs font-semibold uppercase tracking-widest text-pink-500">' +
+          this.dataset.label +
+        '</span>';
+      if (this.dataset.image) {
+        html += '<img src="/images/' + this.dataset.image + '" class="mx-auto mb-4 max-h-48 w-auto rounded-lg object-contain" />';
+      }
+      html += '<p class="text-xl font-medium leading-relaxed ' +
+        (isDark ? 'text-gray-100' : 'text-gray-800') +
+        '">' + this.dataset.text + '</p>' +
+        '</div>';
+      Swal.fire({
+        html: html,
+        showConfirmButton: true,
+        confirmButtonText: 'Close',
+        confirmButtonColor: '#db2777',
+        background: isDark ? '#17161e' : '#fff',
+        color: isDark ? '#e5e7eb' : '#111827',
+        customClass: { confirmButton: 'rounded-2xl px-6 py-3 text-sm font-bold' },
+        padding: '2rem',
+        width: '32rem',
+      });
+    });
   })();
   </script>
 </div>

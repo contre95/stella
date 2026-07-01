@@ -150,9 +150,11 @@ type DeckExport struct {
 
 // FactExport is the JSON-serialisable representation of a single fact.
 type FactExport struct {
-	Front   string `json:"front"`
-	Back    string `json:"back"`
-	Reverse bool   `json:"reverse"`
+	Front      string `json:"front"`
+	Back       string `json:"back"`
+	ImageFront string `json:"image_front,omitempty"`
+	ImageBack  string `json:"image_back,omitempty"`
+	Reverse    bool   `json:"reverse"`
 }
 
 // ExportDeck returns a DeckExport for the given deck ID.
@@ -178,7 +180,7 @@ func (s *Service) ExportDeck(ctx context.Context, deckID string) (*DeckExport, e
 				break
 			}
 		}
-		exp.Facts = append(exp.Facts, FactExport{Front: f.Front, Back: f.Back, Reverse: hasReverse})
+		exp.Facts = append(exp.Facts, FactExport{Front: f.Front, Back: f.Back, ImageFront: f.ImageFront, ImageBack: f.ImageBack, Reverse: hasReverse})
 	}
 	return exp, nil
 }
@@ -196,7 +198,7 @@ func (s *Service) ImportDeck(ctx context.Context, exp *DeckExport, nameOverride 
 	}
 	imported := 0
 	for _, fe := range exp.Facts {
-		if _, err := s.AddFact(ctx, fe.Front, fe.Back, deck.ID, -1, fe.Reverse, "", ""); err != nil {
+		if _, err := s.AddFact(ctx, fe.Front, fe.Back, deck.ID, -1, fe.Reverse, fe.ImageFront, fe.ImageBack); err != nil {
 			return deck, imported, err
 		}
 		imported++
