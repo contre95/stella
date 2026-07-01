@@ -165,7 +165,40 @@
     }
     .dark .btn-ghost:hover { background: rgba(255, 255, 255, 0.1); }
 
-    /* ── Micro-interactions & accents ───────────────────────────── */
+    /* ── Swipeable rows ────────────────────────────────────────── */
+    .swipe-row { position: relative; overflow: hidden; }
+    .swipe-actions { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; z-index: 0; }
+    .swipe-actions.left { left: 0; }
+    .swipe-actions.right { right: 0; }
+    .swipe-content { position: relative; z-index: 1; transition: transform 0.2s ease; background: inherit; }
+    .swipe-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 72px; height: 100%; padding: 0 12px;
+      font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+      border: none; cursor: pointer;
+    }
+    .swipe-btn-del { background: #ef4444; color: #fff; }
+    .swipe-btn-reset { background: #f59e0b; color: #fff; }
+
+    /* ── Teleprompter badge ────────────────────────────────────── */
+    .deck-badge {
+      overflow: hidden; white-space: nowrap; display: inline-block; max-width: 100%;
+      vertical-align: middle;
+    }
+    .deck-badge-inner {
+      display: inline-block; padding-right: 0;
+    }
+    .deck-badge:hover .deck-badge-inner,
+    .deck-badge:focus .deck-badge-inner {
+      animation: tp-scroll 2.5s linear infinite;
+    }
+    @keyframes tp-scroll {
+      0%   { transform: translateX(0); }
+      40%  { transform: translateX(calc(-100% + 10ch)); }
+      60%  { transform: translateX(calc(-100% + 10ch)); }
+      100% { transform: translateX(0); }
+    }
+
     .lift { transition: transform .18s ease, box-shadow .18s ease; }
     .lift:hover { transform: translateY(-3px); }
 

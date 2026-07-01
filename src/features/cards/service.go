@@ -106,9 +106,9 @@ func (s *Service) ListFacts(ctx context.Context) ([]*FactRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	deckNames := make(map[string]string, len(decks))
+	deckMap := make(map[string]*srs.Deck, len(decks))
 	for _, d := range decks {
-		deckNames[d.ID] = d.Name
+		deckMap[d.ID] = d
 	}
 	now := s.scheduler.AdjustedNow(time.Now())
 	rows := make([]*FactRow, 0, len(facts))
@@ -121,7 +121,12 @@ func (s *Service) ListFacts(ctx context.Context) ([]*FactRow, error) {
 		for _, c := range cards {
 			cardRows = append(cardRows, &CardRow{Card: c, Status: s.status(c, now)})
 		}
-		rows = append(rows, &FactRow{Fact: f, DeckName: deckNames[f.DeckID], Cards: cardRows})
+		dk := deckMap[f.DeckID]
+		dn, dc := "", ""
+		if dk != nil {
+			dn, dc = dk.Name, dk.Color
+		}
+		rows = append(rows, &FactRow{Fact: f, DeckName: dn, DeckColor: dc, Cards: cardRows})
 	}
 	return rows, nil
 }
@@ -129,6 +134,26 @@ func (s *Service) ListFacts(ctx context.Context) ([]*FactRow, error) {
 // DeleteFact removes a fact and (via cascade) its cards.
 func (s *Service) DeleteFact(ctx context.Context, id string) error {
 	return s.repo.DeleteFact(ctx, id)
+}
+
+// ResetFact resets all sister cards of a fact back to unseen.
+func (s *Service) ResetFact(ctx context.Context, factID string) error {
+	cards, err := s.repo.CardsForFact(ctx, factID)
+	if err != nil {
+		return err
+	}
+	for _, c := range cards {
+		c.Grade = srs.GradeUnseen
+		c.AcqReps = 0
+		c.RetReps = 0
+		c.Lapses = 0
+		c.LastRep = 0
+		c.NextRep = 0
+		if err := s.repo.UpdateCard(ctx, c); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ListDecks returns all decks ordered by name.
@@ -141,9 +166,17 @@ func (s *Service) DeleteDeck(ctx context.Context, id string) error {
 	return s.repo.DeleteDeck(ctx, id)
 }
 
-// AddDeck creates a new named deck.
-func (s *Service) AddDeck(ctx context.Context, name string) (*srs.Deck, error) {
-	d := &srs.Deck{ID: uuid.NewString(), Name: name}
+var deckColors = []string{
+	"#f472b6", "#a78bfa", "#60a5fa", "#34d399", "#fbbf24",
+	"#fb923c", "#f87171", "#2dd4bf", "#818cf8", "#e879f9",
+	"#6ee7b7", "#38bdf8", "#f97316", "#a855f7", "#14b8a6",
+}
+
+// AddDeck creates a new named deck with a random colour.
+func (s *Service) AddDeck(ctx context.Context, name, description string) (*srs.Deck, error) {
+	all, _ := s.repo.ListDecks(ctx)
+	c := deckColors[len(all)%len(deckColors)]
+	d := &srs.Deck{ID: uuid.NewString(), Name: name, Color: c, Description: description}
 	if err := s.repo.AddDeck(ctx, d); err != nil {
 		return nil, err
 	}
@@ -156,6 +189,11 @@ func (s *Service) ListFactsByDeck(ctx context.Context, deckID string) ([]*FactRo
 	if err != nil {
 		return nil, err
 	}
+	deck, _ := s.repo.GetDeck(ctx, deckID)
+	dn, dc := "", ""
+	if deck != nil {
+		dn, dc = deck.Name, deck.Color
+	}
 	now := s.scheduler.AdjustedNow(time.Now())
 	rows := make([]*FactRow, 0, len(facts))
 	for _, f := range facts {
@@ -167,15 +205,16 @@ func (s *Service) ListFactsByDeck(ctx context.Context, deckID string) ([]*FactRo
 		for _, c := range cards {
 			cardRows = append(cardRows, &CardRow{Card: c, Status: s.status(c, now)})
 		}
-		rows = append(rows, &FactRow{Fact: f, Cards: cardRows})
+		rows = append(rows, &FactRow{Fact: f, DeckName: dn, DeckColor: dc, Cards: cardRows})
 	}
 	return rows, nil
 }
 
 // DeckExport is the JSON-serialisable representation of a deck plus its facts.
 type DeckExport struct {
-	Name  string        `json:"name"`
-	Facts []FactExport  `json:"facts"`
+	Name        string        `json:"name"`
+	Description string        `json:"description,omitempty"`
+	Facts       []FactExport  `json:"facts"`
 }
 
 // FactExport is the JSON-serialisable representation of a single fact.
@@ -199,7 +238,7 @@ func (s *Service) ExportDeck(ctx context.Context, deckID string) (*DeckExport, e
 	if err != nil {
 		return nil, err
 	}
-	exp := &DeckExport{Name: deck.Name, Facts: make([]FactExport, 0, len(facts))}
+	exp := &DeckExport{Name: deck.Name, Description: deck.Description, Facts: make([]FactExport, 0, len(facts))}
 	for _, f := range facts {
 		cards, err := s.repo.CardsForFact(ctx, f.ID)
 		if err != nil {
@@ -236,7 +275,7 @@ func (s *Service) ImportDeck(ctx context.Context, exp *DeckExport, nameOverride 
 	if nameOverride != "" {
 		name = nameOverride
 	}
-	deck, err := s.AddDeck(ctx, name)
+	deck, err := s.AddDeck(ctx, name, exp.Description)
 	if err != nil {
 		return nil, 0, err
 	}

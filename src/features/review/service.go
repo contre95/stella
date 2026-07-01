@@ -20,6 +20,8 @@ type CardInSession struct {
 	Card      *srs.Card
 	Fact      *srs.Fact
 	Remaining int
+	DeckName  string
+	DeckColor string
 }
 
 // Service drives the review loop: queue selection, grading, and aggregate stats.
@@ -63,7 +65,12 @@ func (s *Service) NextCard(ctx context.Context, deckIDs []string) (*CardInSessio
 		return nil, err
 	}
 
-	return &CardInSession{Card: card, Fact: fact, Remaining: remaining}, nil
+	dn, dc := "", ""
+	if d, err := s.repo.GetDeck(ctx, card.DeckID); err == nil && d != nil {
+		dn, dc = d.Name, d.Color
+	}
+
+	return &CardInSession{Card: card, Fact: fact, Remaining: remaining, DeckName: dn, DeckColor: dc}, nil
 }
 
 // Grade applies a grade to a card, persists the updated scheduling state, logs

@@ -55,6 +55,8 @@ func (h *Handler) RenderSession(c *fiber.Ctx) error {
 		"Card":       ci.Card,
 		"Fact":       ci.Fact,
 		"Remaining":  ci.Remaining,
+		"DeckName":   ci.DeckName,
+		"DeckColor":  ci.DeckColor,
 		"DeckFilter": deckFilter,
 	})
 }
@@ -90,6 +92,8 @@ func (h *Handler) GradeCard(c *fiber.Ctx) error {
 		"Card":       ci.Card,
 		"Fact":       ci.Fact,
 		"Remaining":  ci.Remaining,
+		"DeckName":   ci.DeckName,
+		"DeckColor":  ci.DeckColor,
 		"DeckFilter": deckFilter,
 	})
 }

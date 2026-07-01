@@ -129,6 +129,14 @@ func (h *Handler) Delete(c *fiber.Ctx) error {
 	return h.List(c)
 }
 
+// Reset resets all cards for a fact back to unseen and returns the refreshed list.
+func (h *Handler) Reset(c *fiber.Ctx) error {
+	if err := h.service.ResetFact(c.Context(), c.Params("id")); err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return h.List(c)
+}
+
 // RenderDecks renders the decks section page.
 func (h *Handler) RenderDecks(c *fiber.Ctx) error {
 	return respond.Section(c, "decks", fiber.Map{"Title": "Decks"})
@@ -157,7 +165,11 @@ func (h *Handler) AddDeck(c *fiber.Ctx) error {
 	if name == "" {
 		return respond.ToastErr(c, fiber.StatusBadRequest, "Name is required")
 	}
-	if _, err := h.service.AddDeck(c.Context(), name); err != nil {
+	if len([]rune(name)) > 12 {
+		name = string([]rune(name)[:12])
+	}
+	desc := strings.TrimSpace(c.FormValue("description"))
+	if _, err := h.service.AddDeck(c.Context(), name, desc); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return h.DeckList(c)

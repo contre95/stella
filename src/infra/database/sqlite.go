@@ -61,14 +61,22 @@ func (s *SqliteSRS) migrate() error {
 			return fmt.Errorf("migrating facts.%s: %w", col, err)
 		}
 	}
+	for _, col := range []string{"color", "description"} {
+		_, err := s.db.Exec(`ALTER TABLE decks ADD COLUMN ` + col + ` TEXT NOT NULL DEFAULT ''`)
+		if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+			return fmt.Errorf("migrating decks.%s: %w", col, err)
+		}
+	}
 	return nil
 }
 
 func (s *SqliteSRS) createTables() error {
 	const schema = `
 CREATE TABLE IF NOT EXISTS decks (
-	id   TEXT PRIMARY KEY,
-	name TEXT NOT NULL
+	id    TEXT PRIMARY KEY,
+	name  TEXT NOT NULL,
+	color TEXT NOT NULL DEFAULT '#8b5cf6',
+	description TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS facts (
@@ -228,13 +236,13 @@ func (s *SqliteSRS) CardsForFact(ctx context.Context, factID string) ([]*srs.Car
 //
 
 func (s *SqliteSRS) AddDeck(ctx context.Context, d *srs.Deck) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO decks (id, name) VALUES (?, ?)`, d.ID, d.Name)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO decks (id, name, color, description) VALUES (?, ?, ?, ?)`, d.ID, d.Name, d.Color, d.Description)
 	return err
 }
 
 func (s *SqliteSRS) GetDeck(ctx context.Context, id string) (*srs.Deck, error) {
 	var d srs.Deck
-	err := s.db.QueryRowContext(ctx, `SELECT id, name FROM decks WHERE id=?`, id).Scan(&d.ID, &d.Name)
+	err := s.db.QueryRowContext(ctx, `SELECT id, name, color, description FROM decks WHERE id=?`, id).Scan(&d.ID, &d.Name, &d.Color, &d.Description)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, srs.ErrNotFound
 	}
@@ -245,7 +253,7 @@ func (s *SqliteSRS) GetDeck(ctx context.Context, id string) (*srs.Deck, error) {
 }
 
 func (s *SqliteSRS) ListDecks(ctx context.Context) ([]*srs.Deck, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name FROM decks ORDER BY name`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, color, description FROM decks ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +261,7 @@ func (s *SqliteSRS) ListDecks(ctx context.Context) ([]*srs.Deck, error) {
 	var decks []*srs.Deck
 	for rows.Next() {
 		var d srs.Deck
-		if err := rows.Scan(&d.ID, &d.Name); err != nil {
+		if err := rows.Scan(&d.ID, &d.Name, &d.Color, &d.Description); err != nil {
 			return nil, err
 		}
 		decks = append(decks, &d)

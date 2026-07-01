@@ -10,20 +10,28 @@
       hx-target="#deck-list"
       hx-swap="innerHTML"
       _="on htmx:afterRequest call me.reset()"
-      class="glass flex flex-1 gap-3 rounded-2xl p-4"
+      class="glass flex flex-1 flex-col gap-3 rounded-2xl p-4"
     >
-      <input
-        name="name"
-        required
-        placeholder="Deck name"
-        class="glass-input min-w-0 flex-1 rounded-xl px-3 py-2 text-sm"
-      />
-      <button
-        type="submit"
-        class="btn-primary shrink-0 rounded-xl px-4 py-2 text-sm font-semibold"
-      >
-        Create deck
-      </button>
+      <div class="flex gap-3">
+        <input
+          name="name"
+          required
+          maxlength="12"
+          placeholder="Deck name (max 12 chars)"
+          class="glass-input min-w-0 flex-1 rounded-xl px-3 py-2 text-sm"
+        />
+        <input
+          name="description"
+          placeholder="Optional description"
+          class="glass-input min-w-0 flex-1 rounded-xl px-3 py-2 text-sm"
+        />
+        <button
+          type="submit"
+          class="btn-primary shrink-0 rounded-xl px-4 py-2 text-sm font-semibold"
+        >
+          Create
+        </button>
+      </div>
     </form>
 
     <form

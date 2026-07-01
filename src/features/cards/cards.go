@@ -6,9 +6,10 @@ import "github.com/contre95/stella/src/srs"
 
 // FactRow bundles a fact with its sister cards for display in the UI.
 type FactRow struct {
-	Fact     *srs.Fact
-	DeckName string
-	Cards    []*CardRow
+	Fact      *srs.Fact
+	DeckName  string
+	DeckColor string
+	Cards     []*CardRow
 }
 
 // CardRow is a card plus a human-readable scheduling status.
