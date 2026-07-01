@@ -5,6 +5,7 @@
     <span class="text-sm text-gray-500 dark:text-gray-400">
       {{.Remaining}} card{{if gt .Remaining 1}}s{{end}} remaining
     </span>
+    <div class="ml-auto flex items-center gap-3">
     {{if .DeckName}}
       <div class="deck-badge rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset"
            tabindex="0"
@@ -20,6 +21,7 @@
       hx-push-url="true"
       class="text-sm text-gray-400 hover:text-pink-600 transition-colors dark:hover:text-pink-400"
     >✕ End</a>
+    </div>
   </div>
 
   <!-- Card outer: fills remaining space, clips the flying-out card -->
