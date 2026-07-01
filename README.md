@@ -95,8 +95,17 @@ Tools:
 Built bottom-up:
 
 - [x] Step 1 — booting skeleton (config, logging, Fiber server, dashboard shell)
-- [ ] Step 2 — SM2 algorithm port + golden tests
-- [ ] Step 3 — SQLite repository
-- [ ] Step 4 — cards feature (CRUD + sister cards)
-- [ ] Step 5 — review feature (queue + grading)
-- [ ] Step 6 — dashboard stats + polish
+- [x] Step 2 — SM2 algorithm port + golden tests
+- [x] Step 3 — SQLite repository
+- [x] Step 4 — cards feature (CRUD + sister cards)
+- [x] Step 5 — review feature (queue + grading)
+- [x] Step 6 — dashboard stats (live counts + 7-day forecast) + polish
+
+### Tests
+
+```bash
+go test ./...
+```
+
+Covers the SM2 engine (golden tests vs. Mnemosyne), the SQLite repository, and
+the review queue builder.

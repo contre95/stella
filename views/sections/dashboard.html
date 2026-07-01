@@ -65,4 +65,28 @@
       </p>
     </div>
   {{end}}
+
+  {{if and .Forecast (gt .TotalCards 0)}}
+    <div class="glass mt-5 rounded-2xl p-5">
+      <div class="mb-4 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Upcoming reviews</h2>
+        <span class="text-xs text-gray-400">next 7 days</span>
+      </div>
+      <div class="grid grid-cols-7 gap-2">
+        {{range .Forecast}}
+          <div class="flex flex-col items-center gap-1.5">
+            <div class="flex h-24 w-full items-end">
+              <div
+                class="w-full rounded-t-md bg-gradient-to-t from-pink-500 to-pink-300"
+                style="height: {{.Percent}}%; min-height: 3px;"
+                title="{{.Count}} due"
+              ></div>
+            </div>
+            <span class="text-xs font-bold text-gray-800 dark:text-gray-100">{{.Count}}</span>
+            <span class="text-[10px] uppercase tracking-wide text-gray-400">{{.Label}}</span>
+          </div>
+        {{end}}
+      </div>
+    </div>
+  {{end}}
 </div>

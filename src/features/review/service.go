@@ -140,6 +140,69 @@ func (s *Service) Stats(ctx context.Context) (*Stats, error) {
 	return &Stats{DueToday: due, TotalCards: total, NewCards: newCards, DeckCount: len(decks)}, nil
 }
 
+// ForecastDay is one bar in the upcoming-reviews chart: how many cards fall
+// due on that day, plus a 0–100 height relative to the busiest day.
+type ForecastDay struct {
+	Label   string
+	Count   int
+	Percent int
+}
+
+// Forecast returns the number of cards due today and on each of the following
+// days (across all decks), for the dashboard's upcoming-reviews chart. Today's
+// bucket includes anything already due or overdue; later buckets group retention
+// cards by their scheduled day. days must be >= 1.
+func (s *Service) Forecast(ctx context.Context, days int) ([]ForecastDay, error) {
+	if days < 1 {
+		days = 1
+	}
+	now := s.scheduler.AdjustedNow(time.Now())
+
+	counts := make([]int, days)
+	due, err := s.repo.ScheduledCount(ctx, now, nil)
+	if err != nil {
+		return nil, err
+	}
+	counts[0] = due
+
+	// All retention cards scheduled in the future, bucketed by day offset.
+	future, err := s.repo.CardsLearnAhead(ctx, now, "next_rep", -1, nil)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range future {
+		day := int((c.NextRep-now)/srs.DAY) + 1
+		if day >= 1 && day < days {
+			counts[day]++
+		}
+	}
+
+	max := 1
+	for _, n := range counts {
+		if n > max {
+			max = n
+		}
+	}
+
+	wall := time.Now()
+	out := make([]ForecastDay, days)
+	for i := range counts {
+		out[i] = ForecastDay{
+			Label:   forecastLabel(i, wall),
+			Count:   counts[i],
+			Percent: counts[i] * 100 / max,
+		}
+	}
+	return out, nil
+}
+
+func forecastLabel(i int, now time.Time) string {
+	if i == 0 {
+		return "Today"
+	}
+	return now.AddDate(0, 0, i).Format("Mon")
+}
+
 func (s *Service) pickNext(ctx context.Context, now int64, deckIDs []string) (*srs.Card, error) {
 	// 1. Relearn: grade-0 cards need an immediate re-test.
 	cards, err := s.repo.CardsToRelearn(ctx, 0, "interval", deckIDs)

@@ -25,11 +25,17 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 		slog.Error("dashboard stats", "err", err)
 		stats = &review.Stats{}
 	}
+	forecast, err := h.reviewSvc.Forecast(c.Context(), 7)
+	if err != nil {
+		slog.Error("dashboard forecast", "err", err)
+		forecast = nil
+	}
 	return respond.Section(c, "dashboard", fiber.Map{
 		"Title":      "Dashboard",
 		"DueToday":   stats.DueToday,
 		"TotalCards": stats.TotalCards,
 		"NewCards":   stats.NewCards,
+		"Forecast":   forecast,
 	})
 }
 
