@@ -31,19 +31,20 @@ func (s *Service) ImagesPath() string {
 // reverse card is added when reverse is true and a back exists. When grade >= 0
 // the cards are given that initial grade (counted as a first repetition);
 // grade < 0 leaves them unseen for the review process to grade.
-// imageName is the filename of an already-saved image (empty means no image).
-func (s *Service) AddFact(ctx context.Context, front, back, deckID string, grade int, reverse bool, imageName string) (*srs.Fact, error) {
+// imageFront and imageBack are filenames of already-saved images (empty means no image).
+func (s *Service) AddFact(ctx context.Context, front, back, deckID string, grade int, reverse bool, imageFront, imageBack string) (*srs.Fact, error) {
 	front = strings.TrimSpace(front)
 	back = strings.TrimSpace(back)
 	now := time.Now().Unix()
 	fact := &srs.Fact{
-		ID:       uuid.NewString(),
-		Front:    front,
-		Back:     back,
-		Image:    imageName,
-		DeckID:   deckID,
-		Created:  now,
-		Modified: now,
+		ID:         uuid.NewString(),
+		Front:      front,
+		Back:       back,
+		ImageFront: imageFront,
+		ImageBack:  imageBack,
+		DeckID:     deckID,
+		Created:    now,
+		Modified:   now,
 	}
 	if err := s.repo.AddFact(ctx, fact); err != nil {
 		return nil, err
@@ -139,6 +140,68 @@ func (s *Service) ListFactsByDeck(ctx context.Context, deckID string) ([]*FactRo
 		rows = append(rows, &FactRow{Fact: f, Cards: cardRows})
 	}
 	return rows, nil
+}
+
+// DeckExport is the JSON-serialisable representation of a deck plus its facts.
+type DeckExport struct {
+	Name  string        `json:"name"`
+	Facts []FactExport  `json:"facts"`
+}
+
+// FactExport is the JSON-serialisable representation of a single fact.
+type FactExport struct {
+	Front   string `json:"front"`
+	Back    string `json:"back"`
+	Reverse bool   `json:"reverse"`
+}
+
+// ExportDeck returns a DeckExport for the given deck ID.
+func (s *Service) ExportDeck(ctx context.Context, deckID string) (*DeckExport, error) {
+	deck, err := s.repo.GetDeck(ctx, deckID)
+	if err != nil {
+		return nil, err
+	}
+	facts, err := s.repo.ListFactsByDeck(ctx, deckID)
+	if err != nil {
+		return nil, err
+	}
+	exp := &DeckExport{Name: deck.Name, Facts: make([]FactExport, 0, len(facts))}
+	for _, f := range facts {
+		cards, err := s.repo.CardsForFact(ctx, f.ID)
+		if err != nil {
+			return nil, err
+		}
+		hasReverse := false
+		for _, c := range cards {
+			if c.View == srs.ViewReverse {
+				hasReverse = true
+				break
+			}
+		}
+		exp.Facts = append(exp.Facts, FactExport{Front: f.Front, Back: f.Back, Reverse: hasReverse})
+	}
+	return exp, nil
+}
+
+// ImportDeck creates a new deck from a DeckExport. If name is non-empty it
+// overrides the name stored in the export.
+func (s *Service) ImportDeck(ctx context.Context, exp *DeckExport, nameOverride string) (*srs.Deck, int, error) {
+	name := exp.Name
+	if nameOverride != "" {
+		name = nameOverride
+	}
+	deck, err := s.AddDeck(ctx, name)
+	if err != nil {
+		return nil, 0, err
+	}
+	imported := 0
+	for _, fe := range exp.Facts {
+		if _, err := s.AddFact(ctx, fe.Front, fe.Back, deck.ID, -1, fe.Reverse, "", ""); err != nil {
+			return deck, imported, err
+		}
+		imported++
+	}
+	return deck, imported, nil
 }
 
 // status renders a short scheduling label for a card.

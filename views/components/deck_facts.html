@@ -4,7 +4,7 @@
   hx-swap="innerHTML"
   hx-encoding="multipart/form-data"
   _="on htmx:afterRequest call me.reset()"
-  class="mb-4 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-[#141414]"
+  class="glass mb-4 rounded-2xl p-5"
 >
   <div class="grid gap-4 sm:grid-cols-2">
     <label class="block">
@@ -13,7 +13,7 @@
         name="front"
         required
         placeholder="Question / prompt"
-        class="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500"
+        class="glass-input mt-1.5 w-full rounded-xl px-3 py-2 text-sm"
       />
     </label>
     <label class="block">
@@ -21,16 +21,25 @@
       <input
         name="back"
         placeholder="Answer"
-        class="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500"
+        class="glass-input mt-1.5 w-full rounded-xl px-3 py-2 text-sm"
       />
     </label>
-    <label class="block sm:col-span-2">
-      <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Image <span class="font-normal normal-case">(optional — jpg, png, gif, webp)</span></span>
+    <label class="block">
+      <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Front image <span class="font-normal normal-case">(optional)</span></span>
       <input
         type="file"
-        name="image"
+        name="image_front"
         accept=".jpg,.jpeg,.png,.gif,.webp"
-        class="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 transition file:mr-3 file:rounded file:border-0 file:bg-pink-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:file:bg-pink-950/40 dark:file:text-pink-400"
+        class="glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"
+      />
+    </label>
+    <label class="block">
+      <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Back image <span class="font-normal normal-case">(optional)</span></span>
+      <input
+        type="file"
+        name="image_back"
+        accept=".jpg,.jpeg,.png,.gif,.webp"
+        class="glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"
       />
     </label>
   </div>
@@ -39,13 +48,13 @@
       <input
         type="checkbox"
         name="reverse"
-        class="h-4 w-4 rounded border-gray-300 text-pink-600 dark:border-gray-600"
+        class="h-4 w-4 rounded border-gray-300 text-pink-600 focus:ring-pink-500 dark:border-gray-600"
       />
       <span class="text-sm text-gray-600 dark:text-gray-300">Also add reverse card</span>
     </label>
     <button
       type="submit"
-      class="rounded-lg bg-pink-600 px-4 py-2 text-sm font-semibold text-white hover:bg-pink-500 transition-colors"
+      class="btn-primary rounded-xl px-4 py-2 text-sm font-semibold"
     >
       Add card
     </button>
@@ -53,9 +62,9 @@
 </form>
 
 {{if .Facts}}
-  <div class="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
-    <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700">
-      <thead class="bg-gray-50 dark:bg-gray-800">
+  <div class="glass overflow-hidden rounded-2xl">
+    <table class="min-w-full divide-y divide-gray-200/60 text-sm dark:divide-white/10">
+      <thead class="bg-white/40 dark:bg-white/[0.03]">
         <tr class="text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
           <th class="px-4 py-3">Front</th>
           <th class="hidden px-4 py-3 sm:table-cell">Back</th>
@@ -63,25 +72,28 @@
           <th class="px-4 py-3"></th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-gray-100 bg-white dark:divide-gray-700 dark:bg-[#141414]">
+      <tbody class="divide-y divide-gray-100/70 dark:divide-white/[0.06]">
         {{range .Facts}}
-          <tr class="align-top hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+          <tr class="align-top hover:bg-white/50 dark:hover:bg-white/[0.04] transition-colors">
             <td class="px-4 py-3 font-medium text-gray-900 dark:text-gray-100 max-w-[8rem] sm:max-w-xs">
-              {{if .Fact.Image}}
-                <img src="/images/{{.Fact.Image}}" alt="" class="mb-1.5 h-16 w-full rounded object-cover" />
+              {{if .Fact.ImageFront}}
+                <img src="/images/{{.Fact.ImageFront}}" alt="" class="mb-1.5 h-16 w-full rounded-lg object-cover" />
               {{end}}
               <span class="line-clamp-2 break-words">{{.Fact.Front}}</span>
             </td>
             <td class="hidden px-4 py-3 text-gray-500 dark:text-gray-400 sm:table-cell max-w-xs">
+              {{if .Fact.ImageBack}}
+                <img src="/images/{{.Fact.ImageBack}}" alt="" class="mb-1.5 h-16 w-full rounded-lg object-cover" />
+              {{end}}
               <span class="line-clamp-2 break-words">{{.Fact.Back}}</span>
             </td>
             <td class="px-4 py-3">
               <div class="flex flex-col gap-1">
                 {{range .Cards}}
-                  <span class="inline-flex items-center gap-1 self-start rounded-full px-2.5 py-0.5 text-xs font-medium
-                    {{if eq .Status "unseen"}}bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400
-                    {{else if eq .Status "learning"}}bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400
-                    {{else}}bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400{{end}}">
+                  <span class="inline-flex items-center gap-1 self-start rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset
+                    {{if eq .Status "unseen"}}bg-gray-500/10 text-gray-500 ring-gray-500/20 dark:text-gray-400
+                    {{else if eq .Status "learning"}}bg-amber-500/15 text-amber-600 ring-amber-500/20 dark:text-amber-400
+                    {{else}}bg-pink-500/15 text-pink-600 ring-pink-500/20 dark:text-pink-400{{end}}">
                     {{if eq .Card.View "forward"}}→{{else}}←{{end}} {{.Status}}
                   </span>
                 {{end}}
@@ -93,7 +105,7 @@
                 hx-target="closest tr"
                 hx-swap="outerHTML"
                 hx-confirm="Delete this fact and its cards?"
-                class="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors dark:hover:bg-red-950/30 dark:hover:text-red-400"
+                class="rounded-lg p-2 text-gray-400 hover:bg-red-500/10 hover:text-red-600 transition-colors dark:hover:text-red-400"
                 style="min-width: 44px; min-height: 44px;"
                 aria-label="Delete"
               >
@@ -108,7 +120,7 @@
     </table>
   </div>
 {{else}}
-  <div class="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center dark:border-gray-700 dark:bg-[#141414]">
+  <div class="glass rounded-2xl border-dashed p-10 text-center">
     <p class="text-sm text-gray-500 dark:text-gray-400">No cards in this deck yet.</p>
   </div>
 {{end}}

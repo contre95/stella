@@ -50,7 +50,7 @@ Config path is overridable via `STELLA_CONFIG_PATH`.
 
 ```bash
 # Build
-docker build -t stella .
+podmcan build -t stella .
 
 # Run — mount a volume so the database survives restarts
 docker run -d \

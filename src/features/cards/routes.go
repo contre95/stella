@@ -14,7 +14,9 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	app.Get("/decks/list", h.DeckList)
 	app.Get("/decks/list-options", h.DeckOptions)
 	app.Post("/decks", h.AddDeck)
+	app.Post("/decks/import", h.ImportDeck)
 	app.Delete("/decks/:id", h.DeleteDeck)
+	app.Get("/decks/:id/export", h.ExportDeck)
 	app.Get("/decks/:id/facts", h.DeckDetail)
 	app.Post("/decks/:id/cards", h.AddCardToDeck)
 }

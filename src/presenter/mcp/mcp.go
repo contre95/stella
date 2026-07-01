@@ -82,7 +82,7 @@ func (s *Server) createCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in C
 			return nil, CreateCardOutput{}, fmt.Errorf("grade must be between 0 and 5")
 		}
 	}
-	fact, err := s.cards.AddFact(ctx, front, in.Back, in.DeckID, grade, in.Reverse, "")
+	fact, err := s.cards.AddFact(ctx, front, in.Back, in.DeckID, grade, in.Reverse, "", "")
 	if err != nil {
 		return nil, CreateCardOutput{}, fmt.Errorf("creating card: %w", err)
 	}

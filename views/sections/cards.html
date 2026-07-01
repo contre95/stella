@@ -1,6 +1,6 @@
 <div>
   <div class="mb-6">
-    <h1 class="text-xl font-bold text-gray-900 dark:text-white">Cards</h1>
+    <h1 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Cards</h1>
     <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
       Add a fact; each becomes a forward card (and an optional reverse).
     </p>
@@ -12,8 +12,8 @@
     hx-target="#card-list"
     hx-swap="innerHTML"
     hx-encoding="multipart/form-data"
-    _="on htmx:afterRequest call me.reset()"
-    class="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-[#141414] sm:p-6"
+    _="on htmx:afterRequest set deckVal to my.querySelector('[name=deckId]').value call me.reset() set my.querySelector('[name=deckId]').value to deckVal"
+    class="glass rounded-2xl p-5 sm:p-6"
   >
     <div class="grid gap-4 sm:grid-cols-2">
       <label class="block">
@@ -22,7 +22,7 @@
           name="front"
           required
           placeholder="Question / prompt"
-          class="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500"
+          class="glass-input mt-1.5 w-full rounded-xl px-3 py-2 text-sm"
         />
       </label>
 
@@ -31,7 +31,7 @@
         <input
           name="back"
           placeholder="Answer"
-          class="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500"
+          class="glass-input mt-1.5 w-full rounded-xl px-3 py-2 text-sm"
         />
       </label>
 
@@ -39,7 +39,7 @@
         <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Initial grade</span>
         <select
           name="grade"
-          class="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 transition dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          class="glass-input mt-1.5 w-full rounded-xl px-3 py-2 text-sm"
         >
           <option value="-1" selected>Unseen (grade in review)</option>
           <option value="0">0 — blackout</option>
@@ -56,22 +56,32 @@
         <select
           name="deckId"
           required
-          hx-get="/decks/list-options"
-          hx-trigger="load"
-          hx-swap="innerHTML"
-          class="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 transition dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          class="glass-input mt-1.5 w-full rounded-xl px-3 py-2 text-sm"
         >
           <option value="" disabled selected>Select a deck</option>
+          {{range .Decks}}
+            <option value="{{.ID}}">{{.Name}}</option>
+          {{end}}
         </select>
       </label>
 
-      <label class="block sm:col-span-2">
-        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Image <span class="font-normal normal-case">(optional — jpg, png, gif, webp)</span></span>
+      <label class="block">
+        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Front image <span class="font-normal normal-case">(optional)</span></span>
         <input
           type="file"
-          name="image"
+          name="image_front"
           accept=".jpg,.jpeg,.png,.gif,.webp"
-          class="mt-1.5 w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 transition file:mr-3 file:rounded file:border-0 file:bg-pink-50 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:file:bg-pink-950/40 dark:file:text-pink-400"
+          class="glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"
+        />
+      </label>
+
+      <label class="block">
+        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Back image <span class="font-normal normal-case">(optional)</span></span>
+        <input
+          type="file"
+          name="image_back"
+          accept=".jpg,.jpeg,.png,.gif,.webp"
+          class="glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"
         />
       </label>
     </div>
@@ -81,13 +91,13 @@
         <input
           type="checkbox"
           name="reverse"
-          class="h-4 w-4 rounded border-gray-300 text-pink-600 dark:border-gray-600"
+          class="h-4 w-4 rounded border-gray-300 text-pink-600 focus:ring-pink-500 dark:border-gray-600"
         />
         <span class="text-sm text-gray-600 dark:text-gray-300">Also add reverse card</span>
       </label>
       <button
         type="submit"
-        class="rounded-lg bg-pink-600 px-4 py-2 text-sm font-semibold text-white hover:bg-pink-500 transition-colors"
+        class="btn-primary rounded-xl px-4 py-2 text-sm font-semibold"
       >
         Add card
       </button>

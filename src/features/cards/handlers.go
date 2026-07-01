@@ -1,6 +1,8 @@
 package cards
 
 import (
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -27,7 +29,11 @@ func NewHandler(service *Service) *Handler {
 
 // RenderSection renders the cards page (the list itself loads over HTMX).
 func (h *Handler) RenderSection(c *fiber.Ctx) error {
-	return respond.Section(c, "cards", fiber.Map{"Title": "Cards"})
+	decks, err := h.service.ListDecks(c.Context())
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return respond.Section(c, "cards", fiber.Map{"Title": "Cards", "Decks": decks})
 }
 
 // List returns the fact/card list partial.
@@ -39,10 +45,10 @@ func (h *Handler) List(c *fiber.Ctx) error {
 	return respond.Partial(c, "components/card_list", fiber.Map{"Facts": rows})
 }
 
-// saveImage saves the uploaded image file and returns its filename, or an
-// empty string if no image was uploaded.
-func (h *Handler) saveImage(c *fiber.Ctx) (string, error) {
-	file, err := c.FormFile("image")
+// saveImage saves the uploaded image file from the given form field and returns
+// its filename, or an empty string if no image was uploaded.
+func (h *Handler) saveImage(c *fiber.Ctx, field string) (string, error) {
+	file, err := c.FormFile(field)
 	if err != nil || file == nil {
 		return "", nil
 	}
@@ -79,14 +85,26 @@ func (h *Handler) Add(c *fiber.Ctx) error {
 			grade = parsed
 		}
 	}
-	imageName, err := h.saveImage(c)
+	imgFront, err := h.saveImage(c, "image_front")
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
 	}
-	if _, err := h.service.AddFact(c.Context(), front, back, deckID, grade, reverse, imageName); err != nil {
-		if imageName != "" {
-			if rmErr := os.Remove(filepath.Join(h.service.ImagesPath(), imageName)); rmErr != nil {
-				slog.Warn("failed to remove orphaned image", "file", imageName, "err", rmErr)
+	imgBack, err := h.saveImage(c, "image_back")
+	if err != nil {
+		if imgFront != "" {
+			os.Remove(filepath.Join(h.service.ImagesPath(), imgFront))
+		}
+		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
+	}
+	if _, err := h.service.AddFact(c.Context(), front, back, deckID, grade, reverse, imgFront, imgBack); err != nil {
+		if imgFront != "" {
+			if rmErr := os.Remove(filepath.Join(h.service.ImagesPath(), imgFront)); rmErr != nil {
+				slog.Warn("failed to remove orphaned image", "file", imgFront, "err", rmErr)
+			}
+		}
+		if imgBack != "" {
+			if rmErr := os.Remove(filepath.Join(h.service.ImagesPath(), imgBack)); rmErr != nil {
+				slog.Warn("failed to remove orphaned image", "file", imgBack, "err", rmErr)
 			}
 		}
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
@@ -155,6 +173,51 @@ func (h *Handler) DeckDetail(c *fiber.Ctx) error {
 	return respond.Partial(c, "components/deck_facts", fiber.Map{"DeckID": id, "Facts": facts})
 }
 
+// ExportDeck returns a JSON file download for the given deck.
+func (h *Handler) ExportDeck(c *fiber.Ctx) error {
+	exp, err := h.service.ExportDeck(c.Context(), c.Params("id"))
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	data, err := json.MarshalIndent(exp, "", "  ")
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	filename := fmt.Sprintf("%s.json", strings.ReplaceAll(exp.Name, " ", "_"))
+	c.Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	c.Set("Content-Type", "application/json")
+	return c.Send(data)
+}
+
+// ImportDeck reads a JSON file upload and creates a new deck from it.
+func (h *Handler) ImportDeck(c *fiber.Ctx) error {
+	file, err := c.FormFile("file")
+	if err != nil || file == nil {
+		return respond.ToastErr(c, fiber.StatusBadRequest, "JSON file is required")
+	}
+	f, err := file.Open()
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	defer f.Close()
+
+	var exp DeckExport
+	if err := json.NewDecoder(f).Decode(&exp); err != nil {
+		return respond.ToastErr(c, fiber.StatusBadRequest, "invalid JSON: "+err.Error())
+	}
+	if exp.Name == "" {
+		return respond.ToastErr(c, fiber.StatusBadRequest, "deck name is required in JSON")
+	}
+
+	nameOverride := strings.TrimSpace(c.FormValue("name"))
+	_, imported, err := h.service.ImportDeck(c.Context(), &exp, nameOverride)
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	_ = imported
+	return h.DeckList(c)
+}
+
 // AddCardToDeck creates a card assigned to a specific deck and returns the
 // refreshed deck facts partial.
 func (h *Handler) AddCardToDeck(c *fiber.Ctx) error {
@@ -171,14 +234,26 @@ func (h *Handler) AddCardToDeck(c *fiber.Ctx) error {
 			grade = parsed
 		}
 	}
-	imageName, err := h.saveImage(c)
+	imgFront, err := h.saveImage(c, "image_front")
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
 	}
-	if _, err := h.service.AddFact(c.Context(), front, back, id, grade, reverse, imageName); err != nil {
-		if imageName != "" {
-			if rmErr := os.Remove(filepath.Join(h.service.ImagesPath(), imageName)); rmErr != nil {
-				slog.Warn("failed to remove orphaned image", "file", imageName, "err", rmErr)
+	imgBack, err := h.saveImage(c, "image_back")
+	if err != nil {
+		if imgFront != "" {
+			os.Remove(filepath.Join(h.service.ImagesPath(), imgFront))
+		}
+		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
+	}
+	if _, err := h.service.AddFact(c.Context(), front, back, id, grade, reverse, imgFront, imgBack); err != nil {
+		if imgFront != "" {
+			if rmErr := os.Remove(filepath.Join(h.service.ImagesPath(), imgFront)); rmErr != nil {
+				slog.Warn("failed to remove orphaned image", "file", imgFront, "err", rmErr)
+			}
+		}
+		if imgBack != "" {
+			if rmErr := os.Remove(filepath.Join(h.service.ImagesPath(), imgBack)); rmErr != nil {
+				slog.Warn("failed to remove orphaned image", "file", imgBack, "err", rmErr)
 			}
 		}
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
