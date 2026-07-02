@@ -14,8 +14,11 @@ import (
 	"github.com/contre95/stella/src/features/review"
 	"github.com/contre95/stella/src/features/ui"
 	"github.com/contre95/stella/src/infra/database"
+	mcppresenter "github.com/contre95/stella/src/presenter/mcp"
 	"github.com/contre95/stella/src/srs"
 )
+
+const version = "0.1.0"
 
 func main() {
 	// 1. Config + logging.
@@ -55,7 +58,12 @@ func main() {
 	reviewHandler := review.NewHandler(reviewService, cfgManager)
 
 	// 5. Routes + server.
-	server := hosting.NewServer(cfgManager, uiHandler, cardsHandler, reviewHandler)
+	registrars := []hosting.RouteRegistrar{uiHandler, cardsHandler, reviewHandler}
+	if cfgManager.Get().MCP.Enabled {
+		registrars = append(registrars, mcppresenter.NewHTTPRegistrar(cfgManager.Get().Server.AppName, version, cardsService))
+		slog.Info("mcp enabled", "path", "/mcp")
+	}
+	server := hosting.NewServer(cfgManager, registrars...)
 
 	go func() {
 		if err := server.Start(); err != nil {

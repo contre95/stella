@@ -26,7 +26,7 @@ type Server struct {
 
 // MCP holds the Model Context Protocol server settings.
 type MCP struct {
-	Port int `yaml:"port" validate:"required"`
+	Enabled bool `yaml:"enabled"`
 }
 
 // Logger holds logging settings.

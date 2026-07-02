@@ -2,12 +2,12 @@ dbPath: ./data/stella.db
 # Directory where uploaded card images are stored.
 imagePath: ./data/images
 server:
-  port: 8080
+  port: 8858
   appName: Stella
   bodyLimit: 10485760
 mcp:
-  # Port for the MCP HTTP server (StreamableHTTP transport).
-  port: 8858
+  # Enable the MCP endpoint at /mcp (StreamableHTTP transport).
+  enabled: false
 logger:
   level: info
   debug: false

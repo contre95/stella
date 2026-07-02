@@ -7,12 +7,12 @@ func defaultConfig() Config {
 		DbPath:    "./data/stella.db",
 		ImagePath: "./data/images",
 		Server: Server{
-			Port:      8080,
+			Port:      8858,
 			AppName:   "Stella",
 			BodyLimit: 10 * 1024 * 1024,
 		},
 		MCP: MCP{
-			Port: 8858,
+			Enabled: false,
 		},
 		Logger: Logger{
 			Level: "info",
