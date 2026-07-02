@@ -25,7 +25,11 @@
               <img src="/images/{{$fact.Fact.ImageFront}}" alt="" class="mb-1.5 h-16 w-full rounded object-cover" />
             {{end}}
             {{if $fact.Fact.AudioFront}}
-              <audio controls src="/audio/{{$fact.Fact.AudioFront}}" class="mb-1.5 h-8 w-full" preload="none"></audio>
+              <button type="button" class="audio-pill mb-1.5" data-audio="/audio/{{$fact.Fact.AudioFront}}" aria-label="Play audio">
+                <svg class="ac-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+                <svg class="ac-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
+                <span class="ap-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+              </button>
             {{end}}
             <div class="font-medium text-gray-900 dark:text-gray-100 line-clamp-2 break-words">{{$fact.Fact.Front}}</div>
             {{if $fact.DeckName}}
@@ -41,7 +45,11 @@
               <img src="/images/{{$fact.Fact.ImageBack}}" alt="" class="mb-1.5 h-16 w-full rounded object-cover" />
             {{end}}
             {{if $fact.Fact.AudioBack}}
-              <audio controls src="/audio/{{$fact.Fact.AudioBack}}" class="mb-1.5 h-8 w-full" preload="none"></audio>
+              <button type="button" class="audio-pill mb-1.5" data-audio="/audio/{{$fact.Fact.AudioBack}}" aria-label="Play audio">
+                <svg class="ac-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+                <svg class="ac-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
+                <span class="ap-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+              </button>
             {{end}}
             <div class="line-clamp-2 break-words">{{$fact.Fact.Back}}</div>
           </div>

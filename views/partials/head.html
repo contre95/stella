@@ -183,6 +183,186 @@
     .swipe-btn-del { background: #ef4444; color: #fff; }
     .swipe-btn-reset { background: #f59e0b; color: #fff; }
 
+    /* ── Card audio player buttons ─────────────────────────────── */
+    /* Round chip: inner disc matches the opaque card face; outer ring doubles as progress */
+    .audio-chip {
+      --p: 0%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.25rem;
+      height: 2.25rem;
+      border: none;
+      border-radius: 9999px;
+      cursor: pointer;
+      color: #db2777;
+      background:
+        radial-gradient(closest-side, #fdfcff 74%, transparent 75% 100%),
+        conic-gradient(#ec4899 var(--p), rgba(236, 72, 153, 0.22) var(--p));
+      transition: transform 0.15s ease;
+    }
+    .dark .audio-chip {
+      color: #f472b6;
+      background:
+        radial-gradient(closest-side, #191822 74%, transparent 75% 100%),
+        conic-gradient(#f472b6 var(--p), rgba(244, 114, 182, 0.22) var(--p));
+    }
+    .audio-chip:hover { transform: scale(1.08); }
+    .audio-chip svg { width: 0.85rem; height: 0.85rem; }
+    .audio-chip .ac-play { margin-left: 2px; }
+    .audio-chip .ac-pause { display: none; }
+    .audio-chip.playing .ac-play { display: none; }
+    .audio-chip.playing .ac-pause { display: block; margin-left: 0; }
+
+    /* Inline pill for list rows: left-to-right tint fill doubles as progress */
+    .audio-pill {
+      --p: 0%;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.3rem 0.7rem;
+      border: none;
+      border-radius: 9999px;
+      cursor: pointer;
+      color: #db2777;
+      background-image: linear-gradient(90deg, rgba(236, 72, 153, 0.22) var(--p), rgba(236, 72, 153, 0.09) var(--p));
+      box-shadow: inset 0 0 0 1px rgba(236, 72, 153, 0.28);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .audio-pill:hover { transform: translateY(-1px); box-shadow: inset 0 0 0 1px rgba(236, 72, 153, 0.5); }
+    .dark .audio-pill {
+      color: #f472b6;
+      background-image: linear-gradient(90deg, rgba(244, 114, 182, 0.24) var(--p), rgba(244, 114, 182, 0.10) var(--p));
+      box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.3);
+    }
+    .dark .audio-pill:hover { box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.55); }
+    .audio-pill svg { width: 0.7rem; height: 0.7rem; flex-shrink: 0; }
+    .audio-pill .ac-pause { display: none; }
+    .audio-pill.playing .ac-play { display: none; }
+    .audio-pill.playing .ac-pause { display: block; }
+    .ap-eq { display: inline-flex; align-items: center; gap: 2.5px; height: 0.85rem; }
+    .ap-eq i {
+      width: 2.5px;
+      border-radius: 2px;
+      background: currentColor;
+      animation: ap-eq 1s ease-in-out infinite;
+      animation-play-state: paused; /* frozen bars read as a static waveform */
+    }
+    .ap-eq i:nth-child(1) { height: 35%; animation-delay: -0.30s; }
+    .ap-eq i:nth-child(2) { height: 90%; animation-delay: -0.15s; }
+    .ap-eq i:nth-child(3) { height: 55%; animation-delay: -0.45s; }
+    .ap-eq i:nth-child(4) { height: 75%; animation-delay: -0.60s; }
+    .audio-pill.playing .ap-eq i { animation-play-state: running; }
+    @keyframes ap-eq {
+      0%, 100% { transform: scaleY(0.5); }
+      50%      { transform: scaleY(1.2); }
+    }
+    /* Review-card player: glass capsule with gradient play button, glow track, live EQ */
+    .review-player {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.45rem 1rem 0.45rem 0.45rem;
+      border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.65);
+      box-shadow: 0 10px 30px -12px rgba(219, 39, 119, 0.35);
+      backdrop-filter: blur(16px) saturate(160%);
+      -webkit-backdrop-filter: blur(16px) saturate(160%);
+      transition: box-shadow 0.2s ease;
+    }
+    .dark .review-player {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.12);
+      box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.5);
+    }
+    .review-player.playing {
+      box-shadow: 0 10px 34px -10px rgba(219, 39, 119, 0.55), inset 0 0 0 1px rgba(236, 72, 153, 0.25);
+    }
+    .rp-btn {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 2.75rem;
+      height: 2.75rem;
+      border: none;
+      border-radius: 9999px;
+      cursor: pointer;
+      color: #fff;
+      background: linear-gradient(135deg, #f472b6 0%, #db2777 55%, #be185d 100%);
+      box-shadow: 0 6px 16px -4px rgba(219, 39, 119, 0.55);
+      transition: transform 0.15s ease;
+    }
+    .rp-btn:hover { transform: scale(1.06); }
+    .rp-btn:active { transform: scale(0.94); }
+    .review-player.playing .rp-btn::after {
+      content: '';
+      position: absolute;
+      inset: -5px;
+      border-radius: 9999px;
+      border: 2px solid rgba(236, 72, 153, 0.45);
+      animation: rp-pulse 1.8s ease-out infinite;
+    }
+    @keyframes rp-pulse {
+      0%   { transform: scale(0.85); opacity: 0.9; }
+      70%  { transform: scale(1.18); opacity: 0; }
+      100% { transform: scale(1.18); opacity: 0; }
+    }
+    .rp-track {
+      height: 0.5rem;
+      border-radius: 9999px;
+      overflow: hidden;
+      cursor: pointer;
+      background: rgba(17, 24, 39, 0.08);
+    }
+    .dark .rp-track { background: rgba(255, 255, 255, 0.12); }
+    .rp-fill {
+      height: 100%;
+      border-radius: 9999px;
+      pointer-events: none;
+      background: linear-gradient(90deg, #f9a8d4, #ec4899 60%, #db2777);
+      box-shadow: 0 0 10px rgba(236, 72, 153, 0.55);
+      transition: width 0.1s linear;
+    }
+    .rp-time {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #9ca3af;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
+    }
+    .dark .rp-time { color: #6b7280; }
+    .rp-eq {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      height: 0.8rem;
+      color: #db2777;
+    }
+    .dark .rp-eq { color: #f472b6; }
+    .rp-eq i {
+      width: 3px;
+      border-radius: 2px;
+      background: currentColor;
+      opacity: 0.9;
+      animation: ap-eq 1s ease-in-out infinite;
+      animation-play-state: paused; /* frozen bars read as a static waveform */
+    }
+    .rp-eq i:nth-child(1) { height: 40%;  animation-delay: -0.30s; }
+    .rp-eq i:nth-child(2) { height: 85%;  animation-delay: -0.15s; }
+    .rp-eq i:nth-child(3) { height: 60%;  animation-delay: -0.45s; }
+    .rp-eq i:nth-child(4) { height: 100%; animation-delay: -0.60s; }
+    .rp-eq i:nth-child(5) { height: 50%;  animation-delay: -0.75s; }
+    .review-player.playing .rp-eq i { animation-play-state: running; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .audio-chip, .audio-pill, .rp-btn { transition: none; }
+      .ap-eq i, .rp-eq i { animation: none; }
+      .review-player.playing .rp-btn::after { animation: none; opacity: 0.5; }
+    }
+
     /* ── Teleprompter badge ────────────────────────────────────── */
     .deck-badge {
       overflow: hidden; white-space: nowrap; display: inline-block; max-width: 100%;

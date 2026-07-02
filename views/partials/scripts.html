@@ -55,4 +55,189 @@
     _swipeMD = null;
     if (moved) clSnapRow(node, dx);
   });
+
+  // Shared card-audio player — one Audio() for every .audio-chip / .audio-pill button
+  (function () {
+    var player = new Audio();
+    var active = null;
+    function resetBtn(btn) {
+      if (!btn) return;
+      btn.classList.remove('playing');
+      btn.style.setProperty('--p', '0%');
+      btn.setAttribute('aria-label', 'Play audio');
+    }
+    player.addEventListener('timeupdate', function () {
+      if (active && player.duration) {
+        active.style.setProperty('--p', (player.currentTime / player.duration) * 100 + '%');
+      }
+    });
+    player.addEventListener('ended', function () {
+      resetBtn(active);
+      active = null;
+    });
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('.audio-chip, .audio-pill');
+      if (!btn) return;
+      if (btn === active) {
+        if (player.paused) {
+          player.play();
+          btn.classList.add('playing');
+          btn.setAttribute('aria-label', 'Pause audio');
+        } else {
+          player.pause();
+          btn.classList.remove('playing');
+          btn.setAttribute('aria-label', 'Play audio');
+        }
+        return;
+      }
+      resetBtn(active);
+      active = btn;
+      player.src = btn.dataset.audio;
+      player.play();
+      btn.classList.add('playing');
+      btn.setAttribute('aria-label', 'Pause audio');
+    });
+    // Stop playback when a swap re-renders the DOM under the active button
+    document.body.addEventListener('htmx:afterSwap', function () {
+      if (active && !document.contains(active)) {
+        player.pause();
+        active = null;
+      }
+    });
+  })();
+
+  // Audio recorder widget — handles all .audio-rec-widget elements
+  (function () {
+    var MAX_SEC = 15;
+    function fmt(s) { return Math.floor(s/60)+':'+('0'+Math.floor(s%60)).slice(-2); }
+
+    function initWidget(widget) {
+      if (widget._arInit) return;
+      widget._arInit = true;
+
+      var fileInput = widget.querySelector('input[type=file]');
+      var ui = widget.querySelector('.rec-ui');
+      var mr = null, chunks = [], blobUrl = null, elapsed = 0, ticker = null, fillEl = null;
+
+      function btnCls(v) {
+        var b = 'cursor-pointer rounded-lg border-0 px-3 py-1 text-xs font-semibold ';
+        if (v==='rec')  return b+'bg-pink-500/15 text-pink-700 hover:bg-pink-500/25 dark:text-pink-300';
+        if (v==='stop') return b+'bg-red-500/20 text-red-700 hover:bg-red-500/30 dark:text-red-300';
+        if (v==='re')   return b+'bg-gray-200/60 text-gray-600 hover:bg-gray-300/60 dark:bg-white/10 dark:text-gray-300';
+        return b;
+      }
+
+      function renderIdle() {
+        fileInput.hidden = false;
+        ui.innerHTML = '';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'mt-1 text-xs font-medium text-pink-600 hover:text-pink-700 dark:text-pink-400 cursor-pointer';
+        btn.textContent = 'Or record audio (max 15s)';
+        btn.onclick = startRec;
+        ui.appendChild(btn);
+      }
+
+      function renderRecording() {
+        fileInput.hidden = true;
+        ui.innerHTML = '';
+        var row = document.createElement('div');
+        row.className = 'mt-1.5 flex items-center gap-2';
+
+        var stop = document.createElement('button');
+        stop.type = 'button'; stop.textContent = '■ Stop'; stop.className = btnCls('stop');
+        stop.onclick = stopRec;
+
+        var timerEl = document.createElement('span');
+        timerEl.className = 'text-xs tabular-nums text-gray-500 dark:text-gray-400';
+        timerEl.textContent = fmt(0)+' / '+fmt(MAX_SEC);
+
+        var bar = document.createElement('div');
+        bar.className = 'h-1.5 flex-1 rounded-full bg-gray-200 dark:bg-white/10 overflow-hidden';
+        fillEl = document.createElement('div');
+        fillEl.className = 'h-full bg-pink-500';
+        fillEl.style.width = '0%';
+        bar.appendChild(fillEl);
+
+        row.appendChild(stop); row.appendChild(timerEl); row.appendChild(bar);
+        ui.appendChild(row);
+
+        ticker = setInterval(function() {
+          elapsed++;
+          timerEl.textContent = fmt(elapsed)+' / '+fmt(MAX_SEC);
+          if (fillEl) fillEl.style.width = (elapsed/MAX_SEC*100)+'%';
+          if (elapsed >= MAX_SEC) stopRec();
+        }, 1000);
+      }
+
+      function renderDone() {
+        fileInput.hidden = true;
+        ui.innerHTML = '';
+        var row = document.createElement('div');
+        row.className = 'mt-1.5 flex items-center gap-2 flex-wrap';
+
+        var audio = document.createElement('audio');
+        audio.src = blobUrl; audio.controls = true;
+        audio.style.cssText = 'height:28px;flex:1;min-width:0';
+
+        var reBtn = document.createElement('button');
+        reBtn.type = 'button'; reBtn.textContent = '↺ Re-record'; reBtn.className = btnCls('re');
+        reBtn.onclick = doReset;
+
+        row.appendChild(audio); row.appendChild(reBtn);
+        ui.appendChild(row);
+      }
+
+      function startRec() {
+        // Promise.resolve wrapper turns a missing API into the catch path
+        Promise.resolve()
+          .then(function() { return navigator.mediaDevices.getUserMedia({audio:true}); })
+          .then(function(stream) {
+            chunks = []; elapsed = 0; fillEl = null;
+            mr = new MediaRecorder(stream);
+            mr.ondataavailable = function(e) { if (e.data.size>0) chunks.push(e.data); };
+            mr.onstop = function() {
+              stream.getTracks().forEach(function(t){t.stop();});
+              clearInterval(ticker);
+              var blob = new Blob(chunks, {type: mr.mimeType||'audio/webm'});
+              if (blobUrl) URL.revokeObjectURL(blobUrl);
+              blobUrl = URL.createObjectURL(blob);
+              var dt = new DataTransfer();
+              dt.items.add(new File([blob], 'recording.webm', {type: blob.type}));
+              fileInput.files = dt.files;
+              renderDone();
+            };
+            mr.start();
+            renderRecording();
+          })
+          .catch(function(err) {
+            alert('Could not start recording: ' + (err && err.message ? err.message : err));
+          });
+      }
+
+      function stopRec() {
+        clearInterval(ticker);
+        if (mr && mr.state !== 'inactive') mr.stop();
+      }
+
+      function doReset() {
+        stopRec();
+        if (blobUrl) { URL.revokeObjectURL(blobUrl); blobUrl = null; }
+        chunks = []; elapsed = 0; mr = null; fillEl = null;
+        try { fileInput.value = ''; } catch(e) {}
+        renderIdle();
+      }
+
+      var form = widget.closest('form');
+      if (form) form.addEventListener('reset', doReset);
+
+      renderIdle();
+    }
+
+    function initAll() {
+      document.querySelectorAll('.audio-rec-widget').forEach(initWidget);
+    }
+    document.addEventListener('DOMContentLoaded', initAll);
+    document.addEventListener('htmx:afterSwap', initAll);
+  })();
 </script>

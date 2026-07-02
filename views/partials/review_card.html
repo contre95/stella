@@ -63,31 +63,33 @@
         <span class="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-xs font-semibold uppercase tracking-widest text-pink-500/80 dark:text-pink-300/70">
           {{if eq .Card.View "forward"}}Question{{else}}Reverse{{end}}
         </span>
-        {{if .Fact.ImageFront}}
-        <div class="relative z-10 flex-1 flex items-center justify-center min-h-0 w-full mb-3">
-          <img src="/images/{{.Fact.ImageFront}}" alt="" class="max-h-full w-auto max-w-full rounded-lg object-contain pointer-events-none" />
-        </div>
-        {{end}}
         {{$frontAudio := ""}}{{if eq .Card.View "forward"}}{{$frontAudio = .Fact.AudioFront}}{{else}}{{$frontAudio = .Fact.AudioBack}}{{end}}
+        <div class="relative z-10 flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-3">
+          {{if .Fact.ImageFront}}
+          <div class="flex min-h-0 w-full flex-1 items-center justify-center">
+            <img src="/images/{{.Fact.ImageFront}}" alt="" class="max-h-full w-auto max-w-full rounded-lg object-contain pointer-events-none" />
+          </div>
+          {{end}}
+          <p class="text-center text-xl font-medium leading-relaxed text-gray-800 dark:text-gray-100 sm:text-2xl"
+             _="on load if my textContent.trim().length <= 3 set my style.fontSize to '6rem' set my style.lineHeight to '1'">
+            {{if eq .Card.View "forward"}}{{.Fact.Front}}{{else}}{{.Fact.Back}}{{end}}
+          </p>
+        </div>
         {{if $frontAudio}}
-        <div id="player-front" class="relative z-10 mt-3 w-full max-w-xs mx-auto flex items-center gap-3 rounded-2xl px-3.5 py-2.5 bg-white/50 border border-white/60 dark:bg-white/[0.06] dark:border-white/[0.10]" style="backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);">
+        <div id="player-front" class="review-player relative z-10 mt-4 w-full max-w-xs shrink-0">
           <audio id="audio-front" src="/audio/{{$frontAudio}}" preload="auto"></audio>
-          <button type="button" id="play-btn-front" class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white" style="background:linear-gradient(135deg,#f472b6 0%,#db2777 55%,#be185d 100%);box-shadow:0 4px 12px -2px rgba(219,39,119,0.45);"></button>
-          <div class="flex-1 flex flex-col gap-1.5 min-w-0">
-            <div id="track-front" class="h-1.5 rounded-full cursor-pointer overflow-hidden bg-black/[0.07] dark:bg-white/[0.12]">
-              <div id="fill-front" class="h-full rounded-full pointer-events-none" style="width:0%;background:linear-gradient(90deg,#f472b6,#db2777);transition:width 0.1s linear;"></div>
+          <button type="button" id="play-btn-front" class="rp-btn" aria-label="Play audio"></button>
+          <div class="min-w-0 flex-1">
+            <div class="mb-1.5 flex items-center justify-between">
+              <span class="rp-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="rp-time"><span id="cur-front">0:00</span>&thinsp;/&thinsp;<span id="dur-front">-:--</span></span>
             </div>
-            <div class="flex justify-between">
-              <span id="cur-front" class="text-xs font-medium text-gray-400 dark:text-gray-500">0:00</span>
-              <span id="dur-front" class="text-xs font-medium text-gray-400 dark:text-gray-500">-:--</span>
+            <div id="track-front" class="rp-track">
+              <div id="fill-front" class="rp-fill" style="width:0%"></div>
             </div>
           </div>
         </div>
         {{end}}
-        <p class="relative z-10 text-center text-xl font-medium leading-relaxed text-gray-800 dark:text-gray-100 sm:text-2xl"
-           _="on load if my textContent.trim().length <= 2 set my style.fontSize to '6rem' set my style.lineHeight to '1'">
-          {{if eq .Card.View "forward"}}{{.Fact.Front}}{{else}}{{.Fact.Back}}{{end}}
-        </p>
       </div>
 
       <!-- Back face (answer) -->
@@ -104,31 +106,33 @@
         <div class="pointer-events-none absolute inset-0 bg-white/60 dark:bg-[#17161e]/70"></div>
         {{end}}
         <span class="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-xs font-semibold uppercase tracking-widest text-emerald-500/80 dark:text-emerald-300/70">Answer</span>
-        {{if .Fact.ImageBack}}
-        <div class="relative z-10 flex-1 flex items-center justify-center min-h-0 w-full mb-3">
-          <img src="/images/{{.Fact.ImageBack}}" alt="" class="max-h-full w-auto max-w-full rounded-lg object-contain pointer-events-none" />
-        </div>
-        {{end}}
         {{$backAudio := ""}}{{if eq .Card.View "forward"}}{{$backAudio = .Fact.AudioBack}}{{else}}{{$backAudio = .Fact.AudioFront}}{{end}}
+        <div class="relative z-10 flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-3">
+          {{if .Fact.ImageBack}}
+          <div class="flex min-h-0 w-full flex-1 items-center justify-center">
+            <img src="/images/{{.Fact.ImageBack}}" alt="" class="max-h-full w-auto max-w-full rounded-lg object-contain pointer-events-none" />
+          </div>
+          {{end}}
+          <p class="text-center text-xl font-medium leading-relaxed text-gray-900 dark:text-white sm:text-2xl"
+             _="on load if my textContent.trim().length <= 3 set my style.fontSize to '6rem' set my style.lineHeight to '1'">
+            {{if eq .Card.View "forward"}}{{.Fact.Back}}{{else}}{{.Fact.Front}}{{end}}
+          </p>
+        </div>
         {{if $backAudio}}
-        <div id="player-back" class="relative z-10 mt-3 w-full max-w-xs mx-auto flex items-center gap-3 rounded-2xl px-3.5 py-2.5 bg-white/50 border border-white/60 dark:bg-white/[0.06] dark:border-white/[0.10]" style="backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);">
+        <div id="player-back" class="review-player relative z-10 mt-4 w-full max-w-xs shrink-0">
           <audio id="audio-back" src="/audio/{{$backAudio}}" preload="auto"></audio>
-          <button type="button" id="play-btn-back" class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-white" style="background:linear-gradient(135deg,#f472b6 0%,#db2777 55%,#be185d 100%);box-shadow:0 4px 12px -2px rgba(219,39,119,0.45);"></button>
-          <div class="flex-1 flex flex-col gap-1.5 min-w-0">
-            <div id="track-back" class="h-1.5 rounded-full cursor-pointer overflow-hidden bg-black/[0.07] dark:bg-white/[0.12]">
-              <div id="fill-back" class="h-full rounded-full pointer-events-none" style="width:0%;background:linear-gradient(90deg,#f472b6,#db2777);transition:width 0.1s linear;"></div>
+          <button type="button" id="play-btn-back" class="rp-btn" aria-label="Play audio"></button>
+          <div class="min-w-0 flex-1">
+            <div class="mb-1.5 flex items-center justify-between">
+              <span class="rp-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="rp-time"><span id="cur-back">0:00</span>&thinsp;/&thinsp;<span id="dur-back">-:--</span></span>
             </div>
-            <div class="flex justify-between">
-              <span id="cur-back" class="text-xs font-medium text-gray-400 dark:text-gray-500">0:00</span>
-              <span id="dur-back" class="text-xs font-medium text-gray-400 dark:text-gray-500">-:--</span>
+            <div id="track-back" class="rp-track">
+              <div id="fill-back" class="rp-fill" style="width:0%"></div>
             </div>
           </div>
         </div>
         {{end}}
-        <p class="relative z-10 text-center text-xl font-medium leading-relaxed text-gray-900 dark:text-white sm:text-2xl"
-           _="on load if my textContent.trim().length <= 2 set my style.fontSize to '6rem' set my style.lineHeight to '1'">
-          {{if eq .Card.View "forward"}}{{.Fact.Back}}{{else}}{{.Fact.Front}}{{end}}
-        </p>
       </div>
     </div>
   </div>
@@ -199,8 +203,8 @@
     var audioFront  = document.getElementById('audio-front');
     var audioBack   = document.getElementById('audio-back');
 
-    var PLAY_ICON  = '<svg viewBox="0 0 10 10" fill="currentColor" style="width:10px;height:10px;margin-left:1px"><path d="M2 1.5v7l6-3.5z"/></svg>';
-    var PAUSE_ICON = '<svg viewBox="0 0 10 10" fill="currentColor" style="width:10px;height:10px"><rect x="1.5" y="1" width="2.5" height="8" rx="0.8"/><rect x="6" y="1" width="2.5" height="8" rx="0.8"/></svg>';
+    var PLAY_ICON  = '<svg viewBox="0 0 10 10" fill="currentColor" style="width:15px;height:15px;margin-left:2px"><path d="M2 1.5v7l6-3.5z"/></svg>';
+    var PAUSE_ICON = '<svg viewBox="0 0 10 10" fill="currentColor" style="width:15px;height:15px"><rect x="1.5" y="1" width="2.5" height="8" rx="0.8"/><rect x="6" y="1" width="2.5" height="8" rx="0.8"/></svg>';
 
     function initPlayer(audioEl, suffix) {
       var btn     = document.getElementById('play-btn-' + suffix);
@@ -223,6 +227,7 @@
         if (cur) cur.textContent = fmt(audioEl.currentTime);
         if (dur) dur.textContent = fmt(audioEl.duration);
         btn.innerHTML = audioEl.paused ? PLAY_ICON : PAUSE_ICON;
+        wrapper.classList.toggle('playing', !audioEl.paused);
       }
       btn.addEventListener('click', function(e) {
         e.stopPropagation();
@@ -403,10 +408,15 @@
         box.appendChild(img);
       }
       if (this.dataset.audio) {
-        var aud = document.createElement('audio');
-        aud.controls = true;
-        aud.src = '/audio/' + encodeURIComponent(this.dataset.audio);
-        aud.className = 'mx-auto mb-4 w-full max-w-xs';
+        var aud = document.createElement('button');
+        aud.type = 'button';
+        aud.className = 'audio-pill mb-4';
+        aud.dataset.audio = '/audio/' + encodeURIComponent(this.dataset.audio);
+        aud.setAttribute('aria-label', 'Play audio');
+        // Static icon markup only — the user-supplied filename stays in dataset above
+        aud.innerHTML = '<svg class="ac-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>'
+          + '<svg class="ac-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>'
+          + '<span class="ap-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>';
         box.appendChild(aud);
       }
       var text = document.createElement('p');
