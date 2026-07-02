@@ -170,12 +170,7 @@ func (s *Service) ResetFact(ctx context.Context, factID string) error {
 		return err
 	}
 	for _, c := range cards {
-		c.Grade = srs.GradeUnseen
-		c.AcqReps = 0
-		c.RetReps = 0
-		c.Lapses = 0
-		c.LastRep = 0
-		c.NextRep = 0
+		c.ResetLearningData()
 		if err := s.repo.UpdateCard(ctx, c); err != nil {
 			return err
 		}

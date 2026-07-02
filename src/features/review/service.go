@@ -40,17 +40,18 @@ func NewService(repo srs.Repository, scheduler *srs.Scheduler) *Service {
 
 // NextCard returns the highest-priority card to review, or nil when the queue
 // is empty. deckIDs restricts the session to those decks; nil means all decks.
+// learnAhead allows serving future-scheduled cards once the queue is empty.
 // Queue priority mirrors Mnemosyne's SM2:
 //  1. Relearn grade-0 (failed immediately after grading, need re-test now)
 //  2. Relearn grade-1 (lapsed retention cards brought back to acquisition)
 //  3. Retention reps due today
 //  4. Acquisition-phase cards already in hand (grade 1, no lapses)
 //  5. Unseen cards, introduced up to NonMemorisedCardsInHand
-//  6. Learn-ahead (nothing else scheduled)
-func (s *Service) NextCard(ctx context.Context, deckIDs []string) (*CardInSession, error) {
-	now := s.scheduler.AdjustedNow(time.Now())
+//  6. Learn-ahead (only when learnAhead is set and nothing else is scheduled)
+func (s *Service) NextCard(ctx context.Context, deckIDs []string, learnAhead bool) (*CardInSession, error) {
+	now := s.scheduler.AdjustedNow(s.scheduler.Now())
 
-	card, err := s.pickNext(ctx, now, deckIDs)
+	card, err := s.pickNext(ctx, now, deckIDs, learnAhead)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +87,7 @@ func (s *Service) Grade(ctx context.Context, cardID string, grade int) error {
 	}
 
 	scheduledInterval := card.NextRep - card.LastRep
-	nowUnix := time.Now().Unix()
+	nowUnix := s.scheduler.Now().Unix()
 	actualInterval := nowUnix - card.LastRep
 	if card.Grade == srs.GradeUnseen {
 		actualInterval = 0
@@ -122,7 +123,7 @@ func (s *Service) Grade(ctx context.Context, cardID string, grade int) error {
 
 // Stats returns aggregate counts for the dashboard (across all decks).
 func (s *Service) Stats(ctx context.Context) (*Stats, error) {
-	now := s.scheduler.AdjustedNow(time.Now())
+	now := s.scheduler.AdjustedNow(s.scheduler.Now())
 	due, err := s.repo.ScheduledCount(ctx, now, nil)
 	if err != nil {
 		return nil, err
@@ -158,7 +159,7 @@ func (s *Service) Forecast(ctx context.Context, days int) ([]ForecastDay, error)
 	if days < 1 {
 		days = 1
 	}
-	now := s.scheduler.AdjustedNow(time.Now())
+	now := s.scheduler.AdjustedNow(s.scheduler.Now())
 
 	counts := make([]int, days)
 	due, err := s.repo.ScheduledCount(ctx, now, nil)
@@ -186,7 +187,7 @@ func (s *Service) Forecast(ctx context.Context, days int) ([]ForecastDay, error)
 		}
 	}
 
-	wall := time.Now()
+	wall := s.scheduler.Now()
 	out := make([]ForecastDay, days)
 	for i := range counts {
 		out[i] = ForecastDay{
@@ -235,7 +236,7 @@ func (s *Service) StudyHeatmap(ctx context.Context) (*Heatmap, error) {
 	}
 	dayStarts := s.scheduler.Params.DayStartsAt
 
-	today := studyDay(time.Now().Unix(), loc, dayStarts)
+	today := studyDay(s.scheduler.Now().Unix(), loc, dayStarts)
 	startOfWeek := today.AddDate(0, 0, -int(today.Weekday())) // back to Sunday
 	gridStart := startOfWeek.AddDate(0, 0, -(heatmapWeeks-1)*7)
 
@@ -329,7 +330,16 @@ func heatTitle(n int, day time.Time) string {
 	}
 }
 
-func (s *Service) pickNext(ctx context.Context, now int64, deckIDs []string) (*srs.Card, error) {
+func (s *Service) pickNext(ctx context.Context, now int64, deckIDs []string, learnAhead bool) (*srs.Card, error) {
+	scheduledSort := "interval"
+	if s.scheduler.Params.RandomiseScheduledCards {
+		scheduledSort = "random"
+	}
+	newSort := ""
+	if s.scheduler.Params.RandomiseNewCards {
+		newSort = "random"
+	}
+
 	// 1. Relearn: grade-0 cards need an immediate re-test.
 	cards, err := s.repo.CardsToRelearn(ctx, 0, "interval", deckIDs)
 	if err != nil {
@@ -349,7 +359,7 @@ func (s *Service) pickNext(ctx context.Context, now int64, deckIDs []string) (*s
 	}
 
 	// 3. Retention reps due today.
-	cards, err = s.repo.CardsDueForRetRep(ctx, now, "interval", 1, deckIDs)
+	cards, err = s.repo.CardsDueForRetRep(ctx, now, scheduledSort, 1, deckIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -373,7 +383,7 @@ func (s *Service) pickNext(ctx context.Context, now int64, deckIDs []string) (*s
 	}
 	inHand := len(memorising0) + len(memorising1)
 	if inHand < s.scheduler.Params.NonMemorisedCardsInHand {
-		unseen, err := s.repo.CardsUnseen(ctx, "", 1, deckIDs)
+		unseen, err := s.repo.CardsUnseen(ctx, newSort, 1, deckIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -382,8 +392,12 @@ func (s *Service) pickNext(ctx context.Context, now int64, deckIDs []string) (*s
 		}
 	}
 
-	// 6. Nothing due today — offer learn-ahead.
-	cards, err = s.repo.CardsLearnAhead(ctx, now, "interval", 1, deckIDs)
+	// 6. Nothing due today — learn ahead of schedule, but only when the user
+	// asked for it; otherwise the session ends here.
+	if !learnAhead {
+		return nil, nil
+	}
+	cards, err = s.repo.CardsLearnAhead(ctx, now, "next_rep", 1, deckIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -394,7 +408,21 @@ func (s *Service) pickNext(ctx context.Context, now int64, deckIDs []string) (*s
 	return nil, nil
 }
 
-// queueSize estimates how many actionable cards remain in the session.
+// HasLearnAhead reports whether any retention card is scheduled in the future,
+// i.e. whether a learn-ahead session would have something to show.
+func (s *Service) HasLearnAhead(ctx context.Context, deckIDs []string) (bool, error) {
+	now := s.scheduler.AdjustedNow(s.scheduler.Now())
+	cards, err := s.repo.CardsLearnAhead(ctx, now, "next_rep", 1, deckIDs)
+	if err != nil {
+		return false, err
+	}
+	return len(cards) > 0, nil
+}
+
+// queueSize is how many cards still need work in the session: due retention
+// reps plus every non-memorised card. The hand size only paces how many unseen
+// cards are juggled at once — pickNext keeps introducing them as the hand
+// empties, so they all belong to the session and must all be counted here.
 func (s *Service) queueSize(ctx context.Context, now int64, deckIDs []string) (int, error) {
 	due, err := s.repo.ScheduledCount(ctx, now, deckIDs)
 	if err != nil {
@@ -403,10 +431,6 @@ func (s *Service) queueSize(ctx context.Context, now int64, deckIDs []string) (i
 	nm, err := s.repo.NonMemorisedCount(ctx, deckIDs)
 	if err != nil {
 		return 0, err
-	}
-	cap := s.scheduler.Params.NonMemorisedCardsInHand
-	if nm > cap {
-		nm = cap
 	}
 	return due + nm, nil
 }

@@ -3,7 +3,7 @@
   <!-- Session header -->
   <div class="mb-3 flex shrink-0 items-center justify-between">
     <span class="text-sm text-gray-500 dark:text-gray-400">
-      {{.Remaining}} card{{if gt .Remaining 1}}s{{end}} remaining
+      {{if gt .Remaining 0}}{{.Remaining}} card{{if ne .Remaining 1}}s{{end}} remaining{{else}}Learning ahead{{end}}
     </span>
     <div class="ml-auto flex items-center gap-3">
     {{if .DeckName}}
@@ -60,7 +60,7 @@
         <img src="/images/{{.Fact.ImageFront}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
         <div class="pointer-events-none absolute inset-0 bg-white/60 dark:bg-[#17161e]/70"></div>
         {{end}}
-        <span class="relative z-10 mb-3 text-xs font-semibold uppercase tracking-widest text-pink-500/80 dark:text-pink-300/70">
+        <span class="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-xs font-semibold uppercase tracking-widest text-pink-500/80 dark:text-pink-300/70">
           {{if eq .Card.View "forward"}}Question{{else}}Reverse{{end}}
         </span>
         {{if .Fact.ImageFront}}
@@ -103,7 +103,7 @@
         <img src="/images/{{.Fact.ImageBack}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
         <div class="pointer-events-none absolute inset-0 bg-white/60 dark:bg-[#17161e]/70"></div>
         {{end}}
-        <span class="relative z-10 mb-3 text-xs font-semibold uppercase tracking-widest text-emerald-500/80 dark:text-emerald-300/70">Answer</span>
+        <span class="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-xs font-semibold uppercase tracking-widest text-emerald-500/80 dark:text-emerald-300/70">Answer</span>
         {{if .Fact.ImageBack}}
         <div class="relative z-10 flex-1 flex items-center justify-center min-h-0 w-full mb-3">
           <img src="/images/{{.Fact.ImageBack}}" alt="" class="max-h-full w-auto max-w-full rounded-lg object-contain pointer-events-none" />
@@ -144,25 +144,25 @@
     <div id="grade-buttons" class="hidden grid grid-cols-4 gap-2 transition duration-300">
     <button
       data-grade="0"
-      data-url="/review/{{.Card.ID}}/grade{{if .DeckFilter}}?decks={{.DeckFilter}}{{end}}"
+      data-url="/review/{{.Card.ID}}/grade?decks={{.DeckFilter}}{{if .LearnAhead}}&amp;learnahead=1{{end}}"
       class="rounded-2xl py-4 text-sm font-bold transition-colors bg-red-500/15 text-red-600 ring-1 ring-inset ring-red-500/20 active:bg-red-500/25 dark:text-red-400"
       style="min-height: 56px;"
     >Again</button>
     <button
       data-grade="2"
-      data-url="/review/{{.Card.ID}}/grade{{if .DeckFilter}}?decks={{.DeckFilter}}{{end}}"
+      data-url="/review/{{.Card.ID}}/grade?decks={{.DeckFilter}}{{if .LearnAhead}}&amp;learnahead=1{{end}}"
       class="rounded-2xl py-4 text-sm font-bold transition-colors bg-orange-500/15 text-orange-600 ring-1 ring-inset ring-orange-500/20 active:bg-orange-500/25 dark:text-orange-400"
       style="min-height: 56px;"
     >Hard</button>
     <button
       data-grade="4"
-      data-url="/review/{{.Card.ID}}/grade{{if .DeckFilter}}?decks={{.DeckFilter}}{{end}}"
+      data-url="/review/{{.Card.ID}}/grade?decks={{.DeckFilter}}{{if .LearnAhead}}&amp;learnahead=1{{end}}"
       class="rounded-2xl py-4 text-sm font-bold transition-colors bg-emerald-500/15 text-emerald-600 ring-1 ring-inset ring-emerald-500/20 active:bg-emerald-500/25 dark:text-emerald-400"
       style="min-height: 56px;"
     >Good</button>
     <button
       data-grade="5"
-      data-url="/review/{{.Card.ID}}/grade{{if .DeckFilter}}?decks={{.DeckFilter}}{{end}}"
+      data-url="/review/{{.Card.ID}}/grade?decks={{.DeckFilter}}{{if .LearnAhead}}&amp;learnahead=1{{end}}"
       class="rounded-2xl py-4 text-sm font-bold transition-colors bg-pink-500/15 text-pink-600 ring-1 ring-inset ring-pink-500/20 active:bg-pink-500/25 dark:text-pink-400"
       style="min-height: 56px;"
     >Easy</button>

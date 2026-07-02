@@ -7,6 +7,16 @@
     Your review queue is empty. Come back later or add more cards.
   </p>
   <div class="mt-7 flex gap-3">
+    {{if .CanLearnAhead}}
+    <a
+      href="/review?learnahead=1&amp;decks={{.DeckFilter}}"
+      hx-get="/review?learnahead=1&amp;decks={{.DeckFilter}}"
+      hx-target="#contenido"
+      hx-swap="outerHTML"
+      hx-push-url="true"
+      class="btn-ghost rounded-xl px-4 py-2 text-sm font-medium"
+    >Learn ahead</a>
+    {{end}}
     <a
       href="/cards"
       hx-get="/cards"

@@ -3,6 +3,7 @@ package review
 import (
 	"context"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -72,7 +73,7 @@ func TestNextCard_RelearnBeatsDue(t *testing.T) {
 		c.NextRep = 100
 	})
 
-	ci, err := svc.NextCard(context.Background(), nil)
+	ci, err := svc.NextCard(context.Background(), nil, false)
 	if err != nil {
 		t.Fatalf("next card: %v", err)
 	}
@@ -100,7 +101,7 @@ func TestNextCard_ShortestIntervalFirst(t *testing.T) {
 		c.NextRep = 500 // interval 100
 	})
 
-	ci, err := svc.NextCard(context.Background(), nil)
+	ci, err := svc.NextCard(context.Background(), nil, false)
 	if err != nil {
 		t.Fatalf("next card: %v", err)
 	}
@@ -188,10 +189,82 @@ func TestStudyHeatmap(t *testing.T) {
 	}
 }
 
+// The remaining count must cover the whole session queue — every unseen card,
+// not just the hand — and shrink as cards graduate out of the acquisition
+// phase.
+func TestNextCard_RemainingCountsWholeQueue(t *testing.T) {
+	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	svc, db := newTestService(t, now)
+	deck := seedDeck(t, db)
+	total := svc.scheduler.Params.NonMemorisedCardsInHand + 5
+	for i := range total {
+		id := "c" + strconv.Itoa(i)
+		addCard(t, db, deck, "f_"+id, id, nil) // unseen
+	}
+
+	ci, err := svc.NextCard(context.Background(), nil, false)
+	if err != nil {
+		t.Fatalf("next card: %v", err)
+	}
+	if ci == nil || ci.Remaining != total {
+		t.Fatalf("remaining got %v want %d", ci, total)
+	}
+
+	// Graduating a card out of the non-memorised pool shrinks the count.
+	if err := svc.Grade(context.Background(), ci.Card.ID, 4); err != nil {
+		t.Fatalf("grade: %v", err)
+	}
+	ci, err = svc.NextCard(context.Background(), nil, false)
+	if err != nil {
+		t.Fatalf("next card: %v", err)
+	}
+	if ci == nil || ci.Remaining != total-1 {
+		t.Fatalf("remaining after grade got %v want %d", ci, total-1)
+	}
+}
+
+// With the queue empty, future-scheduled cards are only served when the
+// caller opts into learning ahead — otherwise the session must end.
+func TestNextCard_LearnAheadIsOptIn(t *testing.T) {
+	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	svc, db := newTestService(t, now)
+	deck := seedDeck(t, db)
+	addCard(t, db, deck, "f_fut", "c_fut", func(c *srs.Card) {
+		c.Grade = 4
+		c.Easiness = 2.5
+		c.LastRep = now.Unix()
+		c.NextRep = now.Unix() + 30*srs.DAY
+	})
+
+	ci, err := svc.NextCard(context.Background(), nil, false)
+	if err != nil {
+		t.Fatalf("next card: %v", err)
+	}
+	if ci != nil {
+		t.Fatalf("want session end without learn-ahead, got card %s", ci.Card.ID)
+	}
+
+	ok, err := svc.HasLearnAhead(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("has learn ahead: %v", err)
+	}
+	if !ok {
+		t.Fatal("HasLearnAhead should report the future card")
+	}
+
+	ci, err = svc.NextCard(context.Background(), nil, true)
+	if err != nil {
+		t.Fatalf("next card: %v", err)
+	}
+	if ci == nil || ci.Card.ID != "c_fut" {
+		t.Fatalf("want future card in learn-ahead mode, got %v", ci)
+	}
+}
+
 func TestNextCard_EmptyQueue(t *testing.T) {
 	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 	svc, _ := newTestService(t, now)
-	ci, err := svc.NextCard(context.Background(), nil)
+	ci, err := svc.NextCard(context.Background(), nil, false)
 	if err != nil {
 		t.Fatalf("next card: %v", err)
 	}
@@ -204,8 +277,7 @@ func TestForecast(t *testing.T) {
 	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 	svc, db := newTestService(t, now)
 	deck := seedDeck(t, db)
-	// The service derives "now" from the wall clock, so seed relative to that.
-	adjNow := svc.scheduler.AdjustedNow(time.Now())
+	adjNow := svc.scheduler.AdjustedNow(now)
 
 	// One card overdue (due today), one scheduled a couple of days out.
 	addCard(t, db, deck, "f_today", "c_today", func(c *srs.Card) {
