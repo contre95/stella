@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/contre95/stella/src/features/config"
 	"github.com/gofiber/fiber/v2"
@@ -47,7 +48,14 @@ func NewServer(cm *config.Manager, registrars ...RouteRegistrar) *Server {
 		},
 	})
 
-	app.Use(recover.New(), HTMXMiddleware(), LogRequestsMiddleware())
+	app.Use(recover.New(), HTMXMiddleware(), LogRequestsMiddleware(), func(c *fiber.Ctx) error {
+		version := os.Getenv("IMAGE_TAG")
+		if version == "" {
+			version = "dev"
+		}
+		c.Locals("Version", version)
+		return c.Next()
+	})
 	app.Static("/", "./public")
 	app.Static("/images", cm.Get().ImagePath)
 	app.Static("/audio", cm.Get().ImagePath)

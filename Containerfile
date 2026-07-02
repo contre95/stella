@@ -13,6 +13,9 @@ RUN CGO_ENABLED=1 GOOS=linux go build -o stella-mcp   ./src/cmd/mcp/main.go
 # ---- runtime ----
 FROM alpine:3.20
 
+ARG IMAGE_TAG
+ENV IMAGE_TAG=$IMAGE_TAG
+
 RUN apk add --no-cache sqlite-libs ca-certificates
 
 WORKDIR /app

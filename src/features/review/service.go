@@ -282,6 +282,12 @@ func (s *Service) StudyHeatmap(ctx context.Context) (*Heatmap, error) {
 		hm.Weeks[w] = week
 	}
 
+	// The leading partial month may span only 1–2 columns; dropping its label
+	// prevents it from visually overlapping the next month label.
+	if hm.MonthLabels[1] != "" || (len(hm.MonthLabels) > 2 && hm.MonthLabels[2] != "") {
+		hm.MonthLabels[0] = ""
+	}
+
 	// Current streak: consecutive study days ending today. Today counting as
 	// blank does not break it (you may not have studied yet).
 	d := today
