@@ -31,24 +31,30 @@
           class="glass-input mt-1.5 w-full rounded-xl px-3 py-2 text-sm"
         />
       </label>
-      <label class="block">
+      <div class="block">
         <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Front image <span class="font-normal normal-case">(optional)</span></span>
-        <input
-          type="file"
-          name="image_front"
-          accept=".jpg,.jpeg,.png,.gif,.webp"
-          class="glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"
-        />
-      </label>
-      <label class="block">
+        <div class="image-paste-widget">
+          <input
+            type="file"
+            name="image_front"
+            accept=".jpg,.jpeg,.png,.gif,.webp"
+            class="glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"
+          />
+          <div class="paste-ui"></div>
+        </div>
+      </div>
+      <div class="block">
         <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Back image <span class="font-normal normal-case">(optional)</span></span>
-        <input
-          type="file"
-          name="image_back"
-          accept=".jpg,.jpeg,.png,.gif,.webp"
-          class="glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"
-        />
-      </label>
+        <div class="image-paste-widget">
+          <input
+            type="file"
+            name="image_back"
+            accept=".jpg,.jpeg,.png,.gif,.webp"
+            class="glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"
+          />
+          <div class="paste-ui"></div>
+        </div>
+      </div>
       <div class="block">
         <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Front audio <span class="font-normal normal-case">(optional)</span></span>
         <div class="audio-rec-widget" data-for="audio_front">

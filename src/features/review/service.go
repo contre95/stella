@@ -2,7 +2,11 @@ package review
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math/rand"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/contre95/stella/src/srs"
@@ -25,38 +29,81 @@ type CardInSession struct {
 	DeckName  string
 	DeckColor string
 	DeckImage string
+	// Previews holds, per grade 0-5, the interval that grade would schedule,
+	// as a human label ("now", "in 3 days"). Computed with a dry run.
+	Previews [6]string
 }
 
-// Service drives the review loop: queue selection, grading, and aggregate stats.
+// Service drives the review loop: queue selection, grading, and aggregate
+// stats. The queue fields are an exact port of Mnemosyne's SM2Mnemosyne
+// scheduler state (see reset/rebuildQueue/popNextID) and are guarded by mu.
 type Service struct {
 	repo      srs.Repository
 	scheduler *srs.Scheduler
+	shuffle   func(n int, swap func(i, j int)) // injectable for deterministic tests
+
+	mu sync.Mutex
+	// cardIDsInQueue is the review queue. It may contain the same card twice:
+	// grade-0 cards are queued double so they get re-tested within the session.
+	cardIDsInQueue []string
+	// factIDsInQueue keeps sister cards from entering the queue together.
+	factIDsInQueue map[string]struct{}
+	// factIDsMemorised are facts memorised today; it persists across queue
+	// rebuilds and stops stage 4 from pulling a sister card out of the unseen
+	// pile on the same day. Seeded from the review log on reset.
+	factIDsMemorised map[string]struct{}
+	// cardIDLast avoids showing the same card twice in a row.
+	cardIDLast string
+	// stage remembers where queue building left off, skipping useless queries.
+	stage int
+	// sessionKey tracks the deck filter + learn-ahead flag the queue was built
+	// for, and dayStart the study day; the queue resets when either changes
+	// (Mnemosyne resets on programme start, which a long-running server lacks).
+	sessionKey string
+	dayStart   int64
 }
 
 // NewService constructs the review service.
 func NewService(repo srs.Repository, scheduler *srs.Scheduler) *Service {
-	return &Service{repo: repo, scheduler: scheduler}
+	return &Service{repo: repo, scheduler: scheduler, shuffle: rand.Shuffle, stage: -1}
 }
 
-// NextCard returns the highest-priority card to review, or nil when the queue
-// is empty. deckIDs restricts the session to those decks; nil means all decks.
-// learnAhead allows serving future-scheduled cards once the queue is empty.
-// Queue priority mirrors Mnemosyne's SM2:
-//  1. Relearn grade-0 (failed immediately after grading, need re-test now)
-//  2. Relearn grade-1 (lapsed retention cards brought back to acquisition)
-//  3. Retention reps due today
-//  4. Acquisition-phase cards already in hand (grade 1, no lapses)
-//  5. Unseen cards, introduced up to NonMemorisedCardsInHand
-//  6. Learn-ahead (only when learnAhead is set and nothing else is scheduled)
+// NextCard returns the next card to review, or nil when the queue is empty.
+// deckIDs restricts the session to those decks; nil means all decks.
+// learnAhead allows serving future-scheduled cards once nothing else is left.
+// Selection is a port of Mnemosyne's queue: see rebuildQueue and popNextID.
 func (s *Service) NextCard(ctx context.Context, deckIDs []string, learnAhead bool) (*CardInSession, error) {
 	now := s.scheduler.AdjustedNow(s.scheduler.Now())
 
-	card, err := s.pickNext(ctx, now, deckIDs, learnAhead)
-	if err != nil {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.ensureSession(ctx, deckIDs, learnAhead); err != nil {
 		return nil, err
 	}
-	if card == nil {
-		return nil, nil
+
+	var card *srs.Card
+	for card == nil {
+		id, ok, err := s.popNextID(ctx, deckIDs, learnAhead)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, nil
+		}
+		c, err := s.repo.GetCard(ctx, id)
+		switch {
+		case errors.Is(err, srs.ErrNotFound):
+			// Deleted mid-session. Mnemosyne removes deleted cards from the
+			// queue eagerly; serving from a database re-query, we drop them
+			// lazily when popped.
+			s.dropFromQueue(id)
+		case err != nil:
+			return nil, err
+		case !c.Active:
+			s.dropFromQueue(id)
+		default:
+			card = c
+		}
 	}
 
 	fact, err := s.repo.GetFact(ctx, card.FactID)
@@ -74,34 +121,78 @@ func (s *Service) NextCard(ctx context.Context, deckIDs []string, learnAhead boo
 		dn, dc, di = d.Name, d.Color, d.Image
 	}
 
-	return &CardInSession{Card: card, Fact: fact, Remaining: remaining, DeckName: dn, DeckColor: dc, DeckImage: di}, nil
+	ci := &CardInSession{Card: card, Fact: fact, Remaining: remaining, DeckName: dn, DeckColor: dc, DeckImage: di}
+	for g := 0; g <= 5; g++ {
+		ci.Previews[g] = intervalLabel(s.scheduler.GradeAnswer(card, g, true))
+	}
+	return ci, nil
 }
 
-// Grade applies a grade to a card, persists the updated scheduling state, logs
-// the review event, and shifts next_rep by one day when a sister card is
-// already scheduled on the same midnight-UTC value (sister-card avoidance).
+// intervalLabel renders a dry-run interval as a short human label for the
+// grade-button tooltips.
+func intervalLabel(interval int64) string {
+	days := interval / srs.DAY
+	switch {
+	case days <= 0:
+		return "again now"
+	case days == 1:
+		return "in 1 day"
+	default:
+		return fmt.Sprintf("in %d days", days)
+	}
+}
+
+// Grade applies a grade to a card, persists the updated scheduling state, and
+// logs the review event. It also performs the queue bookkeeping Mnemosyne's
+// grade_answer does: remembering memorised facts, dropping the duplicate queue
+// copy of a graduating grade-0 card, and shifting next_rep by whole days while
+// a sister card is scheduled on the same day (avoid_sister_cards).
 func (s *Service) Grade(ctx context.Context, cardID string, grade int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	card, err := s.repo.GetCard(ctx, cardID)
 	if err != nil {
 		return err
 	}
 
+	oldGrade := card.Grade
 	scheduledInterval := card.NextRep - card.LastRep
 	nowUnix := s.scheduler.Now().Unix()
 	actualInterval := nowUnix - card.LastRep
-	if card.Grade == srs.GradeUnseen {
+	if oldGrade == srs.GradeUnseen {
 		actualInterval = 0
+	}
+
+	if oldGrade < 2 && grade >= 2 {
+		// Memorising a card keeps its sisters out of the unseen pile today.
+		if s.factIDsMemorised != nil {
+			s.factIDsMemorised[card.FactID] = struct{}{}
+		}
+		// A grade-0 card sits in the queue twice; make sure the second copy
+		// doesn't show up again now that the card graduated.
+		if oldGrade == 0 {
+			for i, qid := range s.cardIDsInQueue {
+				if qid == card.ID {
+					s.cardIDsInQueue = append(s.cardIDsInQueue[:i], s.cardIDsInQueue[i+1:]...)
+					break
+				}
+			}
+		}
 	}
 
 	s.scheduler.GradeAnswer(card, grade, false)
 
-	if grade >= 2 && card.NextRep > 0 {
-		count, err := s.repo.SisterCardCountScheduledBetween(
-			ctx, card.FactID, card.ID, card.NextRep, card.NextRep+srs.DAY)
-		if err != nil {
-			return err
-		}
-		if count > 0 {
+	if grade >= 2 {
+		for {
+			count, err := s.repo.SisterCardCountScheduledBetween(
+				ctx, card.FactID, card.ID, card.NextRep, card.NextRep+srs.DAY)
+			if err != nil {
+				return err
+			}
+			if count == 0 {
+				break
+			}
 			card.NextRep += srs.DAY
 		}
 	}
@@ -114,6 +205,7 @@ func (s *Service) Grade(ctx context.Context, cardID string, grade int) error {
 		ID:                uuid.NewString(),
 		CardID:            card.ID,
 		Grade:             grade,
+		RetReps:           card.RetReps,
 		ScheduledInterval: scheduledInterval,
 		ActualInterval:    actualInterval,
 		ThinkingTime:      0,
@@ -336,82 +428,295 @@ func heatTitle(n int, day time.Time) string {
 	}
 }
 
-func (s *Service) pickNext(ctx context.Context, now int64, deckIDs []string, learnAhead bool) (*srs.Card, error) {
-	scheduledSort := "interval"
-	if s.scheduler.Params.RandomiseScheduledCards {
-		scheduledSort = "random"
+// reset re-initialises the queue state; port of SM2Mnemosyne.reset (always
+// with new_only=False, a mode Stella does not expose). Mnemosyne runs it at
+// programme start; the server-side equivalents are a session change (deck
+// filter or learn-ahead flag) and a study-day rollover — see ensureSession.
+func (s *Service) reset(ctx context.Context) error {
+	s.cardIDsInQueue = nil
+	s.factIDsInQueue = map[string]struct{}{}
+	s.factIDsMemorised = map[string]struct{}{}
+	s.cardIDLast = ""
+	s.stage = 1
+	from, to := s.scheduler.TodayStartAndEnd()
+	factIDs, err := s.repo.FactIDsLearnedToday(ctx, from, to)
+	if err != nil {
+		return err
 	}
-	newSort := ""
-	if s.scheduler.Params.RandomiseNewCards {
-		newSort = "random"
+	for _, id := range factIDs {
+		s.factIDsMemorised[id] = struct{}{}
+	}
+	s.dayStart = from
+	return nil
+}
+
+// ensureSession resets the queue when it was built for a different deck
+// filter or learn-ahead mode, or for a previous study day. Callers must hold
+// s.mu.
+func (s *Service) ensureSession(ctx context.Context, deckIDs []string, learnAhead bool) error {
+	key := strings.Join(deckIDs, ",")
+	if learnAhead {
+		key += "|learnahead"
+	}
+	dayStart, _ := s.scheduler.TodayStartAndEnd()
+	if s.stage < 1 || key != s.sessionKey || dayStart != s.dayStart {
+		if err := s.reset(ctx); err != nil {
+			return err
+		}
+		s.sessionKey = key
+	}
+	return nil
+}
+
+// rebuildQueue refills the card queue. It is an exact port of
+// SM2Mnemosyne.rebuild_queue and must be kept in step with it, including the
+// stage bookkeeping that lets later rebuilds skip stages known to be empty.
+// Callers must hold s.mu.
+func (s *Service) rebuildQueue(ctx context.Context, deckIDs []string, learnAhead bool) error {
+	now := s.scheduler.AdjustedNow(s.scheduler.Now())
+	s.cardIDsInQueue = s.cardIDsInQueue[:0]
+	s.factIDsInQueue = map[string]struct{}{}
+
+	// enqueue adds a card; copies is 2 for grade-0 cards, which are queued
+	// double so they are re-tested later in the same session.
+	enqueue := func(c *srs.Card, copies int) {
+		for range copies {
+			s.cardIDsInQueue = append(s.cardIDsInQueue, c.ID)
+		}
+		s.factIDsInQueue[c.FactID] = struct{}{}
+	}
+	shuffleQueue := func() {
+		s.shuffle(len(s.cardIDsInQueue), func(i, j int) {
+			s.cardIDsInQueue[i], s.cardIDsInQueue[j] = s.cardIDsInQueue[j], s.cardIDsInQueue[i]
+		})
 	}
 
-	// 1. Relearn: grade-0 cards need an immediate re-test.
-	cards, err := s.repo.CardsToRelearn(ctx, 0, "interval", deckIDs)
-	if err != nil {
-		return nil, err
-	}
-	if len(cards) > 0 {
-		return cards[0], nil
-	}
-
-	// 2. Relearn: lapsed retention cards now back in grade-1 acquisition.
-	cards, err = s.repo.CardsToRelearn(ctx, 1, "interval", deckIDs)
-	if err != nil {
-		return nil, err
-	}
-	if len(cards) > 0 {
-		return cards[0], nil
-	}
-
-	// 3. Retention reps due today.
-	cards, err = s.repo.CardsDueForRetRep(ctx, now, scheduledSort, 1, deckIDs)
-	if err != nil {
-		return nil, err
-	}
-	if len(cards) > 0 {
-		return cards[0], nil
-	}
-
-	// 4. Cards already in the memorising hand (grade 1, no lapses).
-	memorising1, err := s.repo.CardsNewMemorising(ctx, 1, deckIDs)
-	if err != nil {
-		return nil, err
-	}
-	if len(memorising1) > 0 {
-		return memorising1[0], nil
-	}
-
-	// 5. Introduce unseen cards up to the hand limit.
-	memorising0, err := s.repo.CardsNewMemorising(ctx, 0, deckIDs)
-	if err != nil {
-		return nil, err
-	}
-	inHand := len(memorising0) + len(memorising1)
-	if inHand < s.scheduler.Params.NonMemorisedCardsInHand {
-		unseen, err := s.repo.CardsUnseen(ctx, newSort, 1, deckIDs)
+	// Stage 1
+	//
+	// Cards scheduled for today or overdue, shortest interval first (being a
+	// day late on an interval of 2 is much worse than on one of 50). Fetch at
+	// most 50 at a time as a memory/re-query trade-off.
+	if s.stage == 1 {
+		sortKey := "interval"
+		if s.scheduler.Params.RandomiseScheduledCards {
+			sortKey = "random"
+		}
+		cards, err := s.repo.CardsDueForRetRep(ctx, now, sortKey, 50, deckIDs)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		if len(unseen) > 0 {
-			return unseen[0], nil
+		for _, c := range cards {
+			enqueue(c, 1)
+		}
+		if len(s.cardIDsInQueue) > 0 {
+			return nil
+		}
+		s.stage = 2
+	}
+
+	// Stages 2-4 concentrate on a limited number of non-memorised cards, to
+	// avoid too-long intervals between repetitions of the cards in hand.
+	limit := s.scheduler.Params.NonMemorisedCardsInHand
+	nonMemorisedInQueue := 0
+	// addNonMemorised is the shared stage 2/3 loop body: skip sister cards of
+	// facts already queued, and stop filling once the hand is full.
+	addNonMemorised := func(cards []*srs.Card, copies int) {
+		for _, c := range cards {
+			if _, in := s.factIDsInQueue[c.FactID]; in {
+				continue
+			}
+			if nonMemorisedInQueue < limit {
+				enqueue(c, copies)
+				nonMemorisedInQueue++
+			}
+			if nonMemorisedInQueue == limit {
+				return
+			}
 		}
 	}
 
-	// 6. Nothing due today — learn ahead of schedule, but only when the user
-	// asked for it; otherwise the session ends here.
+	// Stage 2
+	//
+	// Rememorise the cards we got wrong (lapsed retention cards).
+	if s.stage == 2 {
+		relearn1, err := s.repo.CardsToRelearn(ctx, 1, "-interval", deckIDs)
+		if err != nil {
+			return err
+		}
+		addNonMemorised(relearn1, 1)
+		relearn0, err := s.repo.CardsToRelearn(ctx, 0, "-interval", deckIDs)
+		if err != nil {
+			return err
+		}
+		addNonMemorised(relearn0, 2)
+		shuffleQueue()
+		// Only stop when the hand is full; otherwise keep going to add some
+		// extra cards for more spread.
+		if nonMemorisedInQueue == limit {
+			return nil
+		}
+		if len(s.cardIDsInQueue) == 0 {
+			s.stage = 3
+		}
+	}
+
+	// Stage 3
+	//
+	// Cards never yet committed to long-term memory, but seen before. Uses <=
+	// so earlier stages can top up the hand from this stage.
+	if s.stage <= 3 {
+		memorising1, err := s.repo.CardsNewMemorising(ctx, 1, deckIDs)
+		if err != nil {
+			return err
+		}
+		addNonMemorised(memorising1, 1)
+		memorising0, err := s.repo.CardsNewMemorising(ctx, 0, deckIDs)
+		if err != nil {
+			return err
+		}
+		addNonMemorised(memorising0, 2)
+		shuffleQueue()
+		if nonMemorisedInQueue == limit {
+			return nil
+		}
+		if len(s.cardIDsInQueue) == 0 {
+			s.stage = 4
+		}
+	}
+
+	// Stage 4
+	//
+	// Introduce cards seen for the first time, preferentially keeping away
+	// from sister cards of facts memorised today for as long as possible.
+	if s.stage <= 4 {
+		sortKey := ""
+		if s.scheduler.Params.RandomiseNewCards {
+			sortKey = "random"
+		}
+		unseen, err := s.repo.CardsUnseen(ctx, sortKey, min(limit, 50), deckIDs)
+		if err != nil {
+			return err
+		}
+		for _, c := range unseen {
+			_, inQueue := s.factIDsInQueue[c.FactID]
+			_, memorised := s.factIDsMemorised[c.FactID]
+			if inQueue || memorised {
+				continue
+			}
+			enqueue(c, 1)
+			nonMemorisedInQueue++
+			if nonMemorisedInQueue == limit {
+				s.stage = 2
+				return nil
+			}
+		}
+		// If the hand is not full enough, start pulling in sister cards.
+		if nonMemorisedInQueue < limit {
+			unseen, err = s.repo.CardsUnseen(ctx, sortKey, min(limit, 50), deckIDs)
+			if err != nil {
+				return err
+			}
+			for _, c := range unseen {
+				if _, in := s.factIDsInQueue[c.FactID]; in {
+					continue
+				}
+				enqueue(c, 1)
+				nonMemorisedInQueue++
+				if nonMemorisedInQueue == limit {
+					s.stage = 2
+					return nil
+				}
+			}
+		}
+		if len(s.cardIDsInQueue) == 0 {
+			s.stage = 5
+		}
+	}
+
+	// Stage 5
+	//
+	// No more scheduled or new cards; serve future-scheduled cards when the
+	// user asked to learn ahead. Not shuffled — reviewing the earliest
+	// scheduled cards first is more useful. Like Mnemosyne, this block is not
+	// gated on the stage so a partially filled hand can still learn ahead.
 	if !learnAhead {
-		return nil, nil
+		s.stage = 2
+		return nil
 	}
-	cards, err = s.repo.CardsLearnAhead(ctx, now, "next_rep", 1, deckIDs)
+	ahead, err := s.repo.CardsLearnAhead(ctx, now, "next_rep", 50, deckIDs)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if len(cards) > 0 {
-		return cards[0], nil
+	for _, c := range ahead {
+		s.cardIDsInQueue = append(s.cardIDsInQueue, c.ID)
 	}
+	// Relearn cards we get wrong during learn ahead.
+	s.stage = 2
+	return nil
+}
 
-	return nil, nil
+// popNextID pops the id of the next card to show, rebuilding the queue when
+// it runs empty and making sure the same card is never shown twice in
+// succession. Port of SM2Mnemosyne.next_card; ok is false when there is
+// nothing left to review. Callers must hold s.mu.
+func (s *Service) popNextID(ctx context.Context, deckIDs []string, learnAhead bool) (id string, ok bool, err error) {
+	pop := func() string {
+		id := s.cardIDsInQueue[0]
+		s.cardIDsInQueue = s.cardIDsInQueue[1:]
+		return id
+	}
+	if len(s.cardIDsInQueue) == 0 {
+		if err := s.rebuildQueue(ctx, deckIDs, learnAhead); err != nil {
+			return "", false, err
+		}
+		if len(s.cardIDsInQueue) == 0 {
+			return "", false, nil
+		}
+	}
+	id = pop()
+	if s.cardIDLast != "" {
+		for id == s.cardIDLast {
+			// Make sure we have enough cards to vary, but exit in hopeless
+			// situations where the just-shown card is the only one left.
+			if len(s.cardIDsInQueue) == 0 {
+				if err := s.rebuildQueue(ctx, deckIDs, learnAhead); err != nil {
+					return "", false, err
+				}
+				if len(s.cardIDsInQueue) == 0 {
+					return "", false, nil
+				}
+				if s.onlyCardInQueue(id) {
+					return id, true, nil
+				}
+			}
+			id = pop()
+		}
+	}
+	s.cardIDLast = id
+	return id, true, nil
+}
+
+// onlyCardInQueue reports whether the (non-empty) queue consists solely of
+// copies of the given card.
+func (s *Service) onlyCardInQueue(id string) bool {
+	for _, qid := range s.cardIDsInQueue {
+		if qid != id {
+			return false
+		}
+	}
+	return true
+}
+
+// dropFromQueue removes every queued copy of a card that turned out to be
+// deleted or suspended. Callers must hold s.mu.
+func (s *Service) dropFromQueue(id string) {
+	out := s.cardIDsInQueue[:0]
+	for _, qid := range s.cardIDsInQueue {
+		if qid != id {
+			out = append(out, qid)
+		}
+	}
+	s.cardIDsInQueue = out
 }
 
 // HasLearnAhead reports whether any retention card is scheduled in the future,

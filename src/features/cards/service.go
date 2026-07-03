@@ -118,6 +118,19 @@ func (s *Service) AddFact(ctx context.Context, front, back, deckID string, grade
 		if err := s.repo.AddCard(ctx, c); err != nil {
 			return nil, err
 		}
+		// Mnemosyne counts initial grading as a repetition and logs it, so the
+		// fact registers as "memorised today" for the queue's sister avoidance.
+		if grade >= 0 {
+			if err := s.repo.AddReview(ctx, &srs.Review{
+				ID:        uuid.NewString(),
+				CardID:    c.ID,
+				Grade:     grade,
+				RetReps:   c.RetReps,
+				Timestamp: now,
+			}); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return fact, nil
 }

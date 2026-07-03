@@ -7,6 +7,7 @@ type Review struct {
 	ID                string
 	CardID            string
 	Grade             int
+	RetReps           int   // card's ret_reps after this repetition was applied
 	ScheduledInterval int64 // interval that led up to this repetition
 	ActualInterval    int64 // time actually elapsed since last rep
 	ThinkingTime      int64 // seconds spent before grading

@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS reviews (
 	id                 TEXT PRIMARY KEY,
 	card_id            TEXT NOT NULL,
 	grade              INTEGER NOT NULL,
+	ret_reps           INTEGER NOT NULL DEFAULT 0,
 	scheduled_interval INTEGER NOT NULL,
 	actual_interval    INTEGER NOT NULL,
 	thinking_time      INTEGER NOT NULL,
@@ -116,6 +117,11 @@ CREATE INDEX IF NOT EXISTS idx_reviews_ts   ON reviews(timestamp);
 	if _, err := s.db.Exec(`ALTER TABLE decks ADD COLUMN image TEXT NOT NULL DEFAULT ''`); err != nil &&
 		!strings.Contains(err.Error(), "duplicate column name") {
 		return fmt.Errorf("migrating decks schema: %w", err)
+	}
+	// Databases created before the queue port lack ret_reps in the review log.
+	if _, err := s.db.Exec(`ALTER TABLE reviews ADD COLUMN ret_reps INTEGER NOT NULL DEFAULT 0`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("migrating reviews schema: %w", err)
 	}
 	return nil
 }
@@ -305,12 +311,45 @@ func (s *SqliteSRS) ListFactsByDeck(ctx context.Context, deckID string) ([]*srs.
 
 func (s *SqliteSRS) AddReview(ctx context.Context, r *srs.Review) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO reviews (id, card_id, grade, scheduled_interval,
+		`INSERT INTO reviews (id, card_id, grade, ret_reps, scheduled_interval,
 			actual_interval, thinking_time, timestamp)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		r.ID, r.CardID, r.Grade, r.ScheduledInterval, r.ActualInterval,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.ID, r.CardID, r.Grade, r.RetReps, r.ScheduledInterval, r.ActualInterval,
 		r.ThinkingTime, r.Timestamp)
 	return err
+}
+
+// FactIDsLearnedToday unions Mnemosyne's fact_ids_newly_learned_today (a
+// repetition with grade >= 2 while ret_reps was still 0) and
+// fact_ids_forgotten_and_learned_today (a grade >= 2 repetition on a card that
+// lapsed from the retention phase earlier in the same window).
+func (s *SqliteSRS) FactIDsLearnedToday(ctx context.Context, from, to int64) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT c.fact_id FROM reviews r
+		JOIN cards c ON r.card_id = c.id
+		WHERE r.timestamp >= ?1 AND r.timestamp < ?2
+		  AND r.grade >= 2 AND r.ret_reps = 0
+		UNION
+		SELECT DISTINCT c.fact_id FROM reviews r
+		JOIN cards c ON r.card_id = c.id
+		WHERE r.timestamp >= ?1 AND r.timestamp < ?2 AND r.grade >= 2
+		  AND r.card_id IN (
+			SELECT card_id FROM reviews
+			WHERE timestamp >= ?1 AND timestamp < ?2
+			  AND grade < 2 AND ret_reps > 0)`, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 func (s *SqliteSRS) ReviewTimestampsSince(ctx context.Context, from int64) ([]int64, error) {

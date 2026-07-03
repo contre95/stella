@@ -74,6 +74,7 @@ func (h *Handler) RenderSession(c *fiber.Ctx) error {
 		"DeckImage":     ci.DeckImage,
 		"DeckFilter":    deckFilter,
 		"LearnAhead":    learnAhead,
+		"Previews":      ci.Previews,
 		"AutoplayAudio": h.cfg.Get().Cards.AutoplayAudio,
 	})
 }
@@ -116,6 +117,7 @@ func (h *Handler) GradeCard(c *fiber.Ctx) error {
 		"DeckImage":     ci.DeckImage,
 		"DeckFilter":    deckFilter,
 		"LearnAhead":    learnAhead,
+		"Previews":      ci.Previews,
 		"AutoplayAudio": h.cfg.Get().Cards.AutoplayAudio,
 	})
 }

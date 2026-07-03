@@ -39,6 +39,11 @@ type Repository interface {
 	// ReviewTimestampsSince returns POSIX timestamps of reviews at or after
 	// `from`, ascending, for the study-activity heatmap.
 	ReviewTimestampsSince(ctx context.Context, from int64) ([]int64, error)
+	// FactIDsLearnedToday returns the fact ids memorised during [from, to):
+	// facts newly committed to memory plus facts forgotten and relearned. It is
+	// the union of Mnemosyne's fact_ids_newly_learned_today and
+	// fact_ids_forgotten_and_learned_today log queries.
+	FactIDsLearnedToday(ctx context.Context, from, to int64) ([]string, error)
 
 	// Aggregate counts.
 	ActiveCount(ctx context.Context) (int, error)

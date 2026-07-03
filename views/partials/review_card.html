@@ -29,16 +29,16 @@
 
     <!-- Drag-direction labels (float over card, not transformed with it) -->
     <div id="drag-label-again" class="pointer-events-none absolute left-4 top-6 z-20 opacity-0" style="transition: opacity 0.08s;">
-      <span class="inline-block -rotate-12 rounded-xl border-4 border-red-500 px-4 py-1 text-lg font-black uppercase tracking-widest text-red-500">Again</span>
+      <span class="inline-block -rotate-12 rounded-xl border-4 border-red-500 px-4 py-1 text-lg font-black uppercase tracking-widest text-red-500">Fail · 0</span>
     </div>
     <div id="drag-label-good" class="pointer-events-none absolute right-4 top-6 z-20 opacity-0" style="transition: opacity 0.08s;">
-      <span class="inline-block rotate-12 rounded-xl border-4 border-emerald-500 px-4 py-1 text-lg font-black uppercase tracking-widest text-emerald-500">Good</span>
+      <span class="inline-block rotate-12 rounded-xl border-4 border-emerald-500 px-4 py-1 text-lg font-black uppercase tracking-widest text-emerald-500">Good · 4</span>
     </div>
     <div id="drag-label-up" class="pointer-events-none absolute left-1/2 top-6 z-20 -translate-x-1/2 opacity-0" style="transition: opacity 0.08s;">
-      <span class="inline-block rounded-xl border-4 border-orange-500 px-4 py-1 text-lg font-black uppercase tracking-widest text-orange-500">Hard</span>
+      <span class="inline-block rounded-xl border-4 border-orange-500 px-4 py-1 text-lg font-black uppercase tracking-widest text-orange-500">Wrong · 2</span>
     </div>
     <div id="drag-label-dn" class="pointer-events-none absolute bottom-6 left-1/2 z-20 -translate-x-1/2 opacity-0" style="transition: opacity 0.08s;">
-      <span class="inline-block rounded-xl border-4 border-pink-500 px-4 py-1 text-lg font-black uppercase tracking-widest text-pink-500">Easy</span>
+      <span class="inline-block rounded-xl border-4 border-pink-500 px-4 py-1 text-lg font-black uppercase tracking-widest text-pink-500">Perfect · 5</span>
     </div>
 
     <!-- The card itself (gets drag-transformed) -->
@@ -144,32 +144,45 @@
       class="w-full rounded-2xl py-4 text-sm font-bold transition-colors bg-white/60 text-gray-600 ring-1 ring-inset ring-gray-300/50 hover:bg-white/80 dark:bg-white/10 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/20 cursor-pointer"
       style="min-height: 56px;">Show Answer</button>
 
-    <!-- Grade buttons — shown after flip -->
-    <div id="grade-buttons" class="hidden grid grid-cols-4 gap-2 transition duration-300">
+    <!-- Grade buttons — shown after flip. Mnemosyne grades 0-5. -->
+    {{$gradeURL := printf "/review/%s/grade?decks=%s" .Card.ID .DeckFilter}}{{if .LearnAhead}}{{$gradeURL = printf "%s&learnahead=1" $gradeURL}}{{end}}
+    <div id="grade-buttons" class="hidden grid grid-cols-6 gap-1.5 sm:gap-2 transition duration-300">
     <button
-      data-grade="0"
-      data-url="/review/{{.Card.ID}}/grade?decks={{.DeckFilter}}{{if .LearnAhead}}&amp;learnahead=1{{end}}"
-      class="rounded-2xl py-4 text-sm font-bold transition-colors bg-red-500/15 text-red-600 ring-1 ring-inset ring-red-500/20 active:bg-red-500/25 dark:text-red-400"
+      data-grade="0" data-url="{{$gradeURL}}"
+      title="Complete blackout — no recall at all · {{index .Previews 0}}"
+      class="rounded-2xl py-2 transition-colors bg-red-500/15 text-red-600 ring-1 ring-inset ring-red-500/20 active:bg-red-500/25 dark:text-red-400"
       style="min-height: 56px;"
-    >Again</button>
+    ><span class="block text-lg font-black leading-none">0</span><span class="mt-1 block text-[10px] font-semibold uppercase tracking-wide opacity-80">Blackout</span></button>
     <button
-      data-grade="2"
-      data-url="/review/{{.Card.ID}}/grade?decks={{.DeckFilter}}{{if .LearnAhead}}&amp;learnahead=1{{end}}"
-      class="rounded-2xl py-4 text-sm font-bold transition-colors bg-orange-500/15 text-orange-600 ring-1 ring-inset ring-orange-500/20 active:bg-orange-500/25 dark:text-orange-400"
+      data-grade="1" data-url="{{$gradeURL}}"
+      title="Complete failure — the answer only felt familiar · {{index .Previews 1}}"
+      class="rounded-2xl py-2 transition-colors bg-rose-500/15 text-rose-600 ring-1 ring-inset ring-rose-500/20 active:bg-rose-500/25 dark:text-rose-400"
       style="min-height: 56px;"
-    >Hard</button>
+    ><span class="block text-lg font-black leading-none">1</span><span class="mt-1 block text-[10px] font-semibold uppercase tracking-wide opacity-80">Fail</span></button>
     <button
-      data-grade="4"
-      data-url="/review/{{.Card.ID}}/grade?decks={{.DeckFilter}}{{if .LearnAhead}}&amp;learnahead=1{{end}}"
-      class="rounded-2xl py-4 text-sm font-bold transition-colors bg-emerald-500/15 text-emerald-600 ring-1 ring-inset ring-emerald-500/20 active:bg-emerald-500/25 dark:text-emerald-400"
+      data-grade="2" data-url="{{$gradeURL}}"
+      title="Incorrect, but you knew it was wrong · {{index .Previews 2}}"
+      class="rounded-2xl py-2 transition-colors bg-orange-500/15 text-orange-600 ring-1 ring-inset ring-orange-500/20 active:bg-orange-500/25 dark:text-orange-400"
       style="min-height: 56px;"
-    >Good</button>
+    ><span class="block text-lg font-black leading-none">2</span><span class="mt-1 block text-[10px] font-semibold uppercase tracking-wide opacity-80">Wrong</span></button>
     <button
-      data-grade="5"
-      data-url="/review/{{.Card.ID}}/grade?decks={{.DeckFilter}}{{if .LearnAhead}}&amp;learnahead=1{{end}}"
-      class="rounded-2xl py-4 text-sm font-bold transition-colors bg-pink-500/15 text-pink-600 ring-1 ring-inset ring-pink-500/20 active:bg-pink-500/25 dark:text-pink-400"
+      data-grade="3" data-url="{{$gradeURL}}"
+      title="Correct, but difficult to remember · {{index .Previews 3}}"
+      class="rounded-2xl py-2 transition-colors bg-amber-500/15 text-amber-600 ring-1 ring-inset ring-amber-500/20 active:bg-amber-500/25 dark:text-amber-400"
       style="min-height: 56px;"
-    >Easy</button>
+    ><span class="block text-lg font-black leading-none">3</span><span class="mt-1 block text-[10px] font-semibold uppercase tracking-wide opacity-80">Hard</span></button>
+    <button
+      data-grade="4" data-url="{{$gradeURL}}"
+      title="Correct with slight hesitation · {{index .Previews 4}}"
+      class="rounded-2xl py-2 transition-colors bg-emerald-500/15 text-emerald-600 ring-1 ring-inset ring-emerald-500/20 active:bg-emerald-500/25 dark:text-emerald-400"
+      style="min-height: 56px;"
+    ><span class="block text-lg font-black leading-none">4</span><span class="mt-1 block text-[10px] font-semibold uppercase tracking-wide opacity-80">Good</span></button>
+    <button
+      data-grade="5" data-url="{{$gradeURL}}"
+      title="Perfect recall · {{index .Previews 5}}"
+      class="rounded-2xl py-2 transition-colors bg-pink-500/15 text-pink-600 ring-1 ring-inset ring-pink-500/20 active:bg-pink-500/25 dark:text-pink-400"
+      style="min-height: 56px;"
+    ><span class="block text-lg font-black leading-none">5</span><span class="mt-1 block text-[10px] font-semibold uppercase tracking-wide opacity-80">Perfect</span></button>
     </div>
   </div>
 
@@ -379,16 +392,40 @@
       }, 230);
     }
 
+    var GRADE_DIRS = {0: [-1,0], 1: [-1,0], 2: [0,-1], 3: [0,-1], 4: [1,0], 5: [0,1]};
+
     gradeBtn.addEventListener('click', function (e) {
       var btn = e.target.closest('[data-grade]');
       if (!btn || !revealed) return;
       e.preventDefault();
       var g = parseInt(btn.dataset.grade);
-      var dirs = {0: [-1,0], 2: [0,-1], 4: [1,0], 5: [0,1]};
-      var dir = dirs[g];
+      var dir = GRADE_DIRS[g];
       if (dir) flyOut(dir[0], dir[1]);
       gradeCard(g);
     });
+
+    /* ── Keyboard: space/enter reveals, 0-5 grades (Mnemosyne keys) ── */
+    // Assigned (not addEventListener) so each swapped-in card replaces the
+    // previous card's handler; it unhooks itself once the review UI is gone.
+    document.onkeydown = function (e) {
+      if (!document.getElementById('review-card-wrap')) {
+        document.onkeydown = null;
+        return;
+      }
+      var t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (!revealed && (e.key === ' ' || e.key === 'Enter')) {
+        e.preventDefault();
+        reveal();
+        return;
+      }
+      if (revealed && e.key >= '0' && e.key <= '5') {
+        e.preventDefault();
+        var g = parseInt(e.key);
+        flyOut(GRADE_DIRS[g][0], GRADE_DIRS[g][1]);
+        gradeCard(g);
+      }
+    };
 
     /* ── Show question modal ──────────────────────────────────── */
     showQBtn.addEventListener('click', function () {

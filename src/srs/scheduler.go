@@ -91,6 +91,16 @@ func (s *Scheduler) AdjustedNow(now time.Time) int64 {
 	return sec + int64(offsetEast)
 }
 
+// TodayStartAndEnd returns the POSIX bounds [start, end) of the current study
+// day, honouring day_starts_at. Ported from _today_start_and_end_timestamp.
+func (s *Scheduler) TodayStartAndEnd() (int64, int64) {
+	dayStarts := int64(s.Params.DayStartsAt) * HOUR
+	t := time.Unix(s.Now().Unix()-dayStarts, 0).In(s.Loc)
+	y, m, d := t.Date()
+	start := time.Date(y, m, d, 0, 0, 0, 0, s.Loc).Unix() + dayStarts
+	return start, start + DAY
+}
+
 // CalculateInitialInterval returns the interval for a card's first repetition.
 // Ported from SM2Mnemosyne.calculate_initial_interval.
 func (s *Scheduler) CalculateInitialInterval(grade int) int64 {
