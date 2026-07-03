@@ -54,7 +54,7 @@
         style="transition: opacity 0.32s ease;"
       >
         {{if and .DeckImage (not .Fact.ImageFront)}}
-        <img src="/images/{{.DeckImage}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover grayscale opacity-[0.13] dark:opacity-10" aria-hidden="true" />
+        <img src="/images/{{.DeckImage}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover grayscale blur-xl opacity-[0.13] dark:opacity-10" aria-hidden="true" />
         {{end}}
         {{if .Fact.ImageFront}}
         <img src="/images/{{.Fact.ImageFront}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
@@ -99,7 +99,7 @@
         style="display: none; opacity: 0; pointer-events: none;"
       >
         {{if and .DeckImage (not .Fact.ImageBack)}}
-        <img src="/images/{{.DeckImage}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover grayscale opacity-[0.13] dark:opacity-10" aria-hidden="true" />
+        <img src="/images/{{.DeckImage}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover grayscale blur-xl opacity-[0.13] dark:opacity-10" aria-hidden="true" />
         {{end}}
         {{if .Fact.ImageBack}}
         <img src="/images/{{.Fact.ImageBack}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
