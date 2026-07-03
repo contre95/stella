@@ -413,6 +413,19 @@
     nav .nav-link.nav-active { color: #db2777; font-weight: 600; }
     .dark nav .nav-link.nav-active { color: #f472b6; }
 
+    /* ── Nav icons ──────────────────────────────────────────────── */
+    /* Full-color illustrated icons: muted while idle, colorful on hover/active */
+    .nav-icon {
+      filter: grayscale(1) opacity(0.55);
+      transition: filter .2s ease, transform .2s ease;
+    }
+    .dark .nav-icon { filter: grayscale(1) invert(0.15) opacity(0.6); }
+    .nav-link:hover .nav-icon { filter: none; }
+    .nav-link.nav-active .nav-icon {
+      filter: drop-shadow(0 1px 3px rgba(236, 72, 153, 0.4));
+      transform: scale(1.12);
+    }
+
     /* ── SweetAlert2 glass theme ──────────────────────────────── */
     .swal2-container { backdrop-filter: blur(6px) !important; -webkit-backdrop-filter: blur(6px) !important; }
     .swal2-popup {
