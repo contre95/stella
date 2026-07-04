@@ -135,6 +135,101 @@ func (s *Service) AddFact(ctx context.Context, front, back, deckID string, grade
 	return fact, nil
 }
 
+// GetFact retrieves a single fact by ID.
+func (s *Service) GetFact(ctx context.Context, id string) (*srs.Fact, error) {
+	return s.repo.GetFact(ctx, id)
+}
+
+// HasReverse reports whether the fact has a reverse sister card.
+func (s *Service) HasReverse(ctx context.Context, factID string) (bool, error) {
+	cards, err := s.repo.CardsForFact(ctx, factID)
+	if err != nil {
+		return false, err
+	}
+	for _, c := range cards {
+		if c.View == srs.ViewReverse {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// UpdateFact edits a fact's content without touching its cards' learning data.
+// front and back replace the current text (front must be non-empty). Each media
+// argument is nil to keep the current file, a pointer to "" to remove it, or a
+// pointer to an already-saved filename to replace it; replaced and removed
+// files are deleted from disk. reverse is nil to leave the sister cards alone,
+// otherwise the reverse card is created (unseen) or deleted to match it. A
+// fact whose back is empty never keeps a reverse card.
+func (s *Service) UpdateFact(ctx context.Context, factID, front, back string, imageFront, imageBack, audioFront, audioBack *string, reverse *bool) (*srs.Fact, error) {
+	front = strings.TrimSpace(front)
+	back = strings.TrimSpace(back)
+	if front == "" {
+		return nil, fmt.Errorf("front is required")
+	}
+	fact, err := s.repo.GetFact(ctx, factID)
+	if err != nil {
+		if errors.Is(err, srs.ErrNotFound) {
+			return nil, fmt.Errorf("fact %q not found", factID)
+		}
+		return nil, err
+	}
+	var stale []string
+	apply := func(field *string, update *string) {
+		if update == nil {
+			return
+		}
+		if *field != "" && *field != *update {
+			stale = append(stale, *field)
+		}
+		*field = *update
+	}
+	apply(&fact.ImageFront, imageFront)
+	apply(&fact.ImageBack, imageBack)
+	apply(&fact.AudioFront, audioFront)
+	apply(&fact.AudioBack, audioBack)
+	fact.Front = front
+	fact.Back = back
+	fact.Modified = time.Now().Unix()
+	if err := s.repo.UpdateFact(ctx, fact); err != nil {
+		return nil, err
+	}
+
+	cards, err := s.repo.CardsForFact(ctx, factID)
+	if err != nil {
+		return nil, err
+	}
+	var revCard *srs.Card
+	for _, c := range cards {
+		if c.View == srs.ViewReverse {
+			revCard = c
+			break
+		}
+	}
+	wantReverse := revCard != nil
+	if reverse != nil {
+		wantReverse = *reverse
+	}
+	if back == "" {
+		wantReverse = false
+	}
+	switch {
+	case wantReverse && revCard == nil:
+		if err := s.repo.AddCard(ctx, newCard(fact, srs.ViewReverse)); err != nil {
+			return nil, err
+		}
+	case !wantReverse && revCard != nil:
+		if err := s.repo.DeleteCard(ctx, revCard.ID); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, f := range stale {
+		os.Remove(filepath.Join(s.cfg.Get().ImagePath, f))
+	}
+	return fact, nil
+}
+
 // ListFacts returns every fact with its sister cards and their statuses,
 // newest first.
 func (s *Service) ListFacts(ctx context.Context) ([]*FactRow, error) {

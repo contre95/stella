@@ -1,0 +1,171 @@
+<div
+  id="card-edit-modal"
+  class="fixed inset-0 z-50 flex items-center justify-center p-4"
+  _="on keyup[key=='Escape'] from window remove me"
+>
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" _="on click remove #card-edit-modal"></div>
+
+  <form
+    hx-put="/cards/{{.Fact.ID}}{{if .DeckID}}?deck={{.DeckID}}{{end}}"
+    hx-target="{{if .DeckID}}#deck-card-grid{{else}}#card-list{{end}}"
+    hx-swap="innerHTML"
+    hx-encoding="multipart/form-data"
+    _="on htmx:afterRequest(detail) if detail.successful remove #card-edit-modal"
+    class="glass-strong relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl p-5 sm:p-6"
+  >
+    <h2 class="text-lg font-bold tracking-tight text-gray-900 dark:text-white">Edit card</h2>
+    <p class="mt-0.5 mb-4 text-xs text-gray-500 dark:text-gray-400">
+      Content only — scheduling and review history stay untouched.
+    </p>
+
+    <div class="grid gap-4 sm:grid-cols-2">
+      <label class="block">
+        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Front</span>
+        <input
+          name="front"
+          required
+          value="{{.Fact.Front}}"
+          placeholder="Question / prompt"
+          class="glass-input mt-1.5 w-full rounded-xl px-3 py-2 text-sm"
+        />
+      </label>
+
+      <label class="block">
+        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Back</span>
+        <input
+          name="back"
+          value="{{.Fact.Back}}"
+          placeholder="Answer"
+          class="glass-input mt-1.5 w-full rounded-xl px-3 py-2 text-sm"
+        />
+      </label>
+
+      <div class="block">
+        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Front image</span>
+        {{if .Fact.ImageFront}}
+          <div class="mt-1.5 flex items-center gap-3">
+            <img src="/images/{{.Fact.ImageFront}}" alt="" class="h-12 w-12 rounded-lg object-cover ring-1 ring-black/10 dark:ring-white/10" />
+            <label class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+              <input type="checkbox" name="remove_image_front" class="h-3.5 w-3.5 rounded border-gray-300 text-pink-600 focus:ring-pink-500 dark:border-gray-600" />
+              Remove
+            </label>
+          </div>
+          <span class="mt-1 block text-[11px] text-gray-400 dark:text-gray-500">Choose a new file to replace it:</span>
+        {{end}}
+        <div class="image-paste-widget">
+          <input
+            type="file"
+            name="image_front"
+            accept=".jpg,.jpeg,.png,.gif,.webp"
+            class="glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"
+          />
+          <div class="paste-ui"></div>
+        </div>
+      </div>
+
+      <div class="block">
+        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Back image</span>
+        {{if .Fact.ImageBack}}
+          <div class="mt-1.5 flex items-center gap-3">
+            <img src="/images/{{.Fact.ImageBack}}" alt="" class="h-12 w-12 rounded-lg object-cover ring-1 ring-black/10 dark:ring-white/10" />
+            <label class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+              <input type="checkbox" name="remove_image_back" class="h-3.5 w-3.5 rounded border-gray-300 text-pink-600 focus:ring-pink-500 dark:border-gray-600" />
+              Remove
+            </label>
+          </div>
+          <span class="mt-1 block text-[11px] text-gray-400 dark:text-gray-500">Choose a new file to replace it:</span>
+        {{end}}
+        <div class="image-paste-widget">
+          <input
+            type="file"
+            name="image_back"
+            accept=".jpg,.jpeg,.png,.gif,.webp"
+            class="glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"
+          />
+          <div class="paste-ui"></div>
+        </div>
+      </div>
+
+      <div class="block">
+        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Front audio</span>
+        {{if .Fact.AudioFront}}
+          <div class="mt-1.5 flex items-center gap-3">
+            <button type="button" class="audio-pill" data-audio="/audio/{{.Fact.AudioFront}}" aria-label="Play audio">
+              <svg class="ac-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+              <svg class="ac-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
+              <span class="ap-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            </button>
+            <label class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+              <input type="checkbox" name="remove_audio_front" class="h-3.5 w-3.5 rounded border-gray-300 text-pink-600 focus:ring-pink-500 dark:border-gray-600" />
+              Remove
+            </label>
+          </div>
+          <span class="mt-1 block text-[11px] text-gray-400 dark:text-gray-500">Choose a new file to replace it:</span>
+        {{end}}
+        <div class="audio-rec-widget" data-for="audio_front">
+          <input
+            type="file"
+            name="audio_front"
+            accept=".mp3,.ogg,.wav,.m4a,.webm,.aac,.flac"
+            class="glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"
+          />
+          <div class="rec-ui"></div>
+        </div>
+      </div>
+
+      <div class="block">
+        <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Back audio</span>
+        {{if .Fact.AudioBack}}
+          <div class="mt-1.5 flex items-center gap-3">
+            <button type="button" class="audio-pill" data-audio="/audio/{{.Fact.AudioBack}}" aria-label="Play audio">
+              <svg class="ac-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+              <svg class="ac-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg>
+              <span class="ap-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            </button>
+            <label class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+              <input type="checkbox" name="remove_audio_back" class="h-3.5 w-3.5 rounded border-gray-300 text-pink-600 focus:ring-pink-500 dark:border-gray-600" />
+              Remove
+            </label>
+          </div>
+          <span class="mt-1 block text-[11px] text-gray-400 dark:text-gray-500">Choose a new file to replace it:</span>
+        {{end}}
+        <div class="audio-rec-widget" data-for="audio_back">
+          <input
+            type="file"
+            name="audio_back"
+            accept=".mp3,.ogg,.wav,.m4a,.webm,.aac,.flac"
+            class="glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"
+          />
+          <div class="rec-ui"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-5 flex items-center justify-between">
+      <label class="flex items-center gap-2">
+        <input
+          type="checkbox"
+          name="reverse"
+          {{if .HasReverse}}checked{{end}}
+          class="h-4 w-4 rounded border-gray-300 text-pink-600 focus:ring-pink-500 dark:border-gray-600"
+        />
+        <span class="text-sm text-gray-600 dark:text-gray-300">Reverse card</span>
+      </label>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          _="on click remove #card-edit-modal"
+          class="btn-ghost rounded-xl px-4 py-2 text-sm font-semibold"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          class="btn-primary rounded-xl px-4 py-2 text-sm font-semibold"
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  </form>
+</div>

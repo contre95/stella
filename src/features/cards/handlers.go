@@ -17,8 +17,10 @@ import (
 	"github.com/google/uuid"
 )
 
-var allowedImageExts = []string{".jpg", ".jpeg", ".png", ".gif", ".webp"}
-var allowedAudioExts = []string{".mp3", ".ogg", ".wav", ".m4a", ".webm", ".aac", ".flac"}
+// AllowedImageExts and AllowedAudioExts are the accepted media file extensions,
+// shared with the MCP transport for validating local file sources.
+var AllowedImageExts = []string{".jpg", ".jpeg", ".png", ".gif", ".webp"}
+var AllowedAudioExts = []string{".mp3", ".ogg", ".wav", ".m4a", ".webm", ".aac", ".flac"}
 
 // Handler is the transport layer for the cards feature.
 type Handler struct {
@@ -56,7 +58,7 @@ func (h *Handler) saveImage(c *fiber.Ctx, field string) (string, error) {
 		return "", nil
 	}
 	ext := strings.ToLower(filepath.Ext(file.Filename))
-	if !slices.Contains(allowedImageExts, ext) {
+	if !slices.Contains(AllowedImageExts, ext) {
 		return "", fiber.NewError(fiber.StatusBadRequest, "image must be jpg, png, gif, or webp")
 	}
 	if err := os.MkdirAll(h.service.ImagePath(), 0o755); err != nil {
@@ -91,7 +93,7 @@ func (h *Handler) saveAudio(c *fiber.Ctx, field string) (string, error) {
 		return "", nil
 	}
 	ext := strings.ToLower(filepath.Ext(file.Filename))
-	if !slices.Contains(allowedAudioExts, ext) {
+	if !slices.Contains(AllowedAudioExts, ext) {
 		return "", fiber.NewError(fiber.StatusBadRequest, "audio must be mp3, ogg, wav, m4a, webm, aac, or flac")
 	}
 	if err := os.MkdirAll(h.service.ImagePath(), 0o755); err != nil {
@@ -188,6 +190,81 @@ func (h *Handler) Delete(c *fiber.Ctx) error {
 // card grid instead.
 func (h *Handler) Reset(c *fiber.Ctx) error {
 	if err := h.service.ResetFact(c.Context(), c.Params("id")); err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	if deckID := c.Query("deck"); deckID != "" {
+		return h.deckGrid(c, deckID)
+	}
+	return h.List(c)
+}
+
+// EditForm returns the edit-card modal for a fact. A ?deck=<id> query keeps
+// the eventual save targeting that deck's card grid instead of the full list.
+func (h *Handler) EditForm(c *fiber.Ctx) error {
+	fact, err := h.service.GetFact(c.Context(), c.Params("id"))
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusNotFound, "Card not found")
+	}
+	hasReverse, err := h.service.HasReverse(c.Context(), fact.ID)
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return respond.Partial(c, "components/card_edit", fiber.Map{
+		"Fact":       fact,
+		"HasReverse": hasReverse,
+		"DeckID":     c.Query("deck"),
+	})
+}
+
+// Edit updates a fact's content and returns the refreshed list. When called
+// from a deck page (?deck=<id>), it returns that deck's card grid instead.
+// Each media slot is replaced by an uploaded file, cleared by its
+// remove_<field> checkbox, or otherwise left untouched.
+func (h *Handler) Edit(c *fiber.Ctx) error {
+	front := strings.TrimSpace(c.FormValue("front"))
+	if front == "" {
+		return respond.ToastErr(c, fiber.StatusBadRequest, "Front is required")
+	}
+	back := strings.TrimSpace(c.FormValue("back"))
+	reverse := c.FormValue("reverse") != ""
+	var saved []string
+	slot := func(field string, save func(*fiber.Ctx, string) (string, error)) (*string, error) {
+		name, err := save(c, field)
+		if err != nil {
+			return nil, err
+		}
+		if name != "" {
+			saved = append(saved, name)
+			return &name, nil
+		}
+		if c.FormValue("remove_"+field) != "" {
+			empty := ""
+			return &empty, nil
+		}
+		return nil, nil
+	}
+	imgFront, err := slot("image_front", h.saveImage)
+	if err != nil {
+		h.removeMedia(saved...)
+		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
+	}
+	imgBack, err := slot("image_back", h.saveImage)
+	if err != nil {
+		h.removeMedia(saved...)
+		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
+	}
+	audFront, err := slot("audio_front", h.saveAudio)
+	if err != nil {
+		h.removeMedia(saved...)
+		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
+	}
+	audBack, err := slot("audio_back", h.saveAudio)
+	if err != nil {
+		h.removeMedia(saved...)
+		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
+	}
+	if _, err := h.service.UpdateFact(c.Context(), c.Params("id"), front, back, imgFront, imgBack, audFront, audBack, &reverse); err != nil {
+		h.removeMedia(saved...)
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	if deckID := c.Query("deck"); deckID != "" {

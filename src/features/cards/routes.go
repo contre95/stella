@@ -9,6 +9,8 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	app.Get("/cards/list", h.List)
 	app.Post("/cards", h.Add)
 	app.Delete("/cards/:id", h.Delete)
+	app.Put("/cards/:id", h.Edit)
+	app.Get("/cards/:id/edit", h.EditForm)
 	app.Post("/cards/:id/reset", h.Reset)
 
 	app.Get("/decks", h.RenderDecks)

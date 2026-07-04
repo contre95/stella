@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/contre95/stella/src/features/cards"
@@ -37,9 +38,17 @@ func NewServer(name, version string, cardsService *cards.Service) *mcpsdk.Server
 	}, s.createCard)
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name: "edit_card",
+		Description: "Edit an existing fact by fact ID: change its front/back text, " +
+			"replace or remove its images and audio, and add or remove the reverse " +
+			"card. Omitted fields keep their current value. Scheduling data is not " +
+			"touched. Use list_recent_cards to find the factId and see current content.",
+	}, s.editCard)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
 		Name: "list_recent_cards",
 		Description: "List the most recently created facts, newest first, with the " +
-			"scheduling status of each of their sister cards.",
+			"scheduling status of each of their sister cards and any attached media filenames.",
 	}, s.listRecentCards)
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
@@ -72,10 +81,10 @@ type CreateCardInput struct {
 	Reverse    bool   `json:"reverse,omitempty" jsonschema:"Also create a reverse card quizzing back -> front. Ignored when back is empty."`
 	Grade      *int   `json:"grade,omitempty" jsonschema:"Initial self-grade 0-5 (0 = blackout, 5 = perfect recall), counted as a first repetition. Omit to leave the card unseen so the review process grades it."`
 	DeckID     string `json:"deckId" jsonschema:"Deck id to file the card under. Required — use list_decks or create_deck first."`
-	ImageFront string `json:"imageFront,omitempty" jsonschema:"URL of an image to show on the front side. Downloaded and stored locally."`
-	ImageBack  string `json:"imageBack,omitempty" jsonschema:"URL of an image to show on the back side. Downloaded and stored locally."`
-	AudioFront string `json:"audioFront,omitempty" jsonschema:"URL of an audio file to play on the front side. Downloaded and stored locally. Supports mp3, ogg, wav, m4a, webm."`
-	AudioBack  string `json:"audioBack,omitempty" jsonschema:"URL of an audio file to play on the back side. Downloaded and stored locally. Supports mp3, ogg, wav, m4a, webm."`
+	ImageFront string `json:"imageFront,omitempty" jsonschema:"http(s) URL or local file path of an image to show on the front side. Copied into Stella's media store. Supports jpg, png, gif, webp."`
+	ImageBack  string `json:"imageBack,omitempty" jsonschema:"http(s) URL or local file path of an image to show on the back side. Copied into Stella's media store. Supports jpg, png, gif, webp."`
+	AudioFront string `json:"audioFront,omitempty" jsonschema:"http(s) URL or local file path of an audio file to play on the front side. Copied into Stella's media store. Supports mp3, ogg, wav, m4a, webm, aac, flac."`
+	AudioBack  string `json:"audioBack,omitempty" jsonschema:"http(s) URL or local file path of an audio file to play on the back side. Copied into Stella's media store. Supports mp3, ogg, wav, m4a, webm, aac, flac."`
 }
 
 // CreateCardOutput is the result schema for create_card.
@@ -101,21 +110,21 @@ func (s *Server) createCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in C
 			return nil, CreateCardOutput{}, fmt.Errorf("grade must be between 0 and 5")
 		}
 	}
-	imgFront, err := s.saveImageFromURL(in.ImageFront)
+	imgFront, err := s.saveImageFromSource(in.ImageFront)
 	if err != nil {
 		return nil, CreateCardOutput{}, fmt.Errorf("saving front image: %w", err)
 	}
-	imgBack, err := s.saveImageFromURL(in.ImageBack)
+	imgBack, err := s.saveImageFromSource(in.ImageBack)
 	if err != nil {
 		s.removeMedia(imgFront)
 		return nil, CreateCardOutput{}, fmt.Errorf("saving back image: %w", err)
 	}
-	audFront, err := s.saveAudioFromURL(in.AudioFront)
+	audFront, err := s.saveAudioFromSource(in.AudioFront)
 	if err != nil {
 		s.removeMedia(imgFront, imgBack)
 		return nil, CreateCardOutput{}, fmt.Errorf("saving front audio: %w", err)
 	}
-	audBack, err := s.saveAudioFromURL(in.AudioBack)
+	audBack, err := s.saveAudioFromSource(in.AudioBack)
 	if err != nil {
 		s.removeMedia(imgFront, imgBack, audFront)
 		return nil, CreateCardOutput{}, fmt.Errorf("saving back audio: %w", err)
@@ -137,6 +146,107 @@ func (s *Server) createCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in C
 	}, nil
 }
 
+// EditCardInput is the argument schema for edit_card.
+type EditCardInput struct {
+	FactID           string  `json:"factId" jsonschema:"Fact ID of the card to edit. Required — use list_recent_cards to find it."`
+	Front            *string `json:"front,omitempty" jsonschema:"New front text. Omit to keep the current front."`
+	Back             *string `json:"back,omitempty" jsonschema:"New back text. Omit to keep the current back; pass an empty string to clear it (which also removes any reverse card)."`
+	Reverse          *bool   `json:"reverse,omitempty" jsonschema:"true creates the reverse (back -> front) card if missing; false deletes it (its learning history is lost). Omit to leave the sister cards as they are."`
+	ImageFront       string  `json:"imageFront,omitempty" jsonschema:"http(s) URL or local file path of a new front image; replaces the current one. Supports jpg, png, gif, webp."`
+	ImageBack        string  `json:"imageBack,omitempty" jsonschema:"http(s) URL or local file path of a new back image; replaces the current one. Supports jpg, png, gif, webp."`
+	AudioFront       string  `json:"audioFront,omitempty" jsonschema:"http(s) URL or local file path of a new front audio file; replaces the current one. Supports mp3, ogg, wav, m4a, webm, aac, flac."`
+	AudioBack        string  `json:"audioBack,omitempty" jsonschema:"http(s) URL or local file path of a new back audio file; replaces the current one. Supports mp3, ogg, wav, m4a, webm, aac, flac."`
+	RemoveImageFront bool    `json:"removeImageFront,omitempty" jsonschema:"Remove the front image."`
+	RemoveImageBack  bool    `json:"removeImageBack,omitempty" jsonschema:"Remove the back image."`
+	RemoveAudioFront bool    `json:"removeAudioFront,omitempty" jsonschema:"Remove the front audio."`
+	RemoveAudioBack  bool    `json:"removeAudioBack,omitempty" jsonschema:"Remove the back audio."`
+}
+
+// EditCardOutput is the result schema for edit_card.
+type EditCardOutput struct {
+	FactID     string `json:"factId"`
+	Front      string `json:"front"`
+	Back       string `json:"back"`
+	Reverse    bool   `json:"reverse"`
+	ImageFront string `json:"imageFront,omitempty"`
+	ImageBack  string `json:"imageBack,omitempty"`
+	AudioFront string `json:"audioFront,omitempty"`
+	AudioBack  string `json:"audioBack,omitempty"`
+}
+
+func (s *Server) editCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in EditCardInput) (*mcpsdk.CallToolResult, EditCardOutput, error) {
+	if strings.TrimSpace(in.FactID) == "" {
+		return nil, EditCardOutput{}, fmt.Errorf("factId is required — use list_recent_cards to find it")
+	}
+	fact, err := s.cards.GetFact(ctx, in.FactID)
+	if err != nil {
+		return nil, EditCardOutput{}, fmt.Errorf("looking up fact: %w", err)
+	}
+	front := fact.Front
+	if in.Front != nil {
+		front = *in.Front
+	}
+	back := fact.Back
+	if in.Back != nil {
+		back = *in.Back
+	}
+	var saved []string
+	slot := func(source string, remove bool, save func(string) (string, error)) (*string, error) {
+		if source != "" {
+			name, err := save(source)
+			if err != nil {
+				return nil, err
+			}
+			saved = append(saved, name)
+			return &name, nil
+		}
+		if remove {
+			empty := ""
+			return &empty, nil
+		}
+		return nil, nil
+	}
+	imgFront, err := slot(in.ImageFront, in.RemoveImageFront, s.saveImageFromSource)
+	if err != nil {
+		s.removeMedia(saved...)
+		return nil, EditCardOutput{}, fmt.Errorf("saving front image: %w", err)
+	}
+	imgBack, err := slot(in.ImageBack, in.RemoveImageBack, s.saveImageFromSource)
+	if err != nil {
+		s.removeMedia(saved...)
+		return nil, EditCardOutput{}, fmt.Errorf("saving back image: %w", err)
+	}
+	audFront, err := slot(in.AudioFront, in.RemoveAudioFront, s.saveAudioFromSource)
+	if err != nil {
+		s.removeMedia(saved...)
+		return nil, EditCardOutput{}, fmt.Errorf("saving front audio: %w", err)
+	}
+	audBack, err := slot(in.AudioBack, in.RemoveAudioBack, s.saveAudioFromSource)
+	if err != nil {
+		s.removeMedia(saved...)
+		return nil, EditCardOutput{}, fmt.Errorf("saving back audio: %w", err)
+	}
+	updated, err := s.cards.UpdateFact(ctx, in.FactID, front, back, imgFront, imgBack, audFront, audBack, in.Reverse)
+	if err != nil {
+		s.removeMedia(saved...)
+		return nil, EditCardOutput{}, fmt.Errorf("updating card: %w", err)
+	}
+	hasReverse, err := s.cards.HasReverse(ctx, in.FactID)
+	if err != nil {
+		return nil, EditCardOutput{}, fmt.Errorf("checking reverse card: %w", err)
+	}
+	return nil, EditCardOutput{
+		FactID:     updated.ID,
+		Front:      updated.Front,
+		Back:       updated.Back,
+		Reverse:    hasReverse,
+		ImageFront: updated.ImageFront,
+		ImageBack:  updated.ImageBack,
+		AudioFront: updated.AudioFront,
+		AudioBack:  updated.AudioBack,
+	}, nil
+}
+
 // ListRecentCardsInput is the argument schema for list_recent_cards.
 type ListRecentCardsInput struct {
 	Limit int `json:"limit,omitempty" jsonschema:"Maximum number of facts to return, newest first. Defaults to 20."`
@@ -144,11 +254,15 @@ type ListRecentCardsInput struct {
 
 // FactSummary is one fact with its sister cards in list_recent_cards output.
 type FactSummary struct {
-	FactID string        `json:"factId"`
-	Front  string        `json:"front"`
-	Back   string        `json:"back"`
-	DeckID string        `json:"deckId,omitempty"`
-	Cards  []CardSummary `json:"cards"`
+	FactID     string        `json:"factId"`
+	Front      string        `json:"front"`
+	Back       string        `json:"back"`
+	DeckID     string        `json:"deckId,omitempty"`
+	ImageFront string        `json:"imageFront,omitempty"`
+	ImageBack  string        `json:"imageBack,omitempty"`
+	AudioFront string        `json:"audioFront,omitempty"`
+	AudioBack  string        `json:"audioBack,omitempty"`
+	Cards      []CardSummary `json:"cards"`
 }
 
 // CardSummary is a sister card's direction and scheduling status.
@@ -181,11 +295,15 @@ func (s *Server) listRecentCards(ctx context.Context, _ *mcpsdk.CallToolRequest,
 			sisters = append(sisters, CardSummary{View: string(c.Card.View), Status: c.Status})
 		}
 		out.Facts = append(out.Facts, FactSummary{
-			FactID: r.Fact.ID,
-			Front:  r.Fact.Front,
-			Back:   r.Fact.Back,
-			DeckID: r.Fact.DeckID,
-			Cards:  sisters,
+			FactID:     r.Fact.ID,
+			Front:      r.Fact.Front,
+			Back:       r.Fact.Back,
+			DeckID:     r.Fact.DeckID,
+			ImageFront: r.Fact.ImageFront,
+			ImageBack:  r.Fact.ImageBack,
+			AudioFront: r.Fact.AudioFront,
+			AudioBack:  r.Fact.AudioBack,
+			Cards:      sisters,
 		})
 	}
 	return nil, out, nil
@@ -290,6 +408,54 @@ func (s *Server) removeMedia(filenames ...string) {
 			os.Remove(filepath.Join(s.cards.ImagePath(), f))
 		}
 	}
+}
+
+// isURL reports whether the media source is an http(s) URL rather than a
+// local file path.
+func isURL(src string) bool {
+	return strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://")
+}
+
+// saveImageFromSource stores an image given an http(s) URL (downloaded) or a
+// local file path (copied), returning the stored filename. Empty source
+// returns "".
+func (s *Server) saveImageFromSource(src string) (string, error) {
+	if src == "" || isURL(src) {
+		return s.saveImageFromURL(src)
+	}
+	return s.copyLocalFile(src, cards.AllowedImageExts, "image")
+}
+
+// saveAudioFromSource stores an audio file given an http(s) URL (downloaded)
+// or a local file path (copied), returning the stored filename. Empty source
+// returns "".
+func (s *Server) saveAudioFromSource(src string) (string, error) {
+	if src == "" || isURL(src) {
+		return s.saveAudioFromURL(src)
+	}
+	return s.copyLocalFile(src, cards.AllowedAudioExts, "audio")
+}
+
+// copyLocalFile copies a local media file into the media directory under a
+// fresh name, validating its extension against the allowed list.
+func (s *Server) copyLocalFile(path string, allowedExts []string, kind string) (string, error) {
+	ext := strings.ToLower(filepath.Ext(path))
+	if !slices.Contains(allowedExts, ext) {
+		return "", fmt.Errorf("unsupported %s file extension %q (allowed: %s)", kind, ext, strings.Join(allowedExts, ", "))
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("reading local %s file: %w", kind, err)
+	}
+	mediaPath := s.cards.ImagePath()
+	if err := os.MkdirAll(mediaPath, 0o755); err != nil {
+		return "", err
+	}
+	filename := uuid.NewString() + ext
+	if err := os.WriteFile(filepath.Join(mediaPath, filename), data, 0o644); err != nil {
+		return "", err
+	}
+	return filename, nil
 }
 
 // saveAudioFromURL downloads a URL and saves it as a local audio file.
