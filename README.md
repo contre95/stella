@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/logo.png" alt="Stella logo" width="128">
+</p>
+
 # Stella
 
 A single-user, self-hosted spaced-repetition web app. The scheduling engine is

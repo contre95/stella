@@ -18,7 +18,7 @@ import (
 	"github.com/contre95/stella/src/srs"
 )
 
-const version = "0.1.0"
+const version = "default"
 
 func main() {
 	// 1. Config + logging.
