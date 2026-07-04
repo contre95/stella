@@ -7,11 +7,15 @@
     </span>
     <div class="ml-auto flex items-center gap-3">
     {{if .DeckName}}
-      <div class="deck-badge rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset"
-           tabindex="0"
-           style="background-color:{{.DeckColor}}18; color:{{.DeckColor}}; box-shadow:inset 0 0 0 1px {{.DeckColor}}33;">
+      <a href="/decks/{{.Fact.DeckID}}"
+         hx-get="/decks/{{.Fact.DeckID}}"
+         hx-target="#contenido"
+         hx-swap="outerHTML"
+         hx-push-url="true"
+         class="deck-badge rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset"
+         style="background-color:{{.DeckColor}}18; color:{{.DeckColor}}; box-shadow:inset 0 0 0 1px {{.DeckColor}}33;">
         <span class="deck-badge-inner">{{.DeckName}}</span>
-      </div>
+      </a>
     {{end}}
     <a
       href="/"
