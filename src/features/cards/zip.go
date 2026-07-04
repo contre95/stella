@@ -243,6 +243,21 @@ func readGroupZip(r io.ReaderAt, size int64) (*GroupExport, error) {
 	return exp, nil
 }
 
+// zipHasEntry reports whether the zip archive (r, size) contains an entry with
+// the given name at the root level.
+func zipHasEntry(r io.ReaderAt, size int64, name string) (bool, error) {
+	zr, err := zip.NewReader(r, size)
+	if err != nil {
+		return false, err
+	}
+	for _, zf := range zr.File {
+		if zf.Name == name {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // readDeckZip parses a deck export zip back into a DeckExport with the media
 // bytes reattached from the mediaDir/ entries.
 func readDeckZip(r io.ReaderAt, size int64) (*DeckExport, error) {
