@@ -34,6 +34,14 @@ type Repository interface {
 	DeleteDeck(ctx context.Context, id string) error // deletes deck and all its facts (cascades to cards)
 	ListFactsByDeck(ctx context.Context, deckID string) ([]*Fact, error)
 
+	// Groups.
+	AddGroup(ctx context.Context, g *Group) error
+	GetGroup(ctx context.Context, id string) (*Group, error)
+	UpdateGroup(ctx context.Context, g *Group) error
+	ListGroups(ctx context.Context) ([]*Group, error)
+	DeleteGroup(ctx context.Context, id string) error
+	UnsetGroupForDecks(ctx context.Context, groupID string) error
+
 	// Reviews (append-only log).
 	AddReview(ctx context.Context, r *Review) error
 	// ReviewTimestampsSince returns POSIX timestamps of reviews at or after

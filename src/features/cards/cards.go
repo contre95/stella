@@ -17,3 +17,10 @@ type CardRow struct {
 	Card   *srs.Card
 	Status string // "unseen", "learning", or an interval string like "in 3 days"
 }
+
+// GroupView bundles a group with its member decks for the deck list page.
+// A nil Group means the decks have no group assigned.
+type GroupView struct {
+	Group *srs.Group
+	Decks []*srs.Deck
+}

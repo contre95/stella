@@ -331,15 +331,95 @@ var deckColors = []string{
 }
 
 // AddDeck creates a new named deck with a random colour. image is the filename
-// of an already-saved cover picture; empty means none.
-func (s *Service) AddDeck(ctx context.Context, name, description, image string) (*srs.Deck, error) {
+// of an already-saved cover picture; empty means none. groupID assigns the
+// deck to a group; empty means no group.
+func (s *Service) AddDeck(ctx context.Context, name, description, image, groupID string) (*srs.Deck, error) {
 	all, _ := s.repo.ListDecks(ctx)
 	c := deckColors[len(all)%len(deckColors)]
-	d := &srs.Deck{ID: uuid.NewString(), Name: name, Color: c, Description: description, Image: image}
+	d := &srs.Deck{ID: uuid.NewString(), Name: name, Color: c, Description: description, Image: image, GroupID: groupID}
 	if err := s.repo.AddDeck(ctx, d); err != nil {
 		return nil, err
 	}
 	return d, nil
+}
+
+// AddGroup creates a new group with the given name.
+func (s *Service) AddGroup(ctx context.Context, name string) (*srs.Group, error) {
+	g := &srs.Group{ID: uuid.NewString(), Name: name}
+	if err := s.repo.AddGroup(ctx, g); err != nil {
+		return nil, err
+	}
+	return g, nil
+}
+
+// GetGroup retrieves a single group by ID.
+func (s *Service) GetGroup(ctx context.Context, id string) (*srs.Group, error) {
+	return s.repo.GetGroup(ctx, id)
+}
+
+// ListGroups returns all groups ordered by name.
+func (s *Service) ListGroups(ctx context.Context) ([]*srs.Group, error) {
+	return s.repo.ListGroups(ctx)
+}
+
+// UpdateGroup renames a group.
+func (s *Service) UpdateGroup(ctx context.Context, id, name string) (*srs.Group, error) {
+	g, err := s.repo.GetGroup(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	g.Name = name
+	if err := s.repo.UpdateGroup(ctx, g); err != nil {
+		return nil, err
+	}
+	return g, nil
+}
+
+// DeleteGroup removes a group and unassigns all its decks (they become ungrouped).
+func (s *Service) DeleteGroup(ctx context.Context, id string) error {
+	if err := s.repo.UnsetGroupForDecks(ctx, id); err != nil {
+		return err
+	}
+	return s.repo.DeleteGroup(ctx, id)
+}
+
+// SetDeckGroup assigns a deck to a group (or clears its group when groupID is empty).
+func (s *Service) SetDeckGroup(ctx context.Context, deckID, groupID string) error {
+	deck, err := s.repo.GetDeck(ctx, deckID)
+	if err != nil {
+		return err
+	}
+	deck.GroupID = groupID
+	return s.repo.UpdateDeck(ctx, deck)
+}
+
+// ListGroupViews returns decks organised into groups for the deck list page.
+// Named groups come first (sorted by name), ungrouped decks are last with a
+// nil Group field.
+func (s *Service) ListGroupViews(ctx context.Context) ([]GroupView, error) {
+	groups, err := s.repo.ListGroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	decks, err := s.repo.ListDecks(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byGroup := make(map[string][]*srs.Deck, len(groups))
+	var ungrouped []*srs.Deck
+	for _, d := range decks {
+		if d.GroupID == "" {
+			ungrouped = append(ungrouped, d)
+		} else {
+			byGroup[d.GroupID] = append(byGroup[d.GroupID], d)
+		}
+	}
+	views := make([]GroupView, 0, len(groups)+1)
+	for _, g := range groups {
+		views = append(views, GroupView{Group: g, Decks: byGroup[g.ID]})
+	}
+	views = append(views, GroupView{Group: nil, Decks: ungrouped})
+	return views, nil
 }
 
 // ListFactsByDeck returns facts belonging to deckID with their cards and statuses.
@@ -369,6 +449,12 @@ func (s *Service) ListFactsByDeck(ctx context.Context, deckID string) ([]*FactRo
 	return rows, nil
 }
 
+// GroupExport is the JSON-serialisable manifest for a group export zip.
+type GroupExport struct {
+	Name  string       `json:"name"`
+	Decks []DeckExport `json:"decks"`
+}
+
 // DeckExport is the JSON-serialisable representation of a deck plus its facts.
 type DeckExport struct {
 	Name        string       `json:"name"`
@@ -391,6 +477,61 @@ type FactExport struct {
 	AudioFrontData []byte `json:"audio_front_data,omitempty"`
 	AudioBackData  []byte `json:"audio_back_data,omitempty"`
 	Reverse        bool   `json:"reverse"`
+}
+
+// ExportGroup builds a GroupExport containing every deck that belongs to the group.
+func (s *Service) ExportGroup(ctx context.Context, groupID string) (*GroupExport, error) {
+	group, err := s.repo.GetGroup(ctx, groupID)
+	if err != nil {
+		return nil, err
+	}
+	decks, err := s.repo.ListDecks(ctx)
+	if err != nil {
+		return nil, err
+	}
+	exp := &GroupExport{Name: group.Name}
+	for _, d := range decks {
+		if d.GroupID != groupID {
+			continue
+		}
+		de, err := s.ExportDeck(ctx, d.ID)
+		if err != nil {
+			return nil, err
+		}
+		exp.Decks = append(exp.Decks, *de)
+	}
+	return exp, nil
+}
+
+// ImportGroup creates a new group (or assigns decks to an existing group when
+// groupID is non-empty) and imports all decks from the export.
+func (s *Service) ImportGroup(ctx context.Context, exp *GroupExport, groupID string) (*srs.Group, int, error) {
+	var group *srs.Group
+	var err error
+	if groupID == "" {
+		group, err = s.AddGroup(ctx, exp.Name)
+		if err != nil {
+			return nil, 0, err
+		}
+	} else {
+		group, err = s.repo.GetGroup(ctx, groupID)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+	imported := 0
+	for i := range exp.Decks {
+		deck, n, err := s.ImportDeck(ctx, &exp.Decks[i], "")
+		if err != nil {
+			return group, imported, err
+		}
+		deck.GroupID = group.ID
+		if err := s.repo.UpdateDeck(ctx, deck); err != nil {
+			return group, imported, err
+		}
+		imported += n
+	}
+	return group, imported, nil
 }
 
 // ExportDeck returns a DeckExport for the given deck ID.
@@ -467,7 +608,7 @@ func (s *Service) ImportDeck(ctx context.Context, exp *DeckExport, nameOverride 
 		}
 		cover = name
 	}
-	deck, err := s.AddDeck(ctx, name, exp.Description, cover)
+	deck, err := s.AddDeck(ctx, name, exp.Description, cover, "")
 	if err != nil {
 		return nil, 0, err
 	}

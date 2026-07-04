@@ -275,16 +275,113 @@ func (h *Handler) Edit(c *fiber.Ctx) error {
 
 // RenderDecks renders the decks section page.
 func (h *Handler) RenderDecks(c *fiber.Ctx) error {
-	return respond.Section(c, "decks", fiber.Map{"Title": "Decks"})
+	groups, err := h.service.ListGroups(c.Context())
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return respond.Section(c, "decks", fiber.Map{"Title": "Decks", "Groups": groups})
 }
 
 // DeckList returns the deck list partial.
 func (h *Handler) DeckList(c *fiber.Ctx) error {
-	decks, err := h.service.ListDecks(c.Context())
+	views, err := h.service.ListGroupViews(c.Context())
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
-	return respond.Partial(c, "components/deck_list", fiber.Map{"Decks": decks})
+	hasGroups := false
+	for _, v := range views {
+		if v.Group != nil {
+			hasGroups = true
+			break
+		}
+	}
+	return respond.Partial(c, "components/deck_list", fiber.Map{"GroupViews": views, "HasGroups": hasGroups})
+}
+
+// AddGroup creates a new group and returns the refreshed deck list.
+func (h *Handler) AddGroup(c *fiber.Ctx) error {
+	name := strings.TrimSpace(c.FormValue("name"))
+	if name == "" {
+		return respond.ToastErr(c, fiber.StatusBadRequest, "Group name is required")
+	}
+	if _, err := h.service.AddGroup(c.Context(), name); err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return h.DeckList(c)
+}
+
+// DeleteGroup removes a group (ungrouping its decks) and returns the refreshed list.
+func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
+	if err := h.service.DeleteGroup(c.Context(), c.Params("id")); err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return h.DeckList(c)
+}
+
+// UpdateGroup renames a group and returns the refreshed list.
+func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
+	name := strings.TrimSpace(c.FormValue("name"))
+	if name == "" {
+		return respond.ToastErr(c, fiber.StatusBadRequest, "Group name is required")
+	}
+	if _, err := h.service.UpdateGroup(c.Context(), c.Params("id"), name); err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return h.DeckList(c)
+}
+
+// ExportGroup returns a zip download containing all decks in the group.
+func (h *Handler) ExportGroup(c *fiber.Ctx) error {
+	exp, err := h.service.ExportGroup(c.Context(), c.Params("id"))
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	var buf bytes.Buffer
+	if err := writeGroupZip(&buf, exp); err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	filename := fmt.Sprintf("%s.zip", strings.ReplaceAll(exp.Name, " ", "_"))
+	c.Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	c.Set("Content-Type", "application/zip")
+	return c.Send(buf.Bytes())
+}
+
+// ImportGroup reads an uploaded group export zip and creates a new group with
+// all its decks.
+func (h *Handler) ImportGroup(c *fiber.Ctx) error {
+	file, err := c.FormFile("file")
+	if err != nil || file == nil {
+		return respond.ToastErr(c, fiber.StatusBadRequest, "group file (.zip) is required")
+	}
+	f, err := file.Open()
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	defer f.Close()
+	exp, err := readGroupZip(f, file.Size)
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
+	}
+	if exp.Name == "" {
+		return respond.ToastErr(c, fiber.StatusBadRequest, "group name is missing from the export")
+	}
+	if _, _, err := h.service.ImportGroup(c.Context(), exp, ""); err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return h.DeckList(c)
+}
+
+// SetDeckGroup assigns a deck to a group (or clears it) and returns the refreshed list.
+func (h *Handler) SetDeckGroup(c *fiber.Ctx) error {
+	groupID := strings.TrimSpace(c.FormValue("group_id"))
+	if err := h.service.SetDeckGroup(c.Context(), c.Params("id"), groupID); err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	// If called from the deck page, re-render the deck page.
+	if c.Query("source") == "deck_page" {
+		return h.RenderDeckPage(c)
+	}
+	return h.DeckList(c)
 }
 
 // DeleteDeck removes a deck and all its facts/cards, then returns the refreshed list.
@@ -305,11 +402,12 @@ func (h *Handler) AddDeck(c *fiber.Ctx) error {
 		name = string([]rune(name)[:12])
 	}
 	desc := strings.TrimSpace(c.FormValue("description"))
+	groupID := strings.TrimSpace(c.FormValue("group_id"))
 	image, err := h.saveImage(c, "image")
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
 	}
-	if _, err := h.service.AddDeck(c.Context(), name, desc, image); err != nil {
+	if _, err := h.service.AddDeck(c.Context(), name, desc, image, groupID); err != nil {
 		h.removeMedia(image)
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -360,12 +458,14 @@ func (h *Handler) RenderDeckPage(c *fiber.Ctx) error {
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
+	groups, _ := h.service.ListGroups(c.Context())
 	return respond.Section(c, "deck_page", fiber.Map{
 		"Title":     deck.Name,
 		"Deck":      deck,
 		"DeckID":    deck.ID,
 		"DeckImage": deck.Image,
 		"Facts":     facts,
+		"Groups":    groups,
 	})
 }
 

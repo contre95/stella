@@ -53,12 +53,18 @@ func (s *SqliteSRS) Close() error { return s.db.Close() }
 
 func (s *SqliteSRS) createTables() error {
 	const schema = `
+CREATE TABLE IF NOT EXISTS groups (
+	id   TEXT PRIMARY KEY,
+	name TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS decks (
 	id    TEXT PRIMARY KEY,
 	name  TEXT NOT NULL,
 	color TEXT NOT NULL DEFAULT '#8b5cf6',
 	description TEXT NOT NULL DEFAULT '',
-	image TEXT NOT NULL DEFAULT ''
+	image TEXT NOT NULL DEFAULT '',
+	group_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS facts (
@@ -122,6 +128,15 @@ CREATE INDEX IF NOT EXISTS idx_reviews_ts   ON reviews(timestamp);
 	if _, err := s.db.Exec(`ALTER TABLE reviews ADD COLUMN ret_reps INTEGER NOT NULL DEFAULT 0`); err != nil &&
 		!strings.Contains(err.Error(), "duplicate column name") {
 		return fmt.Errorf("migrating reviews schema: %w", err)
+	}
+	// Databases created before deck groups lack the group_id column on decks.
+	if _, err := s.db.Exec(`ALTER TABLE decks ADD COLUMN group_id TEXT`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("migrating decks schema: %w", err)
+	}
+	// Ensure the groups table exists for databases that predate the feature.
+	if _, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS groups (id TEXT PRIMARY KEY, name TEXT NOT NULL)`); err != nil {
+		return fmt.Errorf("creating groups table: %w", err)
 	}
 	return nil
 }
@@ -234,29 +249,38 @@ func (s *SqliteSRS) CardsForFact(ctx context.Context, factID string) ([]*srs.Car
 //
 
 func (s *SqliteSRS) AddDeck(ctx context.Context, d *srs.Deck) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO decks (id, name, color, description, image) VALUES (?, ?, ?, ?, ?)`, d.ID, d.Name, d.Color, d.Description, d.Image)
+	groupID := nullableString(d.GroupID)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO decks (id, name, color, description, image, group_id) VALUES (?, ?, ?, ?, ?, ?)`,
+		d.ID, d.Name, d.Color, d.Description, d.Image, groupID)
 	return err
 }
 
 func (s *SqliteSRS) GetDeck(ctx context.Context, id string) (*srs.Deck, error) {
 	var d srs.Deck
-	err := s.db.QueryRowContext(ctx, `SELECT id, name, color, description, image FROM decks WHERE id=?`, id).Scan(&d.ID, &d.Name, &d.Color, &d.Description, &d.Image)
+	var groupID sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT id, name, color, description, image, group_id FROM decks WHERE id=?`, id).
+		Scan(&d.ID, &d.Name, &d.Color, &d.Description, &d.Image, &groupID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, srs.ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
+	if groupID.Valid {
+		d.GroupID = groupID.String
+	}
 	return &d, nil
 }
 
 func (s *SqliteSRS) UpdateDeck(ctx context.Context, d *srs.Deck) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE decks SET name=?, color=?, description=?, image=? WHERE id=?`, d.Name, d.Color, d.Description, d.Image, d.ID)
+	groupID := nullableString(d.GroupID)
+	_, err := s.db.ExecContext(ctx, `UPDATE decks SET name=?, color=?, description=?, image=?, group_id=? WHERE id=?`,
+		d.Name, d.Color, d.Description, d.Image, groupID, d.ID)
 	return err
 }
 
 func (s *SqliteSRS) ListDecks(ctx context.Context) ([]*srs.Deck, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, color, description, image FROM decks ORDER BY name`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, color, description, image, group_id FROM decks ORDER BY group_id IS NULL, group_id, name`)
 	if err != nil {
 		return nil, err
 	}
@@ -264,8 +288,12 @@ func (s *SqliteSRS) ListDecks(ctx context.Context) ([]*srs.Deck, error) {
 	var decks []*srs.Deck
 	for rows.Next() {
 		var d srs.Deck
-		if err := rows.Scan(&d.ID, &d.Name, &d.Color, &d.Description, &d.Image); err != nil {
+		var groupID sql.NullString
+		if err := rows.Scan(&d.ID, &d.Name, &d.Color, &d.Description, &d.Image, &groupID); err != nil {
 			return nil, err
+		}
+		if groupID.Valid {
+			d.GroupID = groupID.String
 		}
 		decks = append(decks, &d)
 	}
@@ -285,6 +313,59 @@ func (s *SqliteSRS) DeleteDeck(ctx context.Context, id string) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+//
+// Groups.
+//
+
+func (s *SqliteSRS) AddGroup(ctx context.Context, g *srs.Group) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO groups (id, name) VALUES (?, ?)`, g.ID, g.Name)
+	return err
+}
+
+func (s *SqliteSRS) GetGroup(ctx context.Context, id string) (*srs.Group, error) {
+	var g srs.Group
+	err := s.db.QueryRowContext(ctx, `SELECT id, name FROM groups WHERE id=?`, id).Scan(&g.ID, &g.Name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, srs.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &g, nil
+}
+
+func (s *SqliteSRS) UpdateGroup(ctx context.Context, g *srs.Group) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE groups SET name=? WHERE id=?`, g.Name, g.ID)
+	return err
+}
+
+func (s *SqliteSRS) ListGroups(ctx context.Context) ([]*srs.Group, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name FROM groups ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var groups []*srs.Group
+	for rows.Next() {
+		var g srs.Group
+		if err := rows.Scan(&g.ID, &g.Name); err != nil {
+			return nil, err
+		}
+		groups = append(groups, &g)
+	}
+	return groups, rows.Err()
+}
+
+func (s *SqliteSRS) DeleteGroup(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM groups WHERE id=?`, id)
+	return err
+}
+
+func (s *SqliteSRS) UnsetGroupForDecks(ctx context.Context, groupID string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE decks SET group_id=NULL WHERE group_id=?`, groupID)
+	return err
 }
 
 func (s *SqliteSRS) ListFactsByDeck(ctx context.Context, deckID string) ([]*srs.Fact, error) {
@@ -523,4 +604,13 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// nullableString converts an empty Go string to a SQL NULL, and a non-empty
+// string to a valid sql.NullString, so optional FK columns round-trip cleanly.
+func nullableString(s string) sql.NullString {
+	if s == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: s, Valid: true}
 }

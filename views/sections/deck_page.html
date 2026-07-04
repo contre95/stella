@@ -62,7 +62,27 @@
         </div>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        {{if .Groups}}
+          <form
+            hx-post="/decks/{{.Deck.ID}}/group?source=deck_page"
+            hx-target="#contenido"
+            hx-swap="outerHTML"
+            class="flex items-center gap-2"
+          >
+            <select
+              name="group_id"
+              onchange="this.form.requestSubmit()"
+              class="glass-input rounded-xl px-3 py-2 text-sm"
+              title="Assign to group"
+            >
+              <option value="">No group</option>
+              {{range .Groups}}
+                <option value="{{.ID}}" {{if eq $.Deck.GroupID .ID}}selected{{end}}>{{.Name}}</option>
+              {{end}}
+            </select>
+          </form>
+        {{end}}
         {{if .Facts}}
           <a
             href="/review?decks={{.Deck.ID}}"

@@ -12,6 +12,8 @@ type Deck struct {
 	// Image is the filename of the deck's cover picture in the media
 	// directory; empty means none.
 	Image string
+	// GroupID is the ID of the Group this deck belongs to; empty means none.
+	GroupID string
 }
 
 // TruncatedName returns the first 12 runes of the name, appending ellipsis if

@@ -1,10 +1,11 @@
 <div id="contenido">
   <div class="mb-6">
     <h1 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Decks</h1>
-    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Organise your cards into named decks.</p>
+    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Organise your cards into named decks and groups.</p>
   </div>
 
   <div class="flex flex-col gap-3">
+    {{/* Create deck */}}
     <form
       hx-post="/decks"
       hx-target="#deck-list"
@@ -26,11 +27,20 @@
           placeholder="Optional description"
           class="glass-input min-w-0 flex-1 rounded-xl px-3 py-2 text-sm"
         />
+        <select
+          name="group_id"
+          class="glass-input shrink-0 rounded-xl px-3 py-2 text-sm"
+        >
+          <option value="">No group</option>
+          {{range .Groups}}
+            <option value="{{.ID}}">{{.Name}}</option>
+          {{end}}
+        </select>
         <button
           type="submit"
           class="btn-primary shrink-0 rounded-xl px-4 py-2 text-sm font-semibold"
         >
-          Create
+          Create deck
         </button>
       </div>
       <label class="flex items-center gap-3">
@@ -44,28 +54,77 @@
       </label>
     </form>
 
-    <form
-      hx-post="/decks/import"
-      hx-target="#deck-list"
-      hx-swap="innerHTML"
-      hx-encoding="multipart/form-data"
-      _="on htmx:afterRequest call me.reset()"
-      class="glass flex flex-col items-start gap-3 sm:flex-row sm:items-center rounded-2xl p-4"
-    >
-      <input
-        type="file"
-        name="file"
-        accept=".zip,.json"
-        required
-        class="glass-input min-w-0 flex-1 rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-gray-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-gray-600 hover:file:bg-gray-500/25 dark:file:text-gray-300"
-      />
-      <button
-        type="submit"
-        class="btn-ghost shrink-0 rounded-xl px-4 py-2 text-sm font-semibold"
+    <div class="flex flex-col gap-3 sm:flex-row">
+      {{/* Create group */}}
+      <form
+        hx-post="/groups"
+        hx-target="#deck-list"
+        hx-swap="innerHTML"
+        _="on htmx:afterRequest call me.reset()"
+        class="glass flex flex-1 items-center gap-3 rounded-2xl p-4"
       >
-        Import deck
-      </button>
-    </form>
+        <input
+          name="name"
+          required
+          placeholder="New group name"
+          class="glass-input min-w-0 flex-1 rounded-xl px-3 py-2 text-sm"
+        />
+        <button
+          type="submit"
+          class="btn-ghost shrink-0 rounded-xl px-4 py-2 text-sm font-semibold"
+        >
+          Create group
+        </button>
+      </form>
+
+      {{/* Import deck */}}
+      <form
+        hx-post="/decks/import"
+        hx-target="#deck-list"
+        hx-swap="innerHTML"
+        hx-encoding="multipart/form-data"
+        _="on htmx:afterRequest call me.reset()"
+        class="glass flex flex-1 items-center gap-3 rounded-2xl p-4"
+      >
+        <input
+          type="file"
+          name="file"
+          accept=".zip,.json"
+          required
+          class="glass-input min-w-0 flex-1 rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-gray-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-gray-600 hover:file:bg-gray-500/25 dark:file:text-gray-300"
+        />
+        <button
+          type="submit"
+          class="btn-ghost shrink-0 rounded-xl px-4 py-2 text-sm font-semibold"
+        >
+          Import deck
+        </button>
+      </form>
+
+      {{/* Import group */}}
+      <form
+        hx-post="/groups/import"
+        hx-target="#deck-list"
+        hx-swap="innerHTML"
+        hx-encoding="multipart/form-data"
+        _="on htmx:afterRequest call me.reset()"
+        class="glass flex flex-1 items-center gap-3 rounded-2xl p-4"
+      >
+        <input
+          type="file"
+          name="file"
+          accept=".zip"
+          required
+          class="glass-input min-w-0 flex-1 rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-violet-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-violet-700 hover:file:bg-violet-500/25 dark:file:text-violet-300"
+        />
+        <button
+          type="submit"
+          class="btn-ghost shrink-0 rounded-xl px-4 py-2 text-sm font-semibold"
+        >
+          Import group
+        </button>
+      </form>
+    </div>
   </div>
 
   <div id="deck-list" hx-get="/decks/list" hx-trigger="load" class="mt-5"></div>
