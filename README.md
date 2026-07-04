@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="public/logo.png" alt="Stella logo" width="128">
-</p>
-
-# Stella
+# <img src="public/logo.png" alt="" width="48" style="vertical-align: middle; margin-right: 8px"> Stella
 
 A single-user, self-hosted spaced-repetition web app. The scheduling engine is
 a faithful port of [Mnemosyne](https://github.com/mnemosyne-proj/mnemosyne)'s
