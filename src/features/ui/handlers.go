@@ -3,6 +3,7 @@ package ui
 import (
 	"log/slog"
 
+	"github.com/contre95/stella/src/features/auth"
 	"github.com/contre95/stella/src/features/hosting/respond"
 	"github.com/contre95/stella/src/features/review"
 	"github.com/gofiber/fiber/v2"
@@ -20,17 +21,17 @@ func NewHandler(reviewSvc *review.Service) *Handler {
 
 // Dashboard renders the overview page with live aggregate stats.
 func (h *Handler) Dashboard(c *fiber.Ctx) error {
-	stats, err := h.reviewSvc.Stats(c.Context())
+	stats, err := h.reviewSvc.Stats(c.Context(), auth.UserID(c))
 	if err != nil {
 		slog.Error("dashboard stats", "err", err)
 		stats = &review.Stats{}
 	}
-	forecast, err := h.reviewSvc.Forecast(c.Context(), 7)
+	forecast, err := h.reviewSvc.Forecast(c.Context(), auth.UserID(c), 7)
 	if err != nil {
 		slog.Error("dashboard forecast", "err", err)
 		forecast = nil
 	}
-	heatmap, err := h.reviewSvc.StudyHeatmap(c.Context())
+	heatmap, err := h.reviewSvc.StudyHeatmap(c.Context(), auth.UserID(c))
 	if err != nil {
 		slog.Error("dashboard heatmap", "err", err)
 		heatmap = nil
@@ -47,7 +48,7 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 
 // SidebarStats returns the deck/card counts for the sidebar.
 func (h *Handler) SidebarStats(c *fiber.Ctx) error {
-	stats, err := h.reviewSvc.Stats(c.Context())
+	stats, err := h.reviewSvc.Stats(c.Context(), auth.UserID(c))
 	if err != nil {
 		return c.SendString("")
 	}

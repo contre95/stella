@@ -11,6 +11,9 @@ func defaultConfig() Config {
 			AppName:   "Stella",
 			BodyLimit: 10 * 1024 * 1024,
 		},
+		Auth: Auth{
+			SingleUser: true,
+		},
 		MCP: MCP{
 			Enabled: false,
 		},

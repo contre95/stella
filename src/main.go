@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/contre95/stella/src/features/auth"
 	"github.com/contre95/stella/src/features/cards"
 	"github.com/contre95/stella/src/features/config"
 	"github.com/contre95/stella/src/features/hosting"
@@ -48,7 +50,13 @@ func main() {
 		srs.NewMathRand(),
 	)
 
-	// 3. Feature services.
+	// 3. Feature services. Auth runs OIDC discovery in multi-user mode, so the
+	// identity provider must be reachable at startup.
+	authService, err := auth.NewService(context.Background(), db, cfgManager)
+	if err != nil {
+		slog.Error("failed to set up auth", "err", err)
+		os.Exit(1)
+	}
 	cardsService := cards.NewService(db, scheduler, cfgManager)
 	reviewService := review.NewService(db, scheduler)
 
@@ -57,13 +65,18 @@ func main() {
 	cardsHandler := cards.NewHandler(cardsService)
 	reviewHandler := review.NewHandler(reviewService, cfgManager)
 
-	// 5. Routes + server.
+	// 5. Routes + server. MCP has no login of its own, so it is only served in
+	// single-user mode, where every tool call runs as the local account.
 	registrars := []hosting.RouteRegistrar{uiHandler, cardsHandler, reviewHandler}
 	if cfgManager.Get().MCP.Enabled {
-		registrars = append(registrars, mcppresenter.NewHTTPRegistrar(cfgManager.Get().Server.AppName, version, cardsService))
-		slog.Info("mcp enabled", "path", "/mcp")
+		if cfgManager.Get().Auth.SingleUser {
+			registrars = append(registrars, mcppresenter.NewHTTPRegistrar(cfgManager.Get().Server.AppName, version, cardsService, auth.LocalUserID))
+			slog.Info("mcp enabled", "path", "/mcp")
+		} else {
+			slog.Warn("mcp is only available in single-user mode; not serving /mcp")
+		}
 	}
-	server := hosting.NewServer(cfgManager, registrars...)
+	server := hosting.NewServer(cfgManager, authService, registrars...)
 
 	go func() {
 		if err := server.Start(); err != nil {

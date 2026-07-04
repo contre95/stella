@@ -1,14 +1,62 @@
 package config
 
+import (
+	"fmt"
+	"strings"
+)
+
 // Config is the root application configuration, loaded from YAML.
 type Config struct {
-	DbPath     string `yaml:"dbPath" validate:"required"`
-	ImagePath  string `yaml:"imagePath"`
-	Server     Server `yaml:"server"`
-	MCP        MCP    `yaml:"mcp"`
-	Logger     Logger `yaml:"logger"`
-	Review     Review `yaml:"review"`
-	Cards      Cards  `yaml:"cards"`
+	DbPath    string `yaml:"dbPath" validate:"required"`
+	ImagePath string `yaml:"imagePath"`
+	Server    Server `yaml:"server"`
+	Auth      Auth   `yaml:"auth"`
+	MCP       MCP    `yaml:"mcp"`
+	Logger    Logger `yaml:"logger"`
+	Review    Review `yaml:"review"`
+	Cards     Cards  `yaml:"cards"`
+}
+
+// Auth holds authentication settings.
+type Auth struct {
+	// SingleUser disables login entirely: no OIDC, no sessions, and all data
+	// belongs to one built-in local account.
+	SingleUser bool `yaml:"singleUser"`
+	// OIDC configures the OpenID Connect provider used when SingleUser is false.
+	OIDC OIDC `yaml:"oidc"`
+}
+
+// OIDC holds the OpenID Connect provider settings for multi-user mode.
+type OIDC struct {
+	// Issuer is the provider's issuer URL (its discovery document must live at
+	// <issuer>/.well-known/openid-configuration).
+	Issuer       string `yaml:"issuer"`
+	ClientID     string `yaml:"clientID"`
+	ClientSecret string `yaml:"clientSecret"`
+	// PublicURL is the external base URL of this Stella instance; the OIDC
+	// redirect URL registered at the provider must be <publicURL>/auth/callback.
+	PublicURL string `yaml:"publicURL"`
+}
+
+// Validate enforces the conditional requirement struct tags cannot express:
+// multi-user mode needs a fully configured OIDC provider.
+func (a *Auth) Validate() error {
+	if a.SingleUser {
+		return nil
+	}
+	var missing []string
+	for key, val := range map[string]string{
+		"issuer": a.OIDC.Issuer, "clientID": a.OIDC.ClientID,
+		"clientSecret": a.OIDC.ClientSecret, "publicURL": a.OIDC.PublicURL,
+	} {
+		if strings.TrimSpace(val) == "" {
+			missing = append(missing, "auth.oidc."+key)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("auth.singleUser is false but %s not set", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // Cards holds card display settings.

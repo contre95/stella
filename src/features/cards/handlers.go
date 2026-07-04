@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/contre95/stella/src/features/auth"
 	"github.com/contre95/stella/src/features/hosting/respond"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -34,7 +35,7 @@ func NewHandler(service *Service) *Handler {
 
 // RenderSection renders the cards page (the list itself loads over HTMX).
 func (h *Handler) RenderSection(c *fiber.Ctx) error {
-	decks, err := h.service.ListDecks(c.Context())
+	decks, err := h.service.ListDecks(c.Context(), auth.UserID(c))
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -43,7 +44,7 @@ func (h *Handler) RenderSection(c *fiber.Ctx) error {
 
 // List returns the fact/card list partial.
 func (h *Handler) List(c *fiber.Ctx) error {
-	rows, err := h.service.ListFacts(c.Context())
+	rows, err := h.service.ListFacts(c.Context(), auth.UserID(c))
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -144,7 +145,7 @@ func (h *Handler) Add(c *fiber.Ctx) error {
 		h.removeMedia(imgFront, imgBack, audFront)
 		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
 	}
-	if _, err := h.service.AddFact(c.Context(), front, back, deckID, grade, reverse, imgFront, imgBack, audFront, audBack); err != nil {
+	if _, err := h.service.AddFact(c.Context(), auth.UserID(c), front, back, deckID, grade, reverse, imgFront, imgBack, audFront, audBack); err != nil {
 		h.removeMedia(imgFront, imgBack, audFront, audBack)
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -153,7 +154,7 @@ func (h *Handler) Add(c *fiber.Ctx) error {
 
 // DeckOptions returns the <option> list for deck selects.
 func (h *Handler) DeckOptions(c *fiber.Ctx) error {
-	decks, err := h.service.ListDecks(c.Context())
+	decks, err := h.service.ListDecks(c.Context(), auth.UserID(c))
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -162,12 +163,12 @@ func (h *Handler) DeckOptions(c *fiber.Ctx) error {
 
 // deckGrid returns the card grid partial for a single deck.
 func (h *Handler) deckGrid(c *fiber.Ctx, deckID string) error {
-	facts, err := h.service.ListFactsByDeck(c.Context(), deckID)
+	facts, err := h.service.ListFactsByDeck(c.Context(), auth.UserID(c), deckID)
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	deckImage := ""
-	if deck, err := h.service.GetDeck(c.Context(), deckID); err == nil {
+	if deck, err := h.service.GetDeck(c.Context(), auth.UserID(c), deckID); err == nil {
 		deckImage = deck.Image
 	}
 	return respond.Partial(c, "components/deck_card_grid", fiber.Map{"DeckID": deckID, "Facts": facts, "DeckImage": deckImage})
@@ -176,7 +177,7 @@ func (h *Handler) deckGrid(c *fiber.Ctx, deckID string) error {
 // Delete removes a fact and returns the refreshed list. When called from a
 // deck page (?deck=<id>), it returns that deck's card grid instead.
 func (h *Handler) Delete(c *fiber.Ctx) error {
-	if err := h.service.DeleteFact(c.Context(), c.Params("id")); err != nil {
+	if err := h.service.DeleteFact(c.Context(), auth.UserID(c), c.Params("id")); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	if deckID := c.Query("deck"); deckID != "" {
@@ -189,7 +190,7 @@ func (h *Handler) Delete(c *fiber.Ctx) error {
 // list. When called from a deck page (?deck=<id>), it returns that deck's
 // card grid instead.
 func (h *Handler) Reset(c *fiber.Ctx) error {
-	if err := h.service.ResetFact(c.Context(), c.Params("id")); err != nil {
+	if err := h.service.ResetFact(c.Context(), auth.UserID(c), c.Params("id")); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	if deckID := c.Query("deck"); deckID != "" {
@@ -201,11 +202,11 @@ func (h *Handler) Reset(c *fiber.Ctx) error {
 // EditForm returns the edit-card modal for a fact. A ?deck=<id> query keeps
 // the eventual save targeting that deck's card grid instead of the full list.
 func (h *Handler) EditForm(c *fiber.Ctx) error {
-	fact, err := h.service.GetFact(c.Context(), c.Params("id"))
+	fact, err := h.service.GetFact(c.Context(), auth.UserID(c), c.Params("id"))
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusNotFound, "Card not found")
 	}
-	hasReverse, err := h.service.HasReverse(c.Context(), fact.ID)
+	hasReverse, err := h.service.HasReverse(c.Context(), auth.UserID(c), fact.ID)
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -263,7 +264,7 @@ func (h *Handler) Edit(c *fiber.Ctx) error {
 		h.removeMedia(saved...)
 		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
 	}
-	if _, err := h.service.UpdateFact(c.Context(), c.Params("id"), front, back, imgFront, imgBack, audFront, audBack, &reverse); err != nil {
+	if _, err := h.service.UpdateFact(c.Context(), auth.UserID(c), c.Params("id"), front, back, imgFront, imgBack, audFront, audBack, &reverse); err != nil {
 		h.removeMedia(saved...)
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -275,7 +276,7 @@ func (h *Handler) Edit(c *fiber.Ctx) error {
 
 // RenderDecks renders the decks section page.
 func (h *Handler) RenderDecks(c *fiber.Ctx) error {
-	groups, err := h.service.ListGroups(c.Context())
+	groups, err := h.service.ListGroups(c.Context(), auth.UserID(c))
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -284,7 +285,7 @@ func (h *Handler) RenderDecks(c *fiber.Ctx) error {
 
 // DeckList returns the deck list partial.
 func (h *Handler) DeckList(c *fiber.Ctx) error {
-	views, err := h.service.ListGroupViews(c.Context())
+	views, err := h.service.ListGroupViews(c.Context(), auth.UserID(c))
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -304,7 +305,7 @@ func (h *Handler) AddGroup(c *fiber.Ctx) error {
 	if name == "" {
 		return respond.ToastErr(c, fiber.StatusBadRequest, "Group name is required")
 	}
-	if _, err := h.service.AddGroup(c.Context(), name); err != nil {
+	if _, err := h.service.AddGroup(c.Context(), auth.UserID(c), name); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return h.DeckList(c)
@@ -312,7 +313,7 @@ func (h *Handler) AddGroup(c *fiber.Ctx) error {
 
 // DeleteGroup removes a group (ungrouping its decks) and returns the refreshed list.
 func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
-	if err := h.service.DeleteGroup(c.Context(), c.Params("id")); err != nil {
+	if err := h.service.DeleteGroup(c.Context(), auth.UserID(c), c.Params("id")); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return h.DeckList(c)
@@ -324,7 +325,7 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 	if name == "" {
 		return respond.ToastErr(c, fiber.StatusBadRequest, "Group name is required")
 	}
-	if _, err := h.service.UpdateGroup(c.Context(), c.Params("id"), name); err != nil {
+	if _, err := h.service.UpdateGroup(c.Context(), auth.UserID(c), c.Params("id"), name); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return h.DeckList(c)
@@ -332,7 +333,7 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 
 // ExportGroup returns a zip download containing all decks in the group.
 func (h *Handler) ExportGroup(c *fiber.Ctx) error {
-	exp, err := h.service.ExportGroup(c.Context(), c.Params("id"))
+	exp, err := h.service.ExportGroup(c.Context(), auth.UserID(c), c.Params("id"))
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -365,7 +366,7 @@ func (h *Handler) ImportGroup(c *fiber.Ctx) error {
 	if exp.Name == "" {
 		return respond.ToastErr(c, fiber.StatusBadRequest, "group name is missing from the export")
 	}
-	if _, _, err := h.service.ImportGroup(c.Context(), exp, ""); err != nil {
+	if _, _, err := h.service.ImportGroup(c.Context(), auth.UserID(c), exp, ""); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return h.DeckList(c)
@@ -374,7 +375,7 @@ func (h *Handler) ImportGroup(c *fiber.Ctx) error {
 // SetDeckGroup assigns a deck to a group (or clears it) and returns the refreshed list.
 func (h *Handler) SetDeckGroup(c *fiber.Ctx) error {
 	groupID := strings.TrimSpace(c.FormValue("group_id"))
-	if err := h.service.SetDeckGroup(c.Context(), c.Params("id"), groupID); err != nil {
+	if err := h.service.SetDeckGroup(c.Context(), auth.UserID(c), c.Params("id"), groupID); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	// If called from the deck page, re-render the deck page.
@@ -386,7 +387,7 @@ func (h *Handler) SetDeckGroup(c *fiber.Ctx) error {
 
 // DeleteDeck removes a deck and all its facts/cards, then returns the refreshed list.
 func (h *Handler) DeleteDeck(c *fiber.Ctx) error {
-	if err := h.service.DeleteDeck(c.Context(), c.Params("id")); err != nil {
+	if err := h.service.DeleteDeck(c.Context(), auth.UserID(c), c.Params("id")); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return h.DeckList(c)
@@ -394,7 +395,7 @@ func (h *Handler) DeleteDeck(c *fiber.Ctx) error {
 
 // ResetDeck resets all cards in the deck back to unseen and re-renders the deck page.
 func (h *Handler) ResetDeck(c *fiber.Ctx) error {
-	if err := h.service.ResetDeck(c.Context(), c.Params("id")); err != nil {
+	if err := h.service.ResetDeck(c.Context(), auth.UserID(c), c.Params("id")); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return h.RenderDeckPage(c)
@@ -415,7 +416,7 @@ func (h *Handler) AddDeck(c *fiber.Ctx) error {
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
 	}
-	if _, err := h.service.AddDeck(c.Context(), name, desc, image, groupID); err != nil {
+	if _, err := h.service.AddDeck(c.Context(), auth.UserID(c), name, desc, image, groupID); err != nil {
 		h.removeMedia(image)
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -432,7 +433,7 @@ func (h *Handler) SetDeckImage(c *fiber.Ctx) error {
 	if image == "" {
 		return respond.ToastErr(c, fiber.StatusBadRequest, "Image is required")
 	}
-	old, err := h.service.SetDeckImage(c.Context(), c.Params("id"), image)
+	old, err := h.service.SetDeckImage(c.Context(), auth.UserID(c), c.Params("id"), image)
 	if err != nil {
 		h.removeMedia(image)
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
@@ -444,12 +445,12 @@ func (h *Handler) SetDeckImage(c *fiber.Ctx) error {
 // DeckDetail renders the facts belonging to a deck.
 func (h *Handler) DeckDetail(c *fiber.Ctx) error {
 	id := c.Params("id")
-	facts, err := h.service.ListFactsByDeck(c.Context(), id)
+	facts, err := h.service.ListFactsByDeck(c.Context(), auth.UserID(c), id)
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	deckImage := ""
-	if deck, err := h.service.GetDeck(c.Context(), id); err == nil {
+	if deck, err := h.service.GetDeck(c.Context(), auth.UserID(c), id); err == nil {
 		deckImage = deck.Image
 	}
 	return respond.Partial(c, "components/deck_facts", fiber.Map{"DeckID": id, "Facts": facts, "DeckImage": deckImage})
@@ -458,15 +459,15 @@ func (h *Handler) DeckDetail(c *fiber.Ctx) error {
 // RenderDeckPage renders the full deck detail page.
 func (h *Handler) RenderDeckPage(c *fiber.Ctx) error {
 	id := c.Params("id")
-	deck, err := h.service.GetDeck(c.Context(), id)
+	deck, err := h.service.GetDeck(c.Context(), auth.UserID(c), id)
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusNotFound, "Deck not found")
 	}
-	facts, err := h.service.ListFactsByDeck(c.Context(), id)
+	facts, err := h.service.ListFactsByDeck(c.Context(), auth.UserID(c), id)
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
-	groups, _ := h.service.ListGroups(c.Context())
+	groups, _ := h.service.ListGroups(c.Context(), auth.UserID(c))
 	return respond.Section(c, "deck_page", fiber.Map{
 		"Title":     deck.Name,
 		"Deck":      deck,
@@ -479,7 +480,7 @@ func (h *Handler) RenderDeckPage(c *fiber.Ctx) error {
 
 // ExportDeck returns a zip download (deck.json plus media files) for the deck.
 func (h *Handler) ExportDeck(c *fiber.Ctx) error {
-	exp, err := h.service.ExportDeck(c.Context(), c.Params("id"))
+	exp, err := h.service.ExportDeck(c.Context(), auth.UserID(c), c.Params("id"))
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -529,7 +530,7 @@ func (h *Handler) ImportDeck(c *fiber.Ctx) error {
 	}
 
 	nameOverride := strings.TrimSpace(c.FormValue("name"))
-	_, imported, err := h.service.ImportDeck(c.Context(), exp, nameOverride)
+	_, imported, err := h.service.ImportDeck(c.Context(), auth.UserID(c), exp, nameOverride)
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -572,7 +573,7 @@ func (h *Handler) AddCardToDeck(c *fiber.Ctx) error {
 		h.removeMedia(imgFront, imgBack, audFront)
 		return respond.ToastErr(c, fiber.StatusBadRequest, err.Error())
 	}
-	if _, err := h.service.AddFact(c.Context(), front, back, id, grade, reverse, imgFront, imgBack, audFront, audBack); err != nil {
+	if _, err := h.service.AddFact(c.Context(), auth.UserID(c), front, back, id, grade, reverse, imgFront, imgBack, audFront, audBack); err != nil {
 		h.removeMedia(imgFront, imgBack, audFront, audBack)
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}

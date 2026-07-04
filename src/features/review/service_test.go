@@ -6,10 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/contre95/stella/src/features/auth"
 	"github.com/contre95/stella/src/infra/database"
 	"github.com/contre95/stella/src/srs"
 	"github.com/google/uuid"
 )
+
+// testUser owns every fixture in these tests.
+const testUser = "u1"
 
 // detRand makes scheduling deterministic: random.choice picks the first option
 // and random.uniform returns 0, so interval noise is always 0.
@@ -37,7 +41,10 @@ func newTestEnv(t *testing.T) (*database.SqliteSRS, *Service) {
 	)
 	svc := NewService(db, sched)
 	svc.shuffle = func(n int, swap func(i, j int)) {} // keep queue order deterministic
-	if err := db.AddDeck(context.Background(), &srs.Deck{ID: "d1", Name: "deck"}); err != nil {
+	if _, err := db.UpsertUser(context.Background(), &auth.User{ID: testUser, Issuer: "test", Subject: testUser, Created: 1}); err != nil {
+		t.Fatalf("add user: %v", err)
+	}
+	if err := db.AddDeck(context.Background(), &srs.Deck{ID: "d1", UserID: testUser, Name: "deck"}); err != nil {
 		t.Fatalf("add deck: %v", err)
 	}
 	return db, svc
@@ -49,10 +56,11 @@ func addCard(t *testing.T, db *database.SqliteSRS, c srs.Card) *srs.Card {
 	t.Helper()
 	ctx := context.Background()
 	factID := uuid.NewString()
-	if err := db.AddFact(ctx, &srs.Fact{ID: factID, Front: "q-" + factID, Back: "a", DeckID: "d1", Created: 1, Modified: 1}); err != nil {
+	if err := db.AddFact(ctx, &srs.Fact{ID: factID, UserID: testUser, Front: "q-" + factID, Back: "a", DeckID: "d1", Created: 1, Modified: 1}); err != nil {
 		t.Fatalf("add fact: %v", err)
 	}
 	c.ID = uuid.NewString()
+	c.UserID = testUser
 	c.FactID = factID
 	c.DeckID = "d1"
 	c.View = srs.ViewForward
@@ -68,7 +76,7 @@ func addCard(t *testing.T, db *database.SqliteSRS, c srs.Card) *srs.Card {
 
 func nextCardID(t *testing.T, svc *Service, learnAhead bool) string {
 	t.Helper()
-	ci, err := svc.NextCard(context.Background(), nil, learnAhead)
+	ci, err := svc.NextCard(context.Background(), testUser, nil, learnAhead)
 	if err != nil {
 		t.Fatalf("next card: %v", err)
 	}
@@ -80,7 +88,7 @@ func nextCardID(t *testing.T, svc *Service, learnAhead bool) string {
 
 func grade(t *testing.T, svc *Service, cardID string, g int) {
 	t.Helper()
-	if err := svc.Grade(context.Background(), cardID, g); err != nil {
+	if err := svc.Grade(context.Background(), testUser, cardID, g); err != nil {
 		t.Fatalf("grade: %v", err)
 	}
 }
@@ -168,10 +176,11 @@ func TestGrade0DoubleCopyRemovedOnGraduation(t *testing.T) {
 	}
 	grade(t, svc, a.ID, 4) // graduates: the duplicate copy must be dropped
 
-	if got := len(svc.cardIDsInQueue); got != 0 {
-		t.Fatalf("expected empty queue after graduation, %d cards left: %v", got, svc.cardIDsInQueue)
+	sess := svc.sessions[testUser]
+	if got := len(sess.cardIDsInQueue); got != 0 {
+		t.Fatalf("expected empty queue after graduation, %d cards left: %v", got, sess.cardIDsInQueue)
 	}
-	if _, ok := svc.factIDsMemorised[a.FactID]; !ok {
+	if _, ok := sess.factIDsMemorised[a.FactID]; !ok {
 		t.Fatalf("graduated card's fact not tracked as memorised")
 	}
 	// The rebuilt queue serves the still-memorising b, not a's stale copy.
@@ -218,10 +227,10 @@ func TestMemorisedFactsSeededFromLog(t *testing.T) {
 	// log when it seeds its session.
 	svc2 := NewService(db, svc.scheduler)
 	svc2.shuffle = func(n int, swap func(i, j int)) {}
-	if ci, err := svc2.NextCard(context.Background(), nil, false); err != nil || ci != nil {
+	if ci, err := svc2.NextCard(context.Background(), testUser, nil, false); err != nil || ci != nil {
 		t.Fatalf("expected empty queue on fresh service, got %v, %v", ci, err)
 	}
-	if _, ok := svc2.factIDsMemorised[u.FactID]; !ok {
+	if _, ok := svc2.sessions[testUser].factIDsMemorised[u.FactID]; !ok {
 		t.Fatalf("fact memorised today not seeded from the review log")
 	}
 }
@@ -242,7 +251,7 @@ func TestSisterCardAvoidance(t *testing.T) {
 		NextRep: sched.MidnightUTC(testNow.Unix() - srs.DAY),
 	})
 	rev := srs.Card{
-		ID: uuid.NewString(), FactID: fwd.FactID, DeckID: "d1", View: srs.ViewReverse,
+		ID: uuid.NewString(), UserID: testUser, FactID: fwd.FactID, DeckID: "d1", View: srs.ViewReverse,
 		Grade: 4, Easiness: 2.5, AcqReps: 1, RetReps: 2, AcqRepsSinceLapse: 1, RetRepsSinceLapse: 2,
 		LastRep: testNow.Unix() - 2*srs.DAY, NextRep: collision, Active: true,
 	}
@@ -252,7 +261,7 @@ func TestSisterCardAvoidance(t *testing.T) {
 
 	grade(t, svc, fwd.ID, 4)
 
-	got, err := db.GetCard(ctx, fwd.ID)
+	got, err := db.GetCard(ctx, testUser, fwd.ID)
 	if err != nil {
 		t.Fatalf("get card: %v", err)
 	}

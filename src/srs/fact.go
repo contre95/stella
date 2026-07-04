@@ -5,6 +5,7 @@ package srs
 // quizzes front->back and the optional reverse card quizzes back->front.
 type Fact struct {
 	ID         string
+	UserID     string
 	Front      string
 	Back       string
 	ImageFront string // filename for the front side; empty means no image

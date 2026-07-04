@@ -40,6 +40,9 @@ func NewManager(path string) (*Manager, error) {
 	if err := m.validate.Struct(m.cfg); err != nil {
 		return nil, fmt.Errorf("config validation: %w", err)
 	}
+	if err := m.cfg.Auth.Validate(); err != nil {
+		return nil, fmt.Errorf("config validation: %w", err)
+	}
 	return m, nil
 }
 

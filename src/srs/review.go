@@ -5,6 +5,7 @@ package srs
 // statistics.
 type Review struct {
 	ID                string
+	UserID            string
 	CardID            string
 	Grade             int
 	RetReps           int   // card's ret_reps after this repetition was applied

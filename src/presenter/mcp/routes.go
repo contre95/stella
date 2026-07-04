@@ -15,9 +15,10 @@ type HTTPRegistrar struct {
 	handler http.Handler
 }
 
-// NewHTTPRegistrar builds an HTTPRegistrar backed by a new MCP server.
-func NewHTTPRegistrar(name, version string, cardsService *cards.Service) *HTTPRegistrar {
-	srv := NewServer(name, version, cardsService)
+// NewHTTPRegistrar builds an HTTPRegistrar backed by a new MCP server
+// operating as userID.
+func NewHTTPRegistrar(name, version string, cardsService *cards.Service, userID string) *HTTPRegistrar {
+	srv := NewServer(name, version, cardsService, userID)
 	raw := mcpsdk.NewStreamableHTTPHandler(func(_ *http.Request) *mcpsdk.Server {
 		return srv
 	}, nil)

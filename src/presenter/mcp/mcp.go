@@ -19,15 +19,18 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Server adapts the cards service onto MCP tool handlers.
+// Server adapts the cards service onto MCP tool handlers. The MCP transport
+// has no login, so every tool call runs as the fixed userID it was built with
+// (the local account — MCP is only served in single-user mode).
 type Server struct {
-	cards *cards.Service
+	cards  *cards.Service
+	userID string
 }
 
 // NewServer builds an MCP server exposing the card tools, backed by the given
-// cards service.
-func NewServer(name, version string, cardsService *cards.Service) *mcpsdk.Server {
-	s := &Server{cards: cardsService}
+// cards service and operating as userID.
+func NewServer(name, version string, cardsService *cards.Service, userID string) *mcpsdk.Server {
+	s := &Server{cards: cardsService, userID: userID}
 	srv := mcpsdk.NewServer(&mcpsdk.Implementation{Name: name, Version: version}, nil)
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
@@ -154,7 +157,7 @@ func (s *Server) createCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in C
 		s.removeMedia(imgFront, imgBack, audFront)
 		return nil, CreateCardOutput{}, fmt.Errorf("saving back audio: %w", err)
 	}
-	fact, err := s.cards.AddFact(ctx, front, in.Back, in.DeckID, grade, in.Reverse, imgFront, imgBack, audFront, audBack)
+	fact, err := s.cards.AddFact(ctx, s.userID, front, in.Back, in.DeckID, grade, in.Reverse, imgFront, imgBack, audFront, audBack)
 	if err != nil {
 		s.removeMedia(imgFront, imgBack, audFront, audBack)
 		return nil, CreateCardOutput{}, fmt.Errorf("creating card: %w", err)
@@ -203,7 +206,7 @@ func (s *Server) editCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in Edi
 	if strings.TrimSpace(in.FactID) == "" {
 		return nil, EditCardOutput{}, fmt.Errorf("factId is required — use list_recent_cards to find it")
 	}
-	fact, err := s.cards.GetFact(ctx, in.FactID)
+	fact, err := s.cards.GetFact(ctx, s.userID, in.FactID)
 	if err != nil {
 		return nil, EditCardOutput{}, fmt.Errorf("looking up fact: %w", err)
 	}
@@ -251,12 +254,12 @@ func (s *Server) editCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in Edi
 		s.removeMedia(saved...)
 		return nil, EditCardOutput{}, fmt.Errorf("saving back audio: %w", err)
 	}
-	updated, err := s.cards.UpdateFact(ctx, in.FactID, front, back, imgFront, imgBack, audFront, audBack, in.Reverse)
+	updated, err := s.cards.UpdateFact(ctx, s.userID, in.FactID, front, back, imgFront, imgBack, audFront, audBack, in.Reverse)
 	if err != nil {
 		s.removeMedia(saved...)
 		return nil, EditCardOutput{}, fmt.Errorf("updating card: %w", err)
 	}
-	hasReverse, err := s.cards.HasReverse(ctx, in.FactID)
+	hasReverse, err := s.cards.HasReverse(ctx, s.userID, in.FactID)
 	if err != nil {
 		return nil, EditCardOutput{}, fmt.Errorf("checking reverse card: %w", err)
 	}
@@ -306,7 +309,7 @@ func (s *Server) listRecentCards(ctx context.Context, _ *mcpsdk.CallToolRequest,
 	if limit <= 0 {
 		limit = 20
 	}
-	rows, err := s.cards.ListFacts(ctx)
+	rows, err := s.cards.ListFacts(ctx, s.userID)
 	if err != nil {
 		return nil, ListRecentCardsOutput{}, fmt.Errorf("listing cards: %w", err)
 	}
@@ -353,7 +356,7 @@ func (s *Server) createDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in C
 	if name == "" {
 		return nil, CreateDeckOutput{}, fmt.Errorf("name is required")
 	}
-	d, err := s.cards.AddDeck(ctx, name, in.Description, "", strings.TrimSpace(in.GroupID))
+	d, err := s.cards.AddDeck(ctx, s.userID, name, in.Description, "", strings.TrimSpace(in.GroupID))
 	if err != nil {
 		return nil, CreateDeckOutput{}, fmt.Errorf("creating deck: %w", err)
 	}
@@ -376,7 +379,7 @@ type ListDecksOutput struct {
 }
 
 func (s *Server) listDecks(ctx context.Context, _ *mcpsdk.CallToolRequest, _ ListDecksInput) (*mcpsdk.CallToolResult, ListDecksOutput, error) {
-	decks, err := s.cards.ListDecks(ctx)
+	decks, err := s.cards.ListDecks(ctx, s.userID)
 	if err != nil {
 		return nil, ListDecksOutput{}, fmt.Errorf("listing decks: %w", err)
 	}
@@ -402,7 +405,7 @@ func (s *Server) deleteCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in D
 	if strings.TrimSpace(in.FactID) == "" {
 		return nil, DeleteCardOutput{}, fmt.Errorf("factId is required")
 	}
-	if err := s.cards.DeleteFact(ctx, in.FactID); err != nil {
+	if err := s.cards.DeleteFact(ctx, s.userID, in.FactID); err != nil {
 		return nil, DeleteCardOutput{}, fmt.Errorf("deleting card: %w", err)
 	}
 	return nil, DeleteCardOutput{Deleted: true, FactID: in.FactID}, nil
@@ -423,7 +426,7 @@ func (s *Server) deleteDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in D
 	if strings.TrimSpace(in.DeckID) == "" {
 		return nil, DeleteDeckOutput{}, fmt.Errorf("deckId is required")
 	}
-	if err := s.cards.DeleteDeck(ctx, in.DeckID); err != nil {
+	if err := s.cards.DeleteDeck(ctx, s.userID, in.DeckID); err != nil {
 		return nil, DeleteDeckOutput{}, fmt.Errorf("deleting deck: %w", err)
 	}
 	return nil, DeleteDeckOutput{Deleted: true, DeckID: in.DeckID}, nil
@@ -445,7 +448,7 @@ func (s *Server) createGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in 
 	if name == "" {
 		return nil, CreateGroupOutput{}, fmt.Errorf("name is required")
 	}
-	g, err := s.cards.AddGroup(ctx, name)
+	g, err := s.cards.AddGroup(ctx, s.userID, name)
 	if err != nil {
 		return nil, CreateGroupOutput{}, fmt.Errorf("creating group: %w", err)
 	}
@@ -469,7 +472,7 @@ type ListGroupsOutput struct {
 }
 
 func (s *Server) listGroups(ctx context.Context, _ *mcpsdk.CallToolRequest, _ ListGroupsInput) (*mcpsdk.CallToolResult, ListGroupsOutput, error) {
-	views, err := s.cards.ListGroupViews(ctx)
+	views, err := s.cards.ListGroupViews(ctx, s.userID)
 	if err != nil {
 		return nil, ListGroupsOutput{}, fmt.Errorf("listing groups: %w", err)
 	}
@@ -508,7 +511,7 @@ func (s *Server) renameGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in 
 	if name == "" {
 		return nil, RenameGroupOutput{}, fmt.Errorf("name is required")
 	}
-	g, err := s.cards.UpdateGroup(ctx, in.GroupID, name)
+	g, err := s.cards.UpdateGroup(ctx, s.userID, in.GroupID, name)
 	if err != nil {
 		return nil, RenameGroupOutput{}, fmt.Errorf("renaming group: %w", err)
 	}
@@ -530,7 +533,7 @@ func (s *Server) deleteGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in 
 	if strings.TrimSpace(in.GroupID) == "" {
 		return nil, DeleteGroupOutput{}, fmt.Errorf("groupId is required")
 	}
-	if err := s.cards.DeleteGroup(ctx, in.GroupID); err != nil {
+	if err := s.cards.DeleteGroup(ctx, s.userID, in.GroupID); err != nil {
 		return nil, DeleteGroupOutput{}, fmt.Errorf("deleting group: %w", err)
 	}
 	return nil, DeleteGroupOutput{Deleted: true, GroupID: in.GroupID}, nil
@@ -552,7 +555,7 @@ func (s *Server) setDeckGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in
 	if strings.TrimSpace(in.DeckID) == "" {
 		return nil, SetDeckGroupOutput{}, fmt.Errorf("deckId is required")
 	}
-	if err := s.cards.SetDeckGroup(ctx, in.DeckID, strings.TrimSpace(in.GroupID)); err != nil {
+	if err := s.cards.SetDeckGroup(ctx, s.userID, in.DeckID, strings.TrimSpace(in.GroupID)); err != nil {
 		return nil, SetDeckGroupOutput{}, fmt.Errorf("setting deck group: %w", err)
 	}
 	return nil, SetDeckGroupOutput{DeckID: in.DeckID, GroupID: strings.TrimSpace(in.GroupID)}, nil

@@ -15,7 +15,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// Service holds the cards business logic.
+// Service holds the cards business logic. Every method operates on behalf of
+// one user: userID scopes all repository access.
 type Service struct {
 	repo      srs.Repository
 	scheduler *srs.Scheduler
@@ -77,14 +78,14 @@ func saveImageData(imagesPath string, data []byte) (string, error) {
 // grade < 0 leaves them unseen for the review process to grade.
 // imageFront/imageBack and audioFront/audioBack are filenames of already-saved
 // media files; empty means none.
-func (s *Service) AddFact(ctx context.Context, front, back, deckID string, grade int, reverse bool, imageFront, imageBack, audioFront, audioBack string) (*srs.Fact, error) {
+func (s *Service) AddFact(ctx context.Context, userID, front, back, deckID string, grade int, reverse bool, imageFront, imageBack, audioFront, audioBack string) (*srs.Fact, error) {
 	front = strings.TrimSpace(front)
 	back = strings.TrimSpace(back)
 	deckID = strings.TrimSpace(deckID)
 	if deckID == "" {
 		return nil, fmt.Errorf("deckID is required: every card must belong to a deck")
 	}
-	if _, err := s.repo.GetDeck(ctx, deckID); err != nil {
+	if _, err := s.repo.GetDeck(ctx, userID, deckID); err != nil {
 		if errors.Is(err, srs.ErrNotFound) {
 			return nil, fmt.Errorf("deck %q not found", deckID)
 		}
@@ -93,6 +94,7 @@ func (s *Service) AddFact(ctx context.Context, front, back, deckID string, grade
 	now := time.Now().Unix()
 	fact := &srs.Fact{
 		ID:         uuid.NewString(),
+		UserID:     userID,
 		Front:      front,
 		Back:       back,
 		ImageFront: imageFront,
@@ -123,6 +125,7 @@ func (s *Service) AddFact(ctx context.Context, front, back, deckID string, grade
 		if grade >= 0 {
 			if err := s.repo.AddReview(ctx, &srs.Review{
 				ID:        uuid.NewString(),
+				UserID:    userID,
 				CardID:    c.ID,
 				Grade:     grade,
 				RetReps:   c.RetReps,
@@ -136,13 +139,13 @@ func (s *Service) AddFact(ctx context.Context, front, back, deckID string, grade
 }
 
 // GetFact retrieves a single fact by ID.
-func (s *Service) GetFact(ctx context.Context, id string) (*srs.Fact, error) {
-	return s.repo.GetFact(ctx, id)
+func (s *Service) GetFact(ctx context.Context, userID, id string) (*srs.Fact, error) {
+	return s.repo.GetFact(ctx, userID, id)
 }
 
 // HasReverse reports whether the fact has a reverse sister card.
-func (s *Service) HasReverse(ctx context.Context, factID string) (bool, error) {
-	cards, err := s.repo.CardsForFact(ctx, factID)
+func (s *Service) HasReverse(ctx context.Context, userID, factID string) (bool, error) {
+	cards, err := s.repo.CardsForFact(ctx, userID, factID)
 	if err != nil {
 		return false, err
 	}
@@ -161,13 +164,13 @@ func (s *Service) HasReverse(ctx context.Context, factID string) (bool, error) {
 // files are deleted from disk. reverse is nil to leave the sister cards alone,
 // otherwise the reverse card is created (unseen) or deleted to match it. A
 // fact whose back is empty never keeps a reverse card.
-func (s *Service) UpdateFact(ctx context.Context, factID, front, back string, imageFront, imageBack, audioFront, audioBack *string, reverse *bool) (*srs.Fact, error) {
+func (s *Service) UpdateFact(ctx context.Context, userID, factID, front, back string, imageFront, imageBack, audioFront, audioBack *string, reverse *bool) (*srs.Fact, error) {
 	front = strings.TrimSpace(front)
 	back = strings.TrimSpace(back)
 	if front == "" {
 		return nil, fmt.Errorf("front is required")
 	}
-	fact, err := s.repo.GetFact(ctx, factID)
+	fact, err := s.repo.GetFact(ctx, userID, factID)
 	if err != nil {
 		if errors.Is(err, srs.ErrNotFound) {
 			return nil, fmt.Errorf("fact %q not found", factID)
@@ -195,7 +198,7 @@ func (s *Service) UpdateFact(ctx context.Context, factID, front, back string, im
 		return nil, err
 	}
 
-	cards, err := s.repo.CardsForFact(ctx, factID)
+	cards, err := s.repo.CardsForFact(ctx, userID, factID)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +222,7 @@ func (s *Service) UpdateFact(ctx context.Context, factID, front, back string, im
 			return nil, err
 		}
 	case !wantReverse && revCard != nil:
-		if err := s.repo.DeleteCard(ctx, revCard.ID); err != nil {
+		if err := s.repo.DeleteCard(ctx, userID, revCard.ID); err != nil {
 			return nil, err
 		}
 	}
@@ -232,12 +235,12 @@ func (s *Service) UpdateFact(ctx context.Context, factID, front, back string, im
 
 // ListFacts returns every fact with its sister cards and their statuses,
 // newest first.
-func (s *Service) ListFacts(ctx context.Context) ([]*FactRow, error) {
-	facts, err := s.repo.ListFacts(ctx)
+func (s *Service) ListFacts(ctx context.Context, userID string) ([]*FactRow, error) {
+	facts, err := s.repo.ListFacts(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	decks, err := s.repo.ListDecks(ctx)
+	decks, err := s.repo.ListDecks(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +251,7 @@ func (s *Service) ListFacts(ctx context.Context) ([]*FactRow, error) {
 	now := s.scheduler.AdjustedNow(time.Now())
 	rows := make([]*FactRow, 0, len(facts))
 	for _, f := range facts {
-		cards, err := s.repo.CardsForFact(ctx, f.ID)
+		cards, err := s.repo.CardsForFact(ctx, userID, f.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -267,13 +270,13 @@ func (s *Service) ListFacts(ctx context.Context) ([]*FactRow, error) {
 }
 
 // DeleteFact removes a fact and (via cascade) its cards.
-func (s *Service) DeleteFact(ctx context.Context, id string) error {
-	return s.repo.DeleteFact(ctx, id)
+func (s *Service) DeleteFact(ctx context.Context, userID, id string) error {
+	return s.repo.DeleteFact(ctx, userID, id)
 }
 
 // ResetFact resets all sister cards of a fact back to unseen.
-func (s *Service) ResetFact(ctx context.Context, factID string) error {
-	cards, err := s.repo.CardsForFact(ctx, factID)
+func (s *Service) ResetFact(ctx context.Context, userID, factID string) error {
+	cards, err := s.repo.CardsForFact(ctx, userID, factID)
 	if err != nil {
 		return err
 	}
@@ -287,13 +290,13 @@ func (s *Service) ResetFact(ctx context.Context, factID string) error {
 }
 
 // ResetDeck resets all cards in every fact belonging to the deck back to unseen.
-func (s *Service) ResetDeck(ctx context.Context, deckID string) error {
-	facts, err := s.repo.ListFactsByDeck(ctx, deckID)
+func (s *Service) ResetDeck(ctx context.Context, userID, deckID string) error {
+	facts, err := s.repo.ListFactsByDeck(ctx, userID, deckID)
 	if err != nil {
 		return err
 	}
 	for _, f := range facts {
-		if err := s.ResetFact(ctx, f.ID); err != nil {
+		if err := s.ResetFact(ctx, userID, f.ID); err != nil {
 			return err
 		}
 	}
@@ -301,20 +304,20 @@ func (s *Service) ResetDeck(ctx context.Context, deckID string) error {
 }
 
 // ListDecks returns all decks ordered by name.
-func (s *Service) ListDecks(ctx context.Context) ([]*srs.Deck, error) {
-	return s.repo.ListDecks(ctx)
+func (s *Service) ListDecks(ctx context.Context, userID string) ([]*srs.Deck, error) {
+	return s.repo.ListDecks(ctx, userID)
 }
 
 // GetDeck retrieves a single deck by ID.
-func (s *Service) GetDeck(ctx context.Context, id string) (*srs.Deck, error) {
-	return s.repo.GetDeck(ctx, id)
+func (s *Service) GetDeck(ctx context.Context, userID, id string) (*srs.Deck, error) {
+	return s.repo.GetDeck(ctx, userID, id)
 }
 
 // DeleteDeck removes a deck and all its facts (which cascade to cards), along
 // with its cover picture file if it has one.
-func (s *Service) DeleteDeck(ctx context.Context, id string) error {
-	deck, _ := s.repo.GetDeck(ctx, id)
-	if err := s.repo.DeleteDeck(ctx, id); err != nil {
+func (s *Service) DeleteDeck(ctx context.Context, userID, id string) error {
+	deck, _ := s.repo.GetDeck(ctx, userID, id)
+	if err := s.repo.DeleteDeck(ctx, userID, id); err != nil {
 		return err
 	}
 	if deck != nil && deck.Image != "" {
@@ -325,8 +328,8 @@ func (s *Service) DeleteDeck(ctx context.Context, id string) error {
 
 // SetDeckImage assigns an already-saved media filename as the deck's cover
 // picture and returns the previous filename so callers can clean it up.
-func (s *Service) SetDeckImage(ctx context.Context, id, filename string) (string, error) {
-	deck, err := s.repo.GetDeck(ctx, id)
+func (s *Service) SetDeckImage(ctx context.Context, userID, id, filename string) (string, error) {
+	deck, err := s.repo.GetDeck(ctx, userID, id)
 	if err != nil {
 		return "", err
 	}
@@ -347,10 +350,10 @@ var deckColors = []string{
 // AddDeck creates a new named deck with a random colour. image is the filename
 // of an already-saved cover picture; empty means none. groupID assigns the
 // deck to a group; empty means no group.
-func (s *Service) AddDeck(ctx context.Context, name, description, image, groupID string) (*srs.Deck, error) {
-	all, _ := s.repo.ListDecks(ctx)
+func (s *Service) AddDeck(ctx context.Context, userID, name, description, image, groupID string) (*srs.Deck, error) {
+	all, _ := s.repo.ListDecks(ctx, userID)
 	c := deckColors[len(all)%len(deckColors)]
-	d := &srs.Deck{ID: uuid.NewString(), Name: name, Color: c, Description: description, Image: image, GroupID: groupID}
+	d := &srs.Deck{ID: uuid.NewString(), UserID: userID, Name: name, Color: c, Description: description, Image: image, GroupID: groupID}
 	if err := s.repo.AddDeck(ctx, d); err != nil {
 		return nil, err
 	}
@@ -358,8 +361,8 @@ func (s *Service) AddDeck(ctx context.Context, name, description, image, groupID
 }
 
 // AddGroup creates a new group with the given name.
-func (s *Service) AddGroup(ctx context.Context, name string) (*srs.Group, error) {
-	g := &srs.Group{ID: uuid.NewString(), Name: name}
+func (s *Service) AddGroup(ctx context.Context, userID, name string) (*srs.Group, error) {
+	g := &srs.Group{ID: uuid.NewString(), UserID: userID, Name: name}
 	if err := s.repo.AddGroup(ctx, g); err != nil {
 		return nil, err
 	}
@@ -367,18 +370,18 @@ func (s *Service) AddGroup(ctx context.Context, name string) (*srs.Group, error)
 }
 
 // GetGroup retrieves a single group by ID.
-func (s *Service) GetGroup(ctx context.Context, id string) (*srs.Group, error) {
-	return s.repo.GetGroup(ctx, id)
+func (s *Service) GetGroup(ctx context.Context, userID, id string) (*srs.Group, error) {
+	return s.repo.GetGroup(ctx, userID, id)
 }
 
 // ListGroups returns all groups ordered by name.
-func (s *Service) ListGroups(ctx context.Context) ([]*srs.Group, error) {
-	return s.repo.ListGroups(ctx)
+func (s *Service) ListGroups(ctx context.Context, userID string) ([]*srs.Group, error) {
+	return s.repo.ListGroups(ctx, userID)
 }
 
 // UpdateGroup renames a group.
-func (s *Service) UpdateGroup(ctx context.Context, id, name string) (*srs.Group, error) {
-	g, err := s.repo.GetGroup(ctx, id)
+func (s *Service) UpdateGroup(ctx context.Context, userID, id, name string) (*srs.Group, error) {
+	g, err := s.repo.GetGroup(ctx, userID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -390,16 +393,16 @@ func (s *Service) UpdateGroup(ctx context.Context, id, name string) (*srs.Group,
 }
 
 // DeleteGroup removes a group and unassigns all its decks (they become ungrouped).
-func (s *Service) DeleteGroup(ctx context.Context, id string) error {
-	if err := s.repo.UnsetGroupForDecks(ctx, id); err != nil {
+func (s *Service) DeleteGroup(ctx context.Context, userID, id string) error {
+	if err := s.repo.UnsetGroupForDecks(ctx, userID, id); err != nil {
 		return err
 	}
-	return s.repo.DeleteGroup(ctx, id)
+	return s.repo.DeleteGroup(ctx, userID, id)
 }
 
 // SetDeckGroup assigns a deck to a group (or clears its group when groupID is empty).
-func (s *Service) SetDeckGroup(ctx context.Context, deckID, groupID string) error {
-	deck, err := s.repo.GetDeck(ctx, deckID)
+func (s *Service) SetDeckGroup(ctx context.Context, userID, deckID, groupID string) error {
+	deck, err := s.repo.GetDeck(ctx, userID, deckID)
 	if err != nil {
 		return err
 	}
@@ -410,12 +413,12 @@ func (s *Service) SetDeckGroup(ctx context.Context, deckID, groupID string) erro
 // ListGroupViews returns decks organised into groups for the deck list page.
 // Named groups come first (sorted by name), ungrouped decks are last with a
 // nil Group field.
-func (s *Service) ListGroupViews(ctx context.Context) ([]GroupView, error) {
-	groups, err := s.repo.ListGroups(ctx)
+func (s *Service) ListGroupViews(ctx context.Context, userID string) ([]GroupView, error) {
+	groups, err := s.repo.ListGroups(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	decks, err := s.repo.ListDecks(ctx)
+	decks, err := s.repo.ListDecks(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -437,12 +440,12 @@ func (s *Service) ListGroupViews(ctx context.Context) ([]GroupView, error) {
 }
 
 // ListFactsByDeck returns facts belonging to deckID with their cards and statuses.
-func (s *Service) ListFactsByDeck(ctx context.Context, deckID string) ([]*FactRow, error) {
-	facts, err := s.repo.ListFactsByDeck(ctx, deckID)
+func (s *Service) ListFactsByDeck(ctx context.Context, userID, deckID string) ([]*FactRow, error) {
+	facts, err := s.repo.ListFactsByDeck(ctx, userID, deckID)
 	if err != nil {
 		return nil, err
 	}
-	deck, _ := s.repo.GetDeck(ctx, deckID)
+	deck, _ := s.repo.GetDeck(ctx, userID, deckID)
 	dn, dc := "", ""
 	if deck != nil {
 		dn, dc = deck.Name, deck.Color
@@ -450,7 +453,7 @@ func (s *Service) ListFactsByDeck(ctx context.Context, deckID string) ([]*FactRo
 	now := s.scheduler.AdjustedNow(time.Now())
 	rows := make([]*FactRow, 0, len(facts))
 	for _, f := range facts {
-		cards, err := s.repo.CardsForFact(ctx, f.ID)
+		cards, err := s.repo.CardsForFact(ctx, userID, f.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -494,12 +497,12 @@ type FactExport struct {
 }
 
 // ExportGroup builds a GroupExport containing every deck that belongs to the group.
-func (s *Service) ExportGroup(ctx context.Context, groupID string) (*GroupExport, error) {
-	group, err := s.repo.GetGroup(ctx, groupID)
+func (s *Service) ExportGroup(ctx context.Context, userID, groupID string) (*GroupExport, error) {
+	group, err := s.repo.GetGroup(ctx, userID, groupID)
 	if err != nil {
 		return nil, err
 	}
-	decks, err := s.repo.ListDecks(ctx)
+	decks, err := s.repo.ListDecks(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -508,7 +511,7 @@ func (s *Service) ExportGroup(ctx context.Context, groupID string) (*GroupExport
 		if d.GroupID != groupID {
 			continue
 		}
-		de, err := s.ExportDeck(ctx, d.ID)
+		de, err := s.ExportDeck(ctx, userID, d.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -519,23 +522,23 @@ func (s *Service) ExportGroup(ctx context.Context, groupID string) (*GroupExport
 
 // ImportGroup creates a new group (or assigns decks to an existing group when
 // groupID is non-empty) and imports all decks from the export.
-func (s *Service) ImportGroup(ctx context.Context, exp *GroupExport, groupID string) (*srs.Group, int, error) {
+func (s *Service) ImportGroup(ctx context.Context, userID string, exp *GroupExport, groupID string) (*srs.Group, int, error) {
 	var group *srs.Group
 	var err error
 	if groupID == "" {
-		group, err = s.AddGroup(ctx, exp.Name)
+		group, err = s.AddGroup(ctx, userID, exp.Name)
 		if err != nil {
 			return nil, 0, err
 		}
 	} else {
-		group, err = s.repo.GetGroup(ctx, groupID)
+		group, err = s.repo.GetGroup(ctx, userID, groupID)
 		if err != nil {
 			return nil, 0, err
 		}
 	}
 	imported := 0
 	for i := range exp.Decks {
-		deck, n, err := s.ImportDeck(ctx, &exp.Decks[i], "")
+		deck, n, err := s.ImportDeck(ctx, userID, &exp.Decks[i], "")
 		if err != nil {
 			return group, imported, err
 		}
@@ -549,12 +552,12 @@ func (s *Service) ImportGroup(ctx context.Context, exp *GroupExport, groupID str
 }
 
 // ExportDeck returns a DeckExport for the given deck ID.
-func (s *Service) ExportDeck(ctx context.Context, deckID string) (*DeckExport, error) {
-	deck, err := s.repo.GetDeck(ctx, deckID)
+func (s *Service) ExportDeck(ctx context.Context, userID, deckID string) (*DeckExport, error) {
+	deck, err := s.repo.GetDeck(ctx, userID, deckID)
 	if err != nil {
 		return nil, err
 	}
-	facts, err := s.repo.ListFactsByDeck(ctx, deckID)
+	facts, err := s.repo.ListFactsByDeck(ctx, userID, deckID)
 	if err != nil {
 		return nil, err
 	}
@@ -565,7 +568,7 @@ func (s *Service) ExportDeck(ctx context.Context, deckID string) (*DeckExport, e
 		}
 	}
 	for _, f := range facts {
-		cards, err := s.repo.CardsForFact(ctx, f.ID)
+		cards, err := s.repo.CardsForFact(ctx, userID, f.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -605,7 +608,7 @@ func (s *Service) ExportDeck(ctx context.Context, deckID string) (*DeckExport, e
 
 // ImportDeck creates a new deck from a DeckExport. If name is non-empty it
 // overrides the name stored in the export.
-func (s *Service) ImportDeck(ctx context.Context, exp *DeckExport, nameOverride string) (*srs.Deck, int, error) {
+func (s *Service) ImportDeck(ctx context.Context, userID string, exp *DeckExport, nameOverride string) (*srs.Deck, int, error) {
 	name := exp.Name
 	if nameOverride != "" {
 		name = nameOverride
@@ -622,7 +625,7 @@ func (s *Service) ImportDeck(ctx context.Context, exp *DeckExport, nameOverride 
 		}
 		cover = name
 	}
-	deck, err := s.AddDeck(ctx, name, exp.Description, cover, "")
+	deck, err := s.AddDeck(ctx, userID, name, exp.Description, cover, "")
 	if err != nil {
 		return nil, 0, err
 	}
@@ -675,7 +678,7 @@ func (s *Service) ImportDeck(ctx context.Context, exp *DeckExport, nameOverride 
 			}
 			audBack = name
 		}
-		if _, err := s.AddFact(ctx, fe.Front, fe.Back, deck.ID, -1, fe.Reverse, imgFront, imgBack, audFront, audBack); err != nil {
+		if _, err := s.AddFact(ctx, userID, fe.Front, fe.Back, deck.ID, -1, fe.Reverse, imgFront, imgBack, audFront, audBack); err != nil {
 			return deck, imported, err
 		}
 		imported++
@@ -698,6 +701,7 @@ func (s *Service) status(c *srs.Card, now int64) string {
 func newCard(fact *srs.Fact, view srs.CardView) *srs.Card {
 	c := &srs.Card{
 		ID:     uuid.NewString(),
+		UserID: fact.UserID,
 		FactID: fact.ID,
 		DeckID: fact.DeckID,
 		View:   view,

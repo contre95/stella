@@ -6,6 +6,7 @@ import "unicode/utf8"
 // single grouping dimension for this simpler app).
 type Deck struct {
 	ID          string
+	UserID      string
 	Name        string
 	Color       string
 	Description string

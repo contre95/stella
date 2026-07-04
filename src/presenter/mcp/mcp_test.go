@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/contre95/stella/src/features/auth"
 	"github.com/contre95/stella/src/features/cards"
 	"github.com/contre95/stella/src/features/config"
 	"github.com/contre95/stella/src/infra/database"
@@ -44,7 +45,12 @@ func newTestSession(t *testing.T) (*mcpsdk.ClientSession, string) {
 		time.Now,
 		srs.NewMathRand(),
 	)
-	srv := NewServer("stella-test", "0.0.0", cards.NewService(db, scheduler, cfg))
+	// The default config is single-user, so this creates the local account the
+	// MCP server operates as — the same wiring main.go uses.
+	if _, err := auth.NewService(context.Background(), db, cfg); err != nil {
+		t.Fatalf("auth service: %v", err)
+	}
+	srv := NewServer("stella-test", "0.0.0", cards.NewService(db, scheduler, cfg), auth.LocalUserID)
 
 	ctx := context.Background()
 	serverT, clientT := mcpsdk.NewInMemoryTransports()

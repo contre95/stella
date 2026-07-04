@@ -11,6 +11,7 @@ import (
 // which are only parsed at runtime by the Fiber view engine.
 func TestReviewTemplatesParse(t *testing.T) {
 	for _, rel := range []string{
+		"views/partials/navbar.html",
 		"views/partials/review_card.html",
 		"views/partials/scripts.html",
 		"views/sections/review.html",

@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/contre95/stella/src/features/auth"
 	"github.com/contre95/stella/src/features/config"
 	"github.com/contre95/stella/src/features/hosting/respond"
 	"github.com/gofiber/fiber/v2"
@@ -42,7 +43,7 @@ func parseDeckFilter(raw string) []string {
 // doneData builds the template data for the session-complete page, offering a
 // learn-ahead session when future-scheduled cards exist.
 func (h *Handler) doneData(c *fiber.Ctx, title, deckFilter string, deckIDs []string) fiber.Map {
-	canLearnAhead, err := h.service.HasLearnAhead(c.Context(), deckIDs)
+	canLearnAhead, err := h.service.HasLearnAhead(c.Context(), auth.UserID(c), deckIDs)
 	if err != nil {
 		canLearnAhead = false
 	}
@@ -57,7 +58,7 @@ func (h *Handler) RenderSession(c *fiber.Ctx) error {
 	deckIDs := parseDeckFilter(deckFilter)
 	learnAhead := c.Query("learnahead") == "1"
 
-	ci, err := h.service.NextCard(c.Context(), deckIDs, learnAhead)
+	ci, err := h.service.NextCard(c.Context(), auth.UserID(c), deckIDs, learnAhead)
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -94,11 +95,11 @@ func (h *Handler) GradeCard(c *fiber.Ctx) error {
 		return respond.ToastErr(c, fiber.StatusBadRequest, "grade must be 0–5")
 	}
 
-	if err := h.service.Grade(c.Context(), cardID, grade); err != nil {
+	if err := h.service.Grade(c.Context(), auth.UserID(c), cardID, grade); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 
-	ci, err := h.service.NextCard(c.Context(), deckIDs, learnAhead)
+	ci, err := h.service.NextCard(c.Context(), auth.UserID(c), deckIDs, learnAhead)
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}

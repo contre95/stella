@@ -2,7 +2,7 @@
 
 # Stella
 
-A single-user, self-hosted spaced-repetition web app. The scheduling engine is
+A self-hosted spaced-repetition web app. The scheduling engine is
 a faithful port of [Mnemosyne](https://github.com/mnemosyne-proj/mnemosyne)'s
 SM2 algorithm, rewritten in Go and wrapped in a small HTMX + Tailwind web UI.
 
@@ -16,12 +16,22 @@ IMAGE_TAG=stella podman build -t stella .
 ## Run locally
 
 ```bash
-# Terminal 1 — web UI on :8858
+# Web UI on :8858 (MCP, when enabled, is served at /mcp)
 go run ./src
-
-# Terminal 2 — MCP server on :8859
-go run ./src/cmd/mcp
 ```
 
-Both read the same `config.yaml` and share the same SQLite database. Config
-path is overridable via `STELLA_CONFIG_PATH`.
+Configuration lives in `config.yaml` (see `config.example.yaml`); the path is
+overridable via `STELLA_CONFIG_PATH`.
+
+## Users & login
+
+Stella runs in one of two modes, controlled by `auth.singleUser`:
+
+- `singleUser: true` (default) — no login. All data belongs to one built-in
+  local account.
+- `singleUser: false` — multi-user. Login goes through any OpenID Connect
+  provider (Keycloak, Authentik, Pocket ID, ...) configured under `auth.oidc`,
+  and each user gets their own decks, cards, and review history. Register
+  `<publicURL>/auth/callback` as the redirect URI at the provider. The MCP
+  endpoint is only served in single-user mode, since MCP clients have no
+  login session.

@@ -6,8 +6,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/contre95/stella/src/features/auth"
 	"github.com/contre95/stella/src/srs"
 )
+
+// testUser owns all fixtures; a second user is added where cross-user
+// isolation is asserted.
+const testUser = "u1"
 
 func newTestDB(t *testing.T) *SqliteSRS {
 	t.Helper()
@@ -17,12 +22,20 @@ func newTestDB(t *testing.T) *SqliteSRS {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
+	addUser(t, db, testUser)
 	return db
+}
+
+func addUser(t *testing.T, db *SqliteSRS, id string) {
+	t.Helper()
+	if _, err := db.UpsertUser(context.Background(), &auth.User{ID: id, Issuer: "test", Subject: id, Created: 1}); err != nil {
+		t.Fatalf("add user: %v", err)
+	}
 }
 
 func addDeck(t *testing.T, db *SqliteSRS, id string) {
 	t.Helper()
-	if err := db.AddDeck(context.Background(), &srs.Deck{ID: id, Name: "deck-" + id, Color: "#000"}); err != nil {
+	if err := db.AddDeck(context.Background(), &srs.Deck{ID: id, UserID: testUser, Name: "deck-" + id, Color: "#000"}); err != nil {
 		t.Fatalf("add deck: %v", err)
 	}
 }
@@ -30,13 +43,16 @@ func addDeck(t *testing.T, db *SqliteSRS, id string) {
 func addFact(t *testing.T, db *SqliteSRS, id, deckID string) {
 	t.Helper()
 	ctx := context.Background()
-	if err := db.AddFact(ctx, &srs.Fact{ID: id, Front: "f-" + id, Back: "b-" + id, DeckID: deckID, Created: 1, Modified: 1}); err != nil {
+	if err := db.AddFact(ctx, &srs.Fact{ID: id, UserID: testUser, Front: "f-" + id, Back: "b-" + id, DeckID: deckID, Created: 1, Modified: 1}); err != nil {
 		t.Fatalf("add fact: %v", err)
 	}
 }
 
 func addCard(t *testing.T, db *SqliteSRS, c *srs.Card) {
 	t.Helper()
+	if c.UserID == "" {
+		c.UserID = testUser
+	}
 	if err := db.AddCard(context.Background(), c); err != nil {
 		t.Fatalf("add card: %v", err)
 	}
@@ -50,7 +66,7 @@ func TestFactCardRoundTrip(t *testing.T) {
 	card := &srs.Card{ID: "c1", FactID: "fact1", DeckID: "d1", View: srs.ViewForward, Grade: srs.GradeUnseen, Easiness: 2.5, NextRep: -1, LastRep: -1, Active: true}
 	addCard(t, db, card)
 
-	got, err := db.GetCard(ctx, "c1")
+	got, err := db.GetCard(ctx, testUser, "c1")
 	if err != nil {
 		t.Fatalf("get card: %v", err)
 	}
@@ -64,7 +80,7 @@ func TestFactCardRoundTrip(t *testing.T) {
 	if err := db.UpdateCard(ctx, card); err != nil {
 		t.Fatalf("update card: %v", err)
 	}
-	got, _ = db.GetCard(ctx, "c1")
+	got, _ = db.GetCard(ctx, testUser, "c1")
 	if got.Grade != 4 || got.Easiness != 2.34 || got.NextRep != 1000 {
 		t.Errorf("update not persisted: %+v", *got)
 	}
@@ -72,9 +88,39 @@ func TestFactCardRoundTrip(t *testing.T) {
 
 func TestGetCardNotFound(t *testing.T) {
 	db := newTestDB(t)
-	_, err := db.GetCard(context.Background(), "missing")
+	_, err := db.GetCard(context.Background(), testUser, "missing")
 	if !errors.Is(err, srs.ErrNotFound) {
 		t.Errorf("want ErrNotFound, got %v", err)
+	}
+}
+
+// TestUserScoping: one user's data must be invisible to another, for reads,
+// lists, counts, and deletes alike.
+func TestUserScoping(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	addUser(t, db, "u2")
+	addDeck(t, db, "d1")
+	addFact(t, db, "f1", "d1")
+	addCard(t, db, &srs.Card{ID: "c1", FactID: "f1", DeckID: "d1", View: srs.ViewForward, Grade: srs.GradeUnseen, Easiness: 2.5, NextRep: -1, LastRep: -1, Active: true})
+
+	if _, err := db.GetDeck(ctx, "u2", "d1"); !errors.Is(err, srs.ErrNotFound) {
+		t.Errorf("GetDeck across users: want ErrNotFound, got %v", err)
+	}
+	if _, err := db.GetCard(ctx, "u2", "c1"); !errors.Is(err, srs.ErrNotFound) {
+		t.Errorf("GetCard across users: want ErrNotFound, got %v", err)
+	}
+	if facts, _ := db.ListFacts(ctx, "u2"); len(facts) != 0 {
+		t.Errorf("ListFacts across users: got %d facts, want 0", len(facts))
+	}
+	if n, _ := db.ActiveCount(ctx, "u2"); n != 0 {
+		t.Errorf("ActiveCount across users: got %d, want 0", n)
+	}
+	if err := db.DeleteFact(ctx, "u2", "f1"); err != nil {
+		t.Fatalf("delete fact: %v", err)
+	}
+	if _, err := db.GetFact(ctx, testUser, "f1"); err != nil {
+		t.Errorf("cross-user delete removed the fact: %v", err)
 	}
 }
 
@@ -93,25 +139,25 @@ func TestQueueQueries(t *testing.T) {
 	// Retained card due in the future.
 	addCard(t, db, &srs.Card{ID: "future", FactID: "f3", DeckID: "d1", View: srs.ViewForward, Grade: 4, Easiness: 2.5, NextRep: 5000, LastRep: 100, Active: true})
 
-	if n, _ := db.ActiveCount(ctx); n != 3 {
+	if n, _ := db.ActiveCount(ctx, testUser); n != 3 {
 		t.Errorf("ActiveCount got %d want 3", n)
 	}
-	if n, _ := db.NonMemorisedCount(ctx, nil); n != 1 {
+	if n, _ := db.NonMemorisedCount(ctx, testUser, nil); n != 1 {
 		t.Errorf("NonMemorisedCount got %d want 1", n)
 	}
-	if n, _ := db.ScheduledCount(ctx, 1000, nil); n != 1 {
+	if n, _ := db.ScheduledCount(ctx, testUser, 1000, nil); n != 1 {
 		t.Errorf("ScheduledCount got %d want 1", n)
 	}
 
-	unseen, _ := db.CardsUnseen(ctx, "", -1, nil)
+	unseen, _ := db.CardsUnseen(ctx, testUser, "", -1, nil)
 	if len(unseen) != 1 || unseen[0].ID != "unseen" {
 		t.Errorf("CardsUnseen got %v", ids(unseen))
 	}
-	due, _ := db.CardsDueForRetRep(ctx, 1000, "interval", -1, nil)
+	due, _ := db.CardsDueForRetRep(ctx, testUser, 1000, "interval", -1, nil)
 	if len(due) != 1 || due[0].ID != "due" {
 		t.Errorf("CardsDueForRetRep got %v", ids(due))
 	}
-	ahead, _ := db.CardsLearnAhead(ctx, 1000, "next_rep", -1, nil)
+	ahead, _ := db.CardsLearnAhead(ctx, testUser, 1000, "next_rep", -1, nil)
 	if len(ahead) != 1 || ahead[0].ID != "future" {
 		t.Errorf("CardsLearnAhead got %v", ids(ahead))
 	}
@@ -128,11 +174,11 @@ func TestRelearnVsNewMemorising(t *testing.T) {
 	// grade 1, lapses=0 => new memorising.
 	addCard(t, db, &srs.Card{ID: "newmem", FactID: "f2", DeckID: "d1", View: srs.ViewForward, Grade: 1, Easiness: 2.5, Lapses: 0, Active: true})
 
-	relearn, _ := db.CardsToRelearn(ctx, 1, "-interval", nil)
+	relearn, _ := db.CardsToRelearn(ctx, testUser, 1, "-interval", nil)
 	if len(relearn) != 1 || relearn[0].ID != "relearn" {
 		t.Errorf("CardsToRelearn got %v", ids(relearn))
 	}
-	newmem, _ := db.CardsNewMemorising(ctx, 1, nil)
+	newmem, _ := db.CardsNewMemorising(ctx, testUser, 1, nil)
 	if len(newmem) != 1 || newmem[0].ID != "newmem" {
 		t.Errorf("CardsNewMemorising got %v", ids(newmem))
 	}
@@ -148,7 +194,7 @@ func TestSisterCardCountAndCascade(t *testing.T) {
 	addCard(t, db, &srs.Card{ID: "rev", FactID: "f1", DeckID: "d1", View: srs.ViewReverse, Grade: 4, Easiness: 2.5, NextRep: 1500, Active: true})
 
 	// From fwd's perspective, the reverse sister is scheduled in [1000, 2000).
-	n, err := db.SisterCardCountScheduledBetween(ctx, "f1", "fwd", 1000, 2000)
+	n, err := db.SisterCardCountScheduledBetween(ctx, testUser, "f1", "fwd", 1000, 2000)
 	if err != nil {
 		t.Fatalf("sister count: %v", err)
 	}
@@ -157,11 +203,59 @@ func TestSisterCardCountAndCascade(t *testing.T) {
 	}
 
 	// Deleting the fact cascades to its cards.
-	if err := db.DeleteFact(ctx, "f1"); err != nil {
+	if err := db.DeleteFact(ctx, testUser, "f1"); err != nil {
 		t.Fatalf("delete fact: %v", err)
 	}
-	if n, _ := db.ActiveCount(ctx); n != 0 {
+	if n, _ := db.ActiveCount(ctx, testUser); n != 0 {
 		t.Errorf("cards not cascaded on fact delete: %d remain", n)
+	}
+}
+
+// TestSessions covers the auth store: session round trip, expiry, and delete.
+func TestSessions(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	if err := db.AddSession(ctx, "hash1", testUser, 1000); err != nil {
+		t.Fatalf("add session: %v", err)
+	}
+	u, err := db.UserBySession(ctx, "hash1", 500)
+	if err != nil || u.ID != testUser {
+		t.Fatalf("session lookup: got %v, %v", u, err)
+	}
+	if _, err := db.UserBySession(ctx, "hash1", 1000); !errors.Is(err, auth.ErrNoSession) {
+		t.Errorf("expired session: want ErrNoSession, got %v", err)
+	}
+	if _, err := db.UserBySession(ctx, "unknown", 500); !errors.Is(err, auth.ErrNoSession) {
+		t.Errorf("unknown session: want ErrNoSession, got %v", err)
+	}
+	if err := db.DeleteSession(ctx, "hash1"); err != nil {
+		t.Fatalf("delete session: %v", err)
+	}
+	if _, err := db.UserBySession(ctx, "hash1", 500); !errors.Is(err, auth.ErrNoSession) {
+		t.Errorf("deleted session: want ErrNoSession, got %v", err)
+	}
+}
+
+// TestUpsertUser: the same (issuer, subject) identity must map onto one user,
+// refreshing profile fields on later logins.
+func TestUpsertUser(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+
+	first, err := db.UpsertUser(ctx, &auth.User{ID: "id-a", Issuer: "https://idp", Subject: "sub", Email: "a@x", Name: "A", Created: 1})
+	if err != nil {
+		t.Fatalf("first upsert: %v", err)
+	}
+	second, err := db.UpsertUser(ctx, &auth.User{ID: "id-b", Issuer: "https://idp", Subject: "sub", Email: "b@x", Name: "B", Created: 2})
+	if err != nil {
+		t.Fatalf("second upsert: %v", err)
+	}
+	if second.ID != first.ID {
+		t.Errorf("same identity produced two users: %q vs %q", first.ID, second.ID)
+	}
+	if second.Email != "b@x" || second.Name != "B" {
+		t.Errorf("profile not refreshed: %+v", second)
 	}
 }
 

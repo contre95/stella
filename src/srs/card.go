@@ -23,6 +23,7 @@ const GradeUnseen = -1
 //     retention reps so all cards due the same day share a value.
 type Card struct {
 	ID                string
+	UserID            string
 	FactID            string
 	DeckID            string
 	View              CardView

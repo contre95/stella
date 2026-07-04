@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/contre95/stella/src/features/auth"
 	"github.com/contre95/stella/src/features/config"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/recover"
@@ -24,8 +25,10 @@ type Server struct {
 }
 
 // NewServer builds the Fiber app, wires middleware, static files, the health
-// check, and every feature's routes.
-func NewServer(cm *config.Manager, registrars ...RouteRegistrar) *Server {
+// check, and every feature's routes. The app-shell assets, the health check,
+// and the login endpoints stay public; user media and every feature route sit
+// behind the auth middleware.
+func NewServer(cm *config.Manager, authSvc *auth.Service, registrars ...RouteRegistrar) *Server {
 	engine := html.New("./views", ".html")
 	engine.Reload(cm.Get().Logger.Debug)
 	engine.AddFunc("add", func(a, b int) int { return a + b })
@@ -57,9 +60,12 @@ func NewServer(cm *config.Manager, registrars ...RouteRegistrar) *Server {
 		return c.Next()
 	})
 	app.Static("/", "./public")
+	app.Get("/health", func(c *fiber.Ctx) error { return c.SendString("OK") })
+
+	authSvc.RegisterRoutes(app)
+	app.Use(authSvc.Middleware())
 	app.Static("/images", cm.Get().ImagePath)
 	app.Static("/audio", cm.Get().ImagePath)
-	app.Get("/health", func(c *fiber.Ctx) error { return c.SendString("OK") })
 
 	for _, r := range registrars {
 		r.RegisterRoutes(app)

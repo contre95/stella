@@ -34,15 +34,10 @@ type CardInSession struct {
 	Previews [6]string
 }
 
-// Service drives the review loop: queue selection, grading, and aggregate
-// stats. The queue fields are an exact port of Mnemosyne's SM2Mnemosyne
-// scheduler state (see reset/rebuildQueue/popNextID) and are guarded by mu.
-type Service struct {
-	repo      srs.Repository
-	scheduler *srs.Scheduler
-	shuffle   func(n int, swap func(i, j int)) // injectable for deterministic tests
-
-	mu sync.Mutex
+// session is one user's review-queue state: an exact port of Mnemosyne's
+// SM2Mnemosyne scheduler state (see reset/rebuildQueue/popNextID). Each user
+// studies an independent queue.
+type session struct {
 	// cardIDsInQueue is the review queue. It may contain the same card twice:
 	// grade-0 cards are queued double so they get re-tested within the session.
 	cardIDsInQueue []string
@@ -63,61 +58,84 @@ type Service struct {
 	dayStart   int64
 }
 
+// Service drives the review loop: queue selection, grading, and aggregate
+// stats. Per-user sessions are guarded by mu.
+type Service struct {
+	repo      srs.Repository
+	scheduler *srs.Scheduler
+	shuffle   func(n int, swap func(i, j int)) // injectable for deterministic tests
+
+	mu       sync.Mutex
+	sessions map[string]*session // keyed by user ID
+}
+
 // NewService constructs the review service.
 func NewService(repo srs.Repository, scheduler *srs.Scheduler) *Service {
-	return &Service{repo: repo, scheduler: scheduler, shuffle: rand.Shuffle, stage: -1}
+	return &Service{repo: repo, scheduler: scheduler, shuffle: rand.Shuffle, sessions: map[string]*session{}}
+}
+
+// session returns the user's queue state, creating a fresh (unbuilt) one on
+// first use. Callers must hold s.mu.
+func (s *Service) session(userID string) *session {
+	sess, ok := s.sessions[userID]
+	if !ok {
+		sess = &session{stage: -1}
+		s.sessions[userID] = sess
+	}
+	return sess
 }
 
 // NextCard returns the next card to review, or nil when the queue is empty.
 // deckIDs restricts the session to those decks; nil means all decks.
 // learnAhead allows serving future-scheduled cards once nothing else is left.
 // Selection is a port of Mnemosyne's queue: see rebuildQueue and popNextID.
-func (s *Service) NextCard(ctx context.Context, deckIDs []string, learnAhead bool) (*CardInSession, error) {
+func (s *Service) NextCard(ctx context.Context, userID string, deckIDs []string, learnAhead bool) (*CardInSession, error) {
 	now := s.scheduler.AdjustedNow(s.scheduler.Now())
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.ensureSession(ctx, deckIDs, learnAhead); err != nil {
+	sess := s.session(userID)
+	if err := s.ensureSession(ctx, userID, sess, deckIDs, learnAhead); err != nil {
 		return nil, err
 	}
 
 	var card *srs.Card
 	for card == nil {
-		id, ok, err := s.popNextID(ctx, deckIDs, learnAhead)
+		id, ok, err := s.popNextID(ctx, userID, sess, deckIDs, learnAhead)
 		if err != nil {
 			return nil, err
 		}
 		if !ok {
 			return nil, nil
 		}
-		c, err := s.repo.GetCard(ctx, id)
+		c, err := s.repo.GetCard(ctx, userID, id)
 		switch {
 		case errors.Is(err, srs.ErrNotFound):
 			// Deleted mid-session. Mnemosyne removes deleted cards from the
 			// queue eagerly; serving from a database re-query, we drop them
 			// lazily when popped.
-			s.dropFromQueue(id)
+			sess.dropFromQueue(id)
 		case err != nil:
 			return nil, err
 		case !c.Active:
-			s.dropFromQueue(id)
+			sess.dropFromQueue(id)
 		default:
 			card = c
 		}
 	}
 
-	fact, err := s.repo.GetFact(ctx, card.FactID)
+	fact, err := s.repo.GetFact(ctx, userID, card.FactID)
 	if err != nil {
 		return nil, err
 	}
 
-	remaining, err := s.queueSize(ctx, now, deckIDs)
+	remaining, err := s.queueSize(ctx, userID, now, deckIDs)
 	if err != nil {
 		return nil, err
 	}
 
 	dn, dc, di := "", "", ""
-	if d, err := s.repo.GetDeck(ctx, card.DeckID); err == nil && d != nil {
+	if d, err := s.repo.GetDeck(ctx, userID, card.DeckID); err == nil && d != nil {
 		dn, dc, di = d.Name, d.Color, d.Image
 	}
 
@@ -147,11 +165,12 @@ func intervalLabel(interval int64) string {
 // grade_answer does: remembering memorised facts, dropping the duplicate queue
 // copy of a graduating grade-0 card, and shifting next_rep by whole days while
 // a sister card is scheduled on the same day (avoid_sister_cards).
-func (s *Service) Grade(ctx context.Context, cardID string, grade int) error {
+func (s *Service) Grade(ctx context.Context, userID, cardID string, grade int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	sess := s.session(userID)
 
-	card, err := s.repo.GetCard(ctx, cardID)
+	card, err := s.repo.GetCard(ctx, userID, cardID)
 	if err != nil {
 		return err
 	}
@@ -166,15 +185,15 @@ func (s *Service) Grade(ctx context.Context, cardID string, grade int) error {
 
 	if oldGrade < 2 && grade >= 2 {
 		// Memorising a card keeps its sisters out of the unseen pile today.
-		if s.factIDsMemorised != nil {
-			s.factIDsMemorised[card.FactID] = struct{}{}
+		if sess.factIDsMemorised != nil {
+			sess.factIDsMemorised[card.FactID] = struct{}{}
 		}
 		// A grade-0 card sits in the queue twice; make sure the second copy
 		// doesn't show up again now that the card graduated.
 		if oldGrade == 0 {
-			for i, qid := range s.cardIDsInQueue {
+			for i, qid := range sess.cardIDsInQueue {
 				if qid == card.ID {
-					s.cardIDsInQueue = append(s.cardIDsInQueue[:i], s.cardIDsInQueue[i+1:]...)
+					sess.cardIDsInQueue = append(sess.cardIDsInQueue[:i], sess.cardIDsInQueue[i+1:]...)
 					break
 				}
 			}
@@ -186,7 +205,7 @@ func (s *Service) Grade(ctx context.Context, cardID string, grade int) error {
 	if grade >= 2 {
 		for {
 			count, err := s.repo.SisterCardCountScheduledBetween(
-				ctx, card.FactID, card.ID, card.NextRep, card.NextRep+srs.DAY)
+				ctx, userID, card.FactID, card.ID, card.NextRep, card.NextRep+srs.DAY)
 			if err != nil {
 				return err
 			}
@@ -203,6 +222,7 @@ func (s *Service) Grade(ctx context.Context, cardID string, grade int) error {
 
 	return s.repo.AddReview(ctx, &srs.Review{
 		ID:                uuid.NewString(),
+		UserID:            userID,
 		CardID:            card.ID,
 		Grade:             grade,
 		RetReps:           card.RetReps,
@@ -214,21 +234,21 @@ func (s *Service) Grade(ctx context.Context, cardID string, grade int) error {
 }
 
 // Stats returns aggregate counts for the dashboard (across all decks).
-func (s *Service) Stats(ctx context.Context) (*Stats, error) {
+func (s *Service) Stats(ctx context.Context, userID string) (*Stats, error) {
 	now := s.scheduler.AdjustedNow(s.scheduler.Now())
-	due, err := s.repo.ScheduledCount(ctx, now, nil)
+	due, err := s.repo.ScheduledCount(ctx, userID, now, nil)
 	if err != nil {
 		return nil, err
 	}
-	total, err := s.repo.ActiveCount(ctx)
+	total, err := s.repo.ActiveCount(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	newCards, err := s.repo.NonMemorisedCount(ctx, nil)
+	newCards, err := s.repo.NonMemorisedCount(ctx, userID, nil)
 	if err != nil {
 		return nil, err
 	}
-	decks, err := s.repo.ListDecks(ctx)
+	decks, err := s.repo.ListDecks(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -247,21 +267,21 @@ type ForecastDay struct {
 // days (across all decks), for the dashboard's upcoming-reviews chart. Today's
 // bucket includes anything already due or overdue; later buckets group retention
 // cards by their scheduled day. days must be >= 1.
-func (s *Service) Forecast(ctx context.Context, days int) ([]ForecastDay, error) {
+func (s *Service) Forecast(ctx context.Context, userID string, days int) ([]ForecastDay, error) {
 	if days < 1 {
 		days = 1
 	}
 	now := s.scheduler.AdjustedNow(s.scheduler.Now())
 
 	counts := make([]int, days)
-	due, err := s.repo.ScheduledCount(ctx, now, nil)
+	due, err := s.repo.ScheduledCount(ctx, userID, now, nil)
 	if err != nil {
 		return nil, err
 	}
 	counts[0] = due
 
 	// All retention cards scheduled in the future, bucketed by day offset.
-	future, err := s.repo.CardsLearnAhead(ctx, now, "next_rep", -1, nil)
+	future, err := s.repo.CardsLearnAhead(ctx, userID, now, "next_rep", -1, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +341,7 @@ const heatmapWeeks = 53
 // StudyHeatmap builds a ~year-long study-activity heatmap from the review log,
 // bucketing each review into a study day (honouring day_starts_at, so a late
 // session before the day boundary counts toward the previous day).
-func (s *Service) StudyHeatmap(ctx context.Context) (*Heatmap, error) {
+func (s *Service) StudyHeatmap(ctx context.Context, userID string) (*Heatmap, error) {
 	loc := s.scheduler.Loc
 	if loc == nil {
 		loc = time.Local
@@ -332,7 +352,7 @@ func (s *Service) StudyHeatmap(ctx context.Context) (*Heatmap, error) {
 	startOfWeek := today.AddDate(0, 0, -int(today.Weekday())) // back to Sunday
 	gridStart := startOfWeek.AddDate(0, 0, -(heatmapWeeks-1)*7)
 
-	timestamps, err := s.repo.ReviewTimestampsSince(ctx, gridStart.Unix()-srs.DAY)
+	timestamps, err := s.repo.ReviewTimestampsSince(ctx, userID, gridStart.Unix()-srs.DAY)
 	if err != nil {
 		return nil, err
 	}
@@ -428,42 +448,43 @@ func heatTitle(n int, day time.Time) string {
 	}
 }
 
-// reset re-initialises the queue state; port of SM2Mnemosyne.reset (always
-// with new_only=False, a mode Stella does not expose). Mnemosyne runs it at
-// programme start; the server-side equivalents are a session change (deck
-// filter or learn-ahead flag) and a study-day rollover — see ensureSession.
-func (s *Service) reset(ctx context.Context) error {
-	s.cardIDsInQueue = nil
-	s.factIDsInQueue = map[string]struct{}{}
-	s.factIDsMemorised = map[string]struct{}{}
-	s.cardIDLast = ""
-	s.stage = 1
+// reset re-initialises the user's queue state; port of SM2Mnemosyne.reset
+// (always with new_only=False, a mode Stella does not expose). Mnemosyne runs
+// it at programme start; the server-side equivalents are a session change
+// (deck filter or learn-ahead flag) and a study-day rollover — see
+// ensureSession.
+func (s *Service) reset(ctx context.Context, userID string, sess *session) error {
+	sess.cardIDsInQueue = nil
+	sess.factIDsInQueue = map[string]struct{}{}
+	sess.factIDsMemorised = map[string]struct{}{}
+	sess.cardIDLast = ""
+	sess.stage = 1
 	from, to := s.scheduler.TodayStartAndEnd()
-	factIDs, err := s.repo.FactIDsLearnedToday(ctx, from, to)
+	factIDs, err := s.repo.FactIDsLearnedToday(ctx, userID, from, to)
 	if err != nil {
 		return err
 	}
 	for _, id := range factIDs {
-		s.factIDsMemorised[id] = struct{}{}
+		sess.factIDsMemorised[id] = struct{}{}
 	}
-	s.dayStart = from
+	sess.dayStart = from
 	return nil
 }
 
 // ensureSession resets the queue when it was built for a different deck
 // filter or learn-ahead mode, or for a previous study day. Callers must hold
 // s.mu.
-func (s *Service) ensureSession(ctx context.Context, deckIDs []string, learnAhead bool) error {
+func (s *Service) ensureSession(ctx context.Context, userID string, sess *session, deckIDs []string, learnAhead bool) error {
 	key := strings.Join(deckIDs, ",")
 	if learnAhead {
 		key += "|learnahead"
 	}
 	dayStart, _ := s.scheduler.TodayStartAndEnd()
-	if s.stage < 1 || key != s.sessionKey || dayStart != s.dayStart {
-		if err := s.reset(ctx); err != nil {
+	if sess.stage < 1 || key != sess.sessionKey || dayStart != sess.dayStart {
+		if err := s.reset(ctx, userID, sess); err != nil {
 			return err
 		}
-		s.sessionKey = key
+		sess.sessionKey = key
 	}
 	return nil
 }
@@ -472,22 +493,22 @@ func (s *Service) ensureSession(ctx context.Context, deckIDs []string, learnAhea
 // SM2Mnemosyne.rebuild_queue and must be kept in step with it, including the
 // stage bookkeeping that lets later rebuilds skip stages known to be empty.
 // Callers must hold s.mu.
-func (s *Service) rebuildQueue(ctx context.Context, deckIDs []string, learnAhead bool) error {
+func (s *Service) rebuildQueue(ctx context.Context, userID string, sess *session, deckIDs []string, learnAhead bool) error {
 	now := s.scheduler.AdjustedNow(s.scheduler.Now())
-	s.cardIDsInQueue = s.cardIDsInQueue[:0]
-	s.factIDsInQueue = map[string]struct{}{}
+	sess.cardIDsInQueue = sess.cardIDsInQueue[:0]
+	sess.factIDsInQueue = map[string]struct{}{}
 
 	// enqueue adds a card; copies is 2 for grade-0 cards, which are queued
 	// double so they are re-tested later in the same session.
 	enqueue := func(c *srs.Card, copies int) {
 		for range copies {
-			s.cardIDsInQueue = append(s.cardIDsInQueue, c.ID)
+			sess.cardIDsInQueue = append(sess.cardIDsInQueue, c.ID)
 		}
-		s.factIDsInQueue[c.FactID] = struct{}{}
+		sess.factIDsInQueue[c.FactID] = struct{}{}
 	}
 	shuffleQueue := func() {
-		s.shuffle(len(s.cardIDsInQueue), func(i, j int) {
-			s.cardIDsInQueue[i], s.cardIDsInQueue[j] = s.cardIDsInQueue[j], s.cardIDsInQueue[i]
+		s.shuffle(len(sess.cardIDsInQueue), func(i, j int) {
+			sess.cardIDsInQueue[i], sess.cardIDsInQueue[j] = sess.cardIDsInQueue[j], sess.cardIDsInQueue[i]
 		})
 	}
 
@@ -496,22 +517,22 @@ func (s *Service) rebuildQueue(ctx context.Context, deckIDs []string, learnAhead
 	// Cards scheduled for today or overdue, shortest interval first (being a
 	// day late on an interval of 2 is much worse than on one of 50). Fetch at
 	// most 50 at a time as a memory/re-query trade-off.
-	if s.stage == 1 {
+	if sess.stage == 1 {
 		sortKey := "interval"
 		if s.scheduler.Params.RandomiseScheduledCards {
 			sortKey = "random"
 		}
-		cards, err := s.repo.CardsDueForRetRep(ctx, now, sortKey, 50, deckIDs)
+		cards, err := s.repo.CardsDueForRetRep(ctx, userID, now, sortKey, 50, deckIDs)
 		if err != nil {
 			return err
 		}
 		for _, c := range cards {
 			enqueue(c, 1)
 		}
-		if len(s.cardIDsInQueue) > 0 {
+		if len(sess.cardIDsInQueue) > 0 {
 			return nil
 		}
-		s.stage = 2
+		sess.stage = 2
 	}
 
 	// Stages 2-4 concentrate on a limited number of non-memorised cards, to
@@ -522,7 +543,7 @@ func (s *Service) rebuildQueue(ctx context.Context, deckIDs []string, learnAhead
 	// facts already queued, and stop filling once the hand is full.
 	addNonMemorised := func(cards []*srs.Card, copies int) {
 		for _, c := range cards {
-			if _, in := s.factIDsInQueue[c.FactID]; in {
+			if _, in := sess.factIDsInQueue[c.FactID]; in {
 				continue
 			}
 			if nonMemorisedInQueue < limit {
@@ -538,13 +559,13 @@ func (s *Service) rebuildQueue(ctx context.Context, deckIDs []string, learnAhead
 	// Stage 2
 	//
 	// Rememorise the cards we got wrong (lapsed retention cards).
-	if s.stage == 2 {
-		relearn1, err := s.repo.CardsToRelearn(ctx, 1, "-interval", deckIDs)
+	if sess.stage == 2 {
+		relearn1, err := s.repo.CardsToRelearn(ctx, userID, 1, "-interval", deckIDs)
 		if err != nil {
 			return err
 		}
 		addNonMemorised(relearn1, 1)
-		relearn0, err := s.repo.CardsToRelearn(ctx, 0, "-interval", deckIDs)
+		relearn0, err := s.repo.CardsToRelearn(ctx, userID, 0, "-interval", deckIDs)
 		if err != nil {
 			return err
 		}
@@ -555,8 +576,8 @@ func (s *Service) rebuildQueue(ctx context.Context, deckIDs []string, learnAhead
 		if nonMemorisedInQueue == limit {
 			return nil
 		}
-		if len(s.cardIDsInQueue) == 0 {
-			s.stage = 3
+		if len(sess.cardIDsInQueue) == 0 {
+			sess.stage = 3
 		}
 	}
 
@@ -564,13 +585,13 @@ func (s *Service) rebuildQueue(ctx context.Context, deckIDs []string, learnAhead
 	//
 	// Cards never yet committed to long-term memory, but seen before. Uses <=
 	// so earlier stages can top up the hand from this stage.
-	if s.stage <= 3 {
-		memorising1, err := s.repo.CardsNewMemorising(ctx, 1, deckIDs)
+	if sess.stage <= 3 {
+		memorising1, err := s.repo.CardsNewMemorising(ctx, userID, 1, deckIDs)
 		if err != nil {
 			return err
 		}
 		addNonMemorised(memorising1, 1)
-		memorising0, err := s.repo.CardsNewMemorising(ctx, 0, deckIDs)
+		memorising0, err := s.repo.CardsNewMemorising(ctx, userID, 0, deckIDs)
 		if err != nil {
 			return err
 		}
@@ -579,8 +600,8 @@ func (s *Service) rebuildQueue(ctx context.Context, deckIDs []string, learnAhead
 		if nonMemorisedInQueue == limit {
 			return nil
 		}
-		if len(s.cardIDsInQueue) == 0 {
-			s.stage = 4
+		if len(sess.cardIDsInQueue) == 0 {
+			sess.stage = 4
 		}
 	}
 
@@ -588,48 +609,48 @@ func (s *Service) rebuildQueue(ctx context.Context, deckIDs []string, learnAhead
 	//
 	// Introduce cards seen for the first time, preferentially keeping away
 	// from sister cards of facts memorised today for as long as possible.
-	if s.stage <= 4 {
+	if sess.stage <= 4 {
 		sortKey := ""
 		if s.scheduler.Params.RandomiseNewCards {
 			sortKey = "random"
 		}
-		unseen, err := s.repo.CardsUnseen(ctx, sortKey, min(limit, 50), deckIDs)
+		unseen, err := s.repo.CardsUnseen(ctx, userID, sortKey, min(limit, 50), deckIDs)
 		if err != nil {
 			return err
 		}
 		for _, c := range unseen {
-			_, inQueue := s.factIDsInQueue[c.FactID]
-			_, memorised := s.factIDsMemorised[c.FactID]
+			_, inQueue := sess.factIDsInQueue[c.FactID]
+			_, memorised := sess.factIDsMemorised[c.FactID]
 			if inQueue || memorised {
 				continue
 			}
 			enqueue(c, 1)
 			nonMemorisedInQueue++
 			if nonMemorisedInQueue == limit {
-				s.stage = 2
+				sess.stage = 2
 				return nil
 			}
 		}
 		// If the hand is not full enough, start pulling in sister cards.
 		if nonMemorisedInQueue < limit {
-			unseen, err = s.repo.CardsUnseen(ctx, sortKey, min(limit, 50), deckIDs)
+			unseen, err = s.repo.CardsUnseen(ctx, userID, sortKey, min(limit, 50), deckIDs)
 			if err != nil {
 				return err
 			}
 			for _, c := range unseen {
-				if _, in := s.factIDsInQueue[c.FactID]; in {
+				if _, in := sess.factIDsInQueue[c.FactID]; in {
 					continue
 				}
 				enqueue(c, 1)
 				nonMemorisedInQueue++
 				if nonMemorisedInQueue == limit {
-					s.stage = 2
+					sess.stage = 2
 					return nil
 				}
 			}
 		}
-		if len(s.cardIDsInQueue) == 0 {
-			s.stage = 5
+		if len(sess.cardIDsInQueue) == 0 {
+			sess.stage = 5
 		}
 	}
 
@@ -640,18 +661,18 @@ func (s *Service) rebuildQueue(ctx context.Context, deckIDs []string, learnAhead
 	// scheduled cards first is more useful. Like Mnemosyne, this block is not
 	// gated on the stage so a partially filled hand can still learn ahead.
 	if !learnAhead {
-		s.stage = 2
+		sess.stage = 2
 		return nil
 	}
-	ahead, err := s.repo.CardsLearnAhead(ctx, now, "next_rep", 50, deckIDs)
+	ahead, err := s.repo.CardsLearnAhead(ctx, userID, now, "next_rep", 50, deckIDs)
 	if err != nil {
 		return err
 	}
 	for _, c := range ahead {
-		s.cardIDsInQueue = append(s.cardIDsInQueue, c.ID)
+		sess.cardIDsInQueue = append(sess.cardIDsInQueue, c.ID)
 	}
 	// Relearn cards we get wrong during learn ahead.
-	s.stage = 2
+	sess.stage = 2
 	return nil
 }
 
@@ -659,47 +680,47 @@ func (s *Service) rebuildQueue(ctx context.Context, deckIDs []string, learnAhead
 // it runs empty and making sure the same card is never shown twice in
 // succession. Port of SM2Mnemosyne.next_card; ok is false when there is
 // nothing left to review. Callers must hold s.mu.
-func (s *Service) popNextID(ctx context.Context, deckIDs []string, learnAhead bool) (id string, ok bool, err error) {
+func (s *Service) popNextID(ctx context.Context, userID string, sess *session, deckIDs []string, learnAhead bool) (id string, ok bool, err error) {
 	pop := func() string {
-		id := s.cardIDsInQueue[0]
-		s.cardIDsInQueue = s.cardIDsInQueue[1:]
+		id := sess.cardIDsInQueue[0]
+		sess.cardIDsInQueue = sess.cardIDsInQueue[1:]
 		return id
 	}
-	if len(s.cardIDsInQueue) == 0 {
-		if err := s.rebuildQueue(ctx, deckIDs, learnAhead); err != nil {
+	if len(sess.cardIDsInQueue) == 0 {
+		if err := s.rebuildQueue(ctx, userID, sess, deckIDs, learnAhead); err != nil {
 			return "", false, err
 		}
-		if len(s.cardIDsInQueue) == 0 {
+		if len(sess.cardIDsInQueue) == 0 {
 			return "", false, nil
 		}
 	}
 	id = pop()
-	if s.cardIDLast != "" {
-		for id == s.cardIDLast {
+	if sess.cardIDLast != "" {
+		for id == sess.cardIDLast {
 			// Make sure we have enough cards to vary, but exit in hopeless
 			// situations where the just-shown card is the only one left.
-			if len(s.cardIDsInQueue) == 0 {
-				if err := s.rebuildQueue(ctx, deckIDs, learnAhead); err != nil {
+			if len(sess.cardIDsInQueue) == 0 {
+				if err := s.rebuildQueue(ctx, userID, sess, deckIDs, learnAhead); err != nil {
 					return "", false, err
 				}
-				if len(s.cardIDsInQueue) == 0 {
+				if len(sess.cardIDsInQueue) == 0 {
 					return "", false, nil
 				}
-				if s.onlyCardInQueue(id) {
+				if sess.onlyCardInQueue(id) {
 					return id, true, nil
 				}
 			}
 			id = pop()
 		}
 	}
-	s.cardIDLast = id
+	sess.cardIDLast = id
 	return id, true, nil
 }
 
 // onlyCardInQueue reports whether the (non-empty) queue consists solely of
 // copies of the given card.
-func (s *Service) onlyCardInQueue(id string) bool {
-	for _, qid := range s.cardIDsInQueue {
+func (sess *session) onlyCardInQueue(id string) bool {
+	for _, qid := range sess.cardIDsInQueue {
 		if qid != id {
 			return false
 		}
@@ -708,22 +729,22 @@ func (s *Service) onlyCardInQueue(id string) bool {
 }
 
 // dropFromQueue removes every queued copy of a card that turned out to be
-// deleted or suspended. Callers must hold s.mu.
-func (s *Service) dropFromQueue(id string) {
-	out := s.cardIDsInQueue[:0]
-	for _, qid := range s.cardIDsInQueue {
+// deleted or suspended. Callers must hold the service's mu.
+func (sess *session) dropFromQueue(id string) {
+	out := sess.cardIDsInQueue[:0]
+	for _, qid := range sess.cardIDsInQueue {
 		if qid != id {
 			out = append(out, qid)
 		}
 	}
-	s.cardIDsInQueue = out
+	sess.cardIDsInQueue = out
 }
 
 // HasLearnAhead reports whether any retention card is scheduled in the future,
 // i.e. whether a learn-ahead session would have something to show.
-func (s *Service) HasLearnAhead(ctx context.Context, deckIDs []string) (bool, error) {
+func (s *Service) HasLearnAhead(ctx context.Context, userID string, deckIDs []string) (bool, error) {
 	now := s.scheduler.AdjustedNow(s.scheduler.Now())
-	cards, err := s.repo.CardsLearnAhead(ctx, now, "next_rep", 1, deckIDs)
+	cards, err := s.repo.CardsLearnAhead(ctx, userID, now, "next_rep", 1, deckIDs)
 	if err != nil {
 		return false, err
 	}
@@ -734,12 +755,12 @@ func (s *Service) HasLearnAhead(ctx context.Context, deckIDs []string) (bool, er
 // reps plus every non-memorised card. The hand size only paces how many unseen
 // cards are juggled at once — pickNext keeps introducing them as the hand
 // empties, so they all belong to the session and must all be counted here.
-func (s *Service) queueSize(ctx context.Context, now int64, deckIDs []string) (int, error) {
-	due, err := s.repo.ScheduledCount(ctx, now, deckIDs)
+func (s *Service) queueSize(ctx context.Context, userID string, now int64, deckIDs []string) (int, error) {
+	due, err := s.repo.ScheduledCount(ctx, userID, now, deckIDs)
 	if err != nil {
 		return 0, err
 	}
-	nm, err := s.repo.NonMemorisedCount(ctx, deckIDs)
+	nm, err := s.repo.NonMemorisedCount(ctx, userID, deckIDs)
 	if err != nil {
 		return 0, err
 	}
