@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/contre95/stella/src/srs"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // SqliteSRS implements srs.Repository on top of SQLite.
@@ -29,8 +29,8 @@ const cardColumns = `id, fact_id, deck_id, card_view, grade, easiness,
 
 // NewSqliteSRS opens (or creates) the database at path and ensures the schema.
 func NewSqliteSRS(path string) (*SqliteSRS, error) {
-	dsn := fmt.Sprintf("file:%s?_foreign_keys=on&_busy_timeout=5000", path)
-	db, err := sql.Open("sqlite3", dsn)
+	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(ON)&_pragma=busy_timeout(5000)", path)
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("opening database: %w", err)
 	}
