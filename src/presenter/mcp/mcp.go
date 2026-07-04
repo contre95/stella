@@ -71,6 +71,31 @@ func NewServer(name, version string, cardsService *cards.Service) *mcpsdk.Server
 		Description: "Delete a deck and all its facts (which cascade to their cards) by deck ID. Use list_decks to find the deckId.",
 	}, s.deleteDeck)
 
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name:        "create_group",
+		Description: "Create a new group that decks can be filed under. Returns the groupId to use when creating or moving decks.",
+	}, s.createGroup)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name:        "list_groups",
+		Description: "List all groups with their member decks. Also returns ungrouped decks separately.",
+	}, s.listGroups)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name:        "rename_group",
+		Description: "Rename a group by ID. Use list_groups to find the groupId.",
+	}, s.renameGroup)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name:        "delete_group",
+		Description: "Delete a group by ID. Its member decks become ungrouped (they and their cards are not deleted). Use list_groups to find the groupId.",
+	}, s.deleteGroup)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name:        "set_deck_group",
+		Description: "Assign a deck to a group, or remove it from its current group by passing an empty groupId. Use list_decks and list_groups to find the IDs.",
+	}, s.setDeckGroup)
+
 	return srv
 }
 
@@ -311,13 +336,16 @@ func (s *Server) listRecentCards(ctx context.Context, _ *mcpsdk.CallToolRequest,
 
 // CreateDeckInput is the argument schema for create_deck.
 type CreateDeckInput struct {
-	Name string `json:"name" jsonschema:"Name of the deck. Required."`
+	Name        string `json:"name" jsonschema:"Name of the deck. Required."`
+	Description string `json:"description,omitempty" jsonschema:"Optional description for the deck."`
+	GroupID     string `json:"groupId,omitempty" jsonschema:"Optional group ID to file the deck under. Use list_groups or create_group first."`
 }
 
 // CreateDeckOutput is the result schema for create_deck.
 type CreateDeckOutput struct {
-	DeckID string `json:"deckId"`
-	Name   string `json:"name"`
+	DeckID  string `json:"deckId"`
+	Name    string `json:"name"`
+	GroupID string `json:"groupId,omitempty"`
 }
 
 func (s *Server) createDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in CreateDeckInput) (*mcpsdk.CallToolResult, CreateDeckOutput, error) {
@@ -325,11 +353,11 @@ func (s *Server) createDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in C
 	if name == "" {
 		return nil, CreateDeckOutput{}, fmt.Errorf("name is required")
 	}
-	d, err := s.cards.AddDeck(ctx, name, "", "", "")
+	d, err := s.cards.AddDeck(ctx, name, in.Description, "", strings.TrimSpace(in.GroupID))
 	if err != nil {
 		return nil, CreateDeckOutput{}, fmt.Errorf("creating deck: %w", err)
 	}
-	return nil, CreateDeckOutput{DeckID: d.ID, Name: d.Name}, nil
+	return nil, CreateDeckOutput{DeckID: d.ID, Name: d.Name, GroupID: d.GroupID}, nil
 }
 
 // ListDecksInput is the argument schema for list_decks.
@@ -337,8 +365,9 @@ type ListDecksInput struct{}
 
 // DeckSummary is one deck in list_decks output.
 type DeckSummary struct {
-	DeckID string `json:"deckId"`
-	Name   string `json:"name"`
+	DeckID  string `json:"deckId"`
+	Name    string `json:"name"`
+	GroupID string `json:"groupId,omitempty"`
 }
 
 // ListDecksOutput is the result schema for list_decks.
@@ -353,7 +382,7 @@ func (s *Server) listDecks(ctx context.Context, _ *mcpsdk.CallToolRequest, _ Lis
 	}
 	out := ListDecksOutput{Decks: make([]DeckSummary, 0, len(decks))}
 	for _, d := range decks {
-		out.Decks = append(out.Decks, DeckSummary{DeckID: d.ID, Name: d.Name})
+		out.Decks = append(out.Decks, DeckSummary{DeckID: d.ID, Name: d.Name, GroupID: d.GroupID})
 	}
 	return nil, out, nil
 }
@@ -398,6 +427,135 @@ func (s *Server) deleteDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in D
 		return nil, DeleteDeckOutput{}, fmt.Errorf("deleting deck: %w", err)
 	}
 	return nil, DeleteDeckOutput{Deleted: true, DeckID: in.DeckID}, nil
+}
+
+// CreateGroupInput is the argument schema for create_group.
+type CreateGroupInput struct {
+	Name string `json:"name" jsonschema:"Name of the group. Required."`
+}
+
+// CreateGroupOutput is the result schema for create_group.
+type CreateGroupOutput struct {
+	GroupID string `json:"groupId"`
+	Name    string `json:"name"`
+}
+
+func (s *Server) createGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in CreateGroupInput) (*mcpsdk.CallToolResult, CreateGroupOutput, error) {
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, CreateGroupOutput{}, fmt.Errorf("name is required")
+	}
+	g, err := s.cards.AddGroup(ctx, name)
+	if err != nil {
+		return nil, CreateGroupOutput{}, fmt.Errorf("creating group: %w", err)
+	}
+	return nil, CreateGroupOutput{GroupID: g.ID, Name: g.Name}, nil
+}
+
+// ListGroupsInput is the argument schema for list_groups.
+type ListGroupsInput struct{}
+
+// GroupSummary is one group with its decks in list_groups output.
+type GroupSummary struct {
+	GroupID string        `json:"groupId"`
+	Name    string        `json:"name"`
+	Decks   []DeckSummary `json:"decks"`
+}
+
+// ListGroupsOutput is the result schema for list_groups.
+type ListGroupsOutput struct {
+	Groups    []GroupSummary `json:"groups"`
+	Ungrouped []DeckSummary  `json:"ungrouped"`
+}
+
+func (s *Server) listGroups(ctx context.Context, _ *mcpsdk.CallToolRequest, _ ListGroupsInput) (*mcpsdk.CallToolResult, ListGroupsOutput, error) {
+	views, err := s.cards.ListGroupViews(ctx)
+	if err != nil {
+		return nil, ListGroupsOutput{}, fmt.Errorf("listing groups: %w", err)
+	}
+	out := ListGroupsOutput{Groups: make([]GroupSummary, 0), Ungrouped: make([]DeckSummary, 0)}
+	for _, v := range views {
+		decks := make([]DeckSummary, 0, len(v.Decks))
+		for _, d := range v.Decks {
+			decks = append(decks, DeckSummary{DeckID: d.ID, Name: d.Name, GroupID: d.GroupID})
+		}
+		if v.Group == nil {
+			out.Ungrouped = decks
+		} else {
+			out.Groups = append(out.Groups, GroupSummary{GroupID: v.Group.ID, Name: v.Group.Name, Decks: decks})
+		}
+	}
+	return nil, out, nil
+}
+
+// RenameGroupInput is the argument schema for rename_group.
+type RenameGroupInput struct {
+	GroupID string `json:"groupId" jsonschema:"Group ID to rename. Required — use list_groups to find it."`
+	Name    string `json:"name" jsonschema:"New name for the group. Required."`
+}
+
+// RenameGroupOutput is the result schema for rename_group.
+type RenameGroupOutput struct {
+	GroupID string `json:"groupId"`
+	Name    string `json:"name"`
+}
+
+func (s *Server) renameGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in RenameGroupInput) (*mcpsdk.CallToolResult, RenameGroupOutput, error) {
+	if strings.TrimSpace(in.GroupID) == "" {
+		return nil, RenameGroupOutput{}, fmt.Errorf("groupId is required")
+	}
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, RenameGroupOutput{}, fmt.Errorf("name is required")
+	}
+	g, err := s.cards.UpdateGroup(ctx, in.GroupID, name)
+	if err != nil {
+		return nil, RenameGroupOutput{}, fmt.Errorf("renaming group: %w", err)
+	}
+	return nil, RenameGroupOutput{GroupID: g.ID, Name: g.Name}, nil
+}
+
+// DeleteGroupInput is the argument schema for delete_group.
+type DeleteGroupInput struct {
+	GroupID string `json:"groupId" jsonschema:"Group ID to delete. Its decks become ungrouped. Required."`
+}
+
+// DeleteGroupOutput is the result schema for delete_group.
+type DeleteGroupOutput struct {
+	Deleted bool   `json:"deleted"`
+	GroupID string `json:"groupId"`
+}
+
+func (s *Server) deleteGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in DeleteGroupInput) (*mcpsdk.CallToolResult, DeleteGroupOutput, error) {
+	if strings.TrimSpace(in.GroupID) == "" {
+		return nil, DeleteGroupOutput{}, fmt.Errorf("groupId is required")
+	}
+	if err := s.cards.DeleteGroup(ctx, in.GroupID); err != nil {
+		return nil, DeleteGroupOutput{}, fmt.Errorf("deleting group: %w", err)
+	}
+	return nil, DeleteGroupOutput{Deleted: true, GroupID: in.GroupID}, nil
+}
+
+// SetDeckGroupInput is the argument schema for set_deck_group.
+type SetDeckGroupInput struct {
+	DeckID  string `json:"deckId" jsonschema:"Deck ID to move. Required — use list_decks to find it."`
+	GroupID string `json:"groupId,omitempty" jsonschema:"Group ID to assign the deck to. Omit or pass empty to remove the deck from its current group."`
+}
+
+// SetDeckGroupOutput is the result schema for set_deck_group.
+type SetDeckGroupOutput struct {
+	DeckID  string `json:"deckId"`
+	GroupID string `json:"groupId,omitempty"`
+}
+
+func (s *Server) setDeckGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in SetDeckGroupInput) (*mcpsdk.CallToolResult, SetDeckGroupOutput, error) {
+	if strings.TrimSpace(in.DeckID) == "" {
+		return nil, SetDeckGroupOutput{}, fmt.Errorf("deckId is required")
+	}
+	if err := s.cards.SetDeckGroup(ctx, in.DeckID, strings.TrimSpace(in.GroupID)); err != nil {
+		return nil, SetDeckGroupOutput{}, fmt.Errorf("setting deck group: %w", err)
+	}
+	return nil, SetDeckGroupOutput{DeckID: in.DeckID, GroupID: strings.TrimSpace(in.GroupID)}, nil
 }
 
 // removeMedia deletes named media files from the media directory, silently
