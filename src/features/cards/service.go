@@ -286,6 +286,20 @@ func (s *Service) ResetFact(ctx context.Context, factID string) error {
 	return nil
 }
 
+// ResetDeck resets all cards in every fact belonging to the deck back to unseen.
+func (s *Service) ResetDeck(ctx context.Context, deckID string) error {
+	facts, err := s.repo.ListFactsByDeck(ctx, deckID)
+	if err != nil {
+		return err
+	}
+	for _, f := range facts {
+		if err := s.ResetFact(ctx, f.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ListDecks returns all decks ordered by name.
 func (s *Service) ListDecks(ctx context.Context) ([]*srs.Deck, error) {
 	return s.repo.ListDecks(ctx)

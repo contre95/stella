@@ -392,6 +392,14 @@ func (h *Handler) DeleteDeck(c *fiber.Ctx) error {
 	return h.DeckList(c)
 }
 
+// ResetDeck resets all cards in the deck back to unseen and re-renders the deck page.
+func (h *Handler) ResetDeck(c *fiber.Ctx) error {
+	if err := h.service.ResetDeck(c.Context(), c.Params("id")); err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return h.RenderDeckPage(c)
+}
+
 // AddDeck creates a deck and returns the refreshed list.
 func (h *Handler) AddDeck(c *fiber.Ctx) error {
 	name := strings.TrimSpace(c.FormValue("name"))
