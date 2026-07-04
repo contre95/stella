@@ -25,10 +25,7 @@ COPY config.example.yaml               ./config.yaml
 
 RUN mkdir -p /app/data
 
-# Web UI
+# Web UI (MCP, when enabled, is served on the same port at /mcp)
 EXPOSE 8858
 
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
-
-ENTRYPOINT ["/docker-entrypoint.sh"]
+ENTRYPOINT ["./stella"]

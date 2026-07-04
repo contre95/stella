@@ -7,7 +7,6 @@ on:
     paths:
       - .github/workflows/codeberg.yaml
       - Containerfile
-      - docker-entrypoint.sh
       - src/**
       - views/**
       - go.mod
