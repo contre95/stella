@@ -29,6 +29,32 @@ func (s *Service) RegisterRoutes(app *fiber.App) {
 	app.Get("/auth/login", s.login)
 	app.Get("/auth/callback", s.callback)
 	app.Get("/auth/logout", s.logout)
+	// RFC 9728 discovery for OAuth-capable MCP clients. Served at both the
+	// path-inserted location (for the /mcp resource) and the root, since
+	// clients differ in which they try.
+	app.Get(ProtectedResourceMetadataPath, s.protectedResourceMetadata)
+	app.Get("/.well-known/oauth-protected-resource", s.protectedResourceMetadata)
+}
+
+// protectedResourceMetadata serves the RFC 9728 document that tells MCP
+// clients which authorization server protects /mcp. Public and CORS-open:
+// browser-based clients fetch it cross-origin before authenticating.
+// RFC 9728 requires the resource identifier to correspond to the well-known
+// path the document was fetched from: the root document describes the origin,
+// the path-inserted one the /mcp resource. Clients reject a mismatch.
+func (s *Service) protectedResourceMetadata(c *fiber.Ctx) error {
+	o := s.cfg.Get().Auth.OIDC
+	resource := strings.TrimRight(o.PublicURL, "/")
+	if strings.HasSuffix(c.Path(), "/mcp") {
+		resource += "/mcp"
+	}
+	c.Set("Access-Control-Allow-Origin", "*")
+	return c.JSON(fiber.Map{
+		"resource":                 resource,
+		"authorization_servers":    []string{o.Issuer},
+		"bearer_methods_supported": []string{"header"},
+		"scopes_supported":         []string{"openid", "profile", "email"},
+	})
 }
 
 // login starts the OIDC authorization-code flow: remember state, nonce, and

@@ -41,6 +41,23 @@ func (s *SqliteSRS) UpsertUser(ctx context.Context, u *auth.User) (*auth.User, e
 	return &existing, nil
 }
 
+// UserByIdentity resolves an (issuer, subject) identity to its user;
+// auth.ErrUnknownUser when no such user exists.
+func (s *SqliteSRS) UserByIdentity(ctx context.Context, issuer, subject string) (*auth.User, error) {
+	var u auth.User
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, issuer, subject, email, name, created FROM users WHERE issuer=? AND subject=?`,
+		issuer, subject).
+		Scan(&u.ID, &u.Issuer, &u.Subject, &u.Email, &u.Name, &u.Created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, auth.ErrUnknownUser
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
 func (s *SqliteSRS) AddSession(ctx context.Context, tokenHash, userID string, expires int64) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO sessions (token_hash, user_id, expires) VALUES (?, ?, ?)`, tokenHash, userID, expires)

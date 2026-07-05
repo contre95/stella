@@ -32,6 +32,10 @@ var ErrNoSession = errors.New("no session")
 // unknown.
 var ErrInvalidAPIToken = errors.New("invalid api token")
 
+// ErrUnknownUser is returned by Store.UserByIdentity when no user with that
+// (issuer, subject) identity exists.
+var ErrUnknownUser = errors.New("unknown user")
+
 // APIToken grants bearer-token access to the MCP endpoint for its owner.
 type APIToken struct {
 	Hash    string // SHA-256 hex of the raw token (never store raw)
@@ -79,6 +83,9 @@ type Store interface {
 	UserByAPIToken(ctx context.Context, tokenHash string) (*User, error)
 	DeleteAPIToken(ctx context.Context, tokenHash string) error
 	ListAPITokens(ctx context.Context, userID string) ([]*APIToken, error)
+	// UserByIdentity resolves an (issuer, subject) identity to its user;
+	// ErrUnknownUser when no such user exists.
+	UserByIdentity(ctx context.Context, issuer, subject string) (*User, error)
 }
 
 // Service drives authentication: the OIDC login flow, session cookies, and
@@ -88,6 +95,11 @@ type Service struct {
 	cfg      *config.Manager
 	oauth    *oauth2.Config
 	verifier *oidc.IDTokenVerifier
+	// accessVerifier validates OAuth access tokens presented to /mcp. Unlike
+	// verifier it skips the audience check: MCP clients hold their own client
+	// registrations at the provider, so their tokens' audience is not Stella's
+	// client ID.
+	accessVerifier *oidc.IDTokenVerifier
 }
 
 // NewService builds the auth service. Single-user mode just ensures the local
@@ -110,6 +122,7 @@ func NewService(ctx context.Context, store Store, cfg *config.Manager) (*Service
 		return nil, fmt.Errorf("oidc discovery for %q: %w", a.OIDC.Issuer, err)
 	}
 	s.verifier = provider.Verifier(&oidc.Config{ClientID: a.OIDC.ClientID})
+	s.accessVerifier = provider.Verifier(&oidc.Config{SkipClientIDCheck: true})
 	s.oauth = &oauth2.Config{
 		ClientID:     a.OIDC.ClientID,
 		ClientSecret: a.OIDC.ClientSecret,
@@ -167,6 +180,18 @@ func (s *Service) userByRawAPIToken(ctx context.Context, raw string) (*User, err
 	return s.store.UserByAPIToken(ctx, hashToken(raw))
 }
 
+// userByAccessToken verifies a JWT access token against the OIDC provider's
+// keys and resolves its subject to an existing Stella user. Users who have
+// never signed into the web UI get ErrUnknownUser — they must log in once so
+// the account exists.
+func (s *Service) userByAccessToken(ctx context.Context, raw string) (*User, error) {
+	tok, err := s.accessVerifier.Verify(ctx, raw)
+	if err != nil {
+		return nil, err
+	}
+	return s.store.UserByIdentity(ctx, tok.Issuer, tok.Subject)
+}
+
 // mcpUserIDKey is the context key used to propagate the authenticated user ID
 // into the net/http MCP handler.
 type mcpUserIDKey struct{}
@@ -178,27 +203,40 @@ func MCPUserIDFromContext(ctx context.Context) string {
 	return v
 }
 
+// ProtectedResourceMetadataPath is where the RFC 9728 discovery document for
+// the /mcp resource is served, advertised in 401 WWW-Authenticate headers so
+// OAuth-capable MCP clients can find the authorization server.
+const ProtectedResourceMetadataPath = "/.well-known/oauth-protected-resource/mcp"
+
 // MCPBearerMiddleware is a net/http middleware that authenticates requests to
 // the MCP endpoint. In single-user mode the local user is assumed without a
-// token check; in multi-user mode a valid Bearer token is required.
+// token check. In multi-user mode the bearer token may be either a Stella API
+// token (minted at /settings/tokens) or an OAuth access token issued by the
+// configured OIDC provider.
 func (s *Service) MCPBearerMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var userID string
 		if s.SingleUser() {
-			userID = LocalUserID
-		} else {
-			parts := strings.Fields(r.Header.Get("Authorization"))
-			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-				http.Error(w, "missing bearer token", http.StatusUnauthorized)
-				return
-			}
-			user, err := s.userByRawAPIToken(r.Context(), parts[1])
-			if err != nil {
-				http.Error(w, "invalid token", http.StatusUnauthorized)
-				return
-			}
-			userID = user.ID
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), mcpUserIDKey{}, LocalUserID)))
+			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), mcpUserIDKey{}, userID)))
+		unauthorized := func(msg string) {
+			metadataURL := strings.TrimRight(s.cfg.Get().Auth.OIDC.PublicURL, "/") + ProtectedResourceMetadataPath
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf("Bearer resource_metadata=%q", metadataURL))
+			http.Error(w, msg, http.StatusUnauthorized)
+		}
+		parts := strings.Fields(r.Header.Get("Authorization"))
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
+			unauthorized("missing bearer token")
+			return
+		}
+		user, err := s.userByRawAPIToken(r.Context(), parts[1])
+		if errors.Is(err, ErrInvalidAPIToken) && strings.Count(parts[1], ".") == 2 {
+			user, err = s.userByAccessToken(r.Context(), parts[1])
+		}
+		if err != nil {
+			unauthorized("invalid token")
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), mcpUserIDKey{}, user.ID)))
 	})
 }
