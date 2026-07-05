@@ -51,13 +51,40 @@ func (m *Manager) load() error {
 	if err != nil {
 		return fmt.Errorf("reading config: %w", err)
 	}
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return fmt.Errorf("parsing config: %w", err)
+	}
+	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
+		if err := resolveEnvVars(root.Content[0]); err != nil {
+			return fmt.Errorf("resolving env vars in config: %w", err)
+		}
+	}
 	// Start from the defaults so keys omitted from the file keep their default
 	// value instead of being zeroed (e.g. a missing imagePath must not become "").
 	cfg := defaultConfig()
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return fmt.Errorf("parsing config: %w", err)
+	if err := root.Decode(&cfg); err != nil {
+		return fmt.Errorf("decoding config: %w", err)
 	}
 	m.cfg = &cfg
+	return nil
+}
+
+func resolveEnvVars(node *yaml.Node) error {
+	if node.Tag == "!env_var" {
+		val, ok := os.LookupEnv(node.Value)
+		if !ok {
+			return fmt.Errorf("env var %q referenced in config is not set", node.Value)
+		}
+		node.Tag = "!!str"
+		node.Value = val
+		return nil
+	}
+	for _, child := range node.Content {
+		if err := resolveEnvVars(child); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
