@@ -353,7 +353,7 @@ var deckColors = []string{
 func (s *Service) AddDeck(ctx context.Context, userID, name, description, image, groupID string) (*srs.Deck, error) {
 	all, _ := s.repo.ListDecks(ctx, userID)
 	c := deckColors[len(all)%len(deckColors)]
-	d := &srs.Deck{ID: uuid.NewString(), UserID: userID, Name: name, Color: c, Description: description, Image: image, GroupID: groupID}
+	d := &srs.Deck{ID: uuid.NewString(), UserID: userID, Name: name, Color: c, Description: description, Image: image, GroupID: groupID, StudyEnabled: true}
 	if err := s.repo.AddDeck(ctx, d); err != nil {
 		return nil, err
 	}
@@ -408,6 +408,16 @@ func (s *Service) SetDeckGroup(ctx context.Context, userID, deckID, groupID stri
 	}
 	deck.GroupID = groupID
 	return s.repo.UpdateDeck(ctx, deck)
+}
+
+// ToggleDeckStudy flips a deck's StudyEnabled flag and returns the updated deck.
+func (s *Service) ToggleDeckStudy(ctx context.Context, userID, deckID string) (*srs.Deck, error) {
+	deck, err := s.repo.GetDeck(ctx, userID, deckID)
+	if err != nil {
+		return nil, err
+	}
+	deck.StudyEnabled = !deck.StudyEnabled
+	return deck, s.repo.UpdateDeck(ctx, deck)
 }
 
 // ListGroupViews returns decks organised into groups for the deck list page.

@@ -740,6 +740,13 @@ func (sess *session) dropFromQueue(id string) {
 	sess.cardIDsInQueue = out
 }
 
+// EnabledDeckIDs returns the IDs of all decks the user has marked for study.
+// The review handler uses this to populate the default queue when no explicit
+// deck filter is provided.
+func (s *Service) EnabledDeckIDs(ctx context.Context, userID string) ([]string, error) {
+	return s.repo.ListStudyEnabledDeckIDs(ctx, userID)
+}
+
 // HasLearnAhead reports whether any retention card is scheduled in the future,
 // i.e. whether a learn-ahead session would have something to show.
 func (s *Service) HasLearnAhead(ctx context.Context, userID string, deckIDs []string) (bool, error) {

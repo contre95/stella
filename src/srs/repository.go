@@ -36,6 +36,9 @@ type Repository interface {
 	ListDecks(ctx context.Context, userID string) ([]*Deck, error)
 	DeleteDeck(ctx context.Context, userID, id string) error // deletes deck and all its facts (cascades to cards)
 	ListFactsByDeck(ctx context.Context, userID, deckID string) ([]*Fact, error)
+	// ListStudyEnabledDeckIDs returns the IDs of all decks with study_enabled=true.
+	// Used by the review service to populate the default study queue.
+	ListStudyEnabledDeckIDs(ctx context.Context, userID string) ([]string, error)
 
 	// Groups.
 	AddGroup(ctx context.Context, g *Group) error

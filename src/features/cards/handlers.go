@@ -460,6 +460,14 @@ func (h *Handler) Import(c *fiber.Ctx) error {
 	return h.DeckList(c)
 }
 
+// ToggleDeckStudy flips a deck's study-enabled flag and returns the refreshed deck list.
+func (h *Handler) ToggleDeckStudy(c *fiber.Ctx) error {
+	if _, err := h.service.ToggleDeckStudy(c.Context(), auth.UserID(c), c.Params("id")); err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return h.DeckList(c)
+}
+
 // SetDeckGroup assigns a deck to a group (or clears it) and returns the refreshed list.
 func (h *Handler) SetDeckGroup(c *fiber.Ctx) error {
 	groupID := strings.TrimSpace(c.FormValue("group_id"))

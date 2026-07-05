@@ -84,13 +84,14 @@ CREATE TABLE IF NOT EXISTS groups (
 );
 
 CREATE TABLE IF NOT EXISTS decks (
-	id      TEXT PRIMARY KEY,
-	user_id TEXT NOT NULL,
-	name    TEXT NOT NULL,
-	color   TEXT NOT NULL DEFAULT '#8b5cf6',
-	description TEXT NOT NULL DEFAULT '',
-	image   TEXT NOT NULL DEFAULT '',
-	group_id TEXT,
+	id            TEXT PRIMARY KEY,
+	user_id       TEXT NOT NULL,
+	name          TEXT NOT NULL,
+	color         TEXT NOT NULL DEFAULT '#8b5cf6',
+	description   TEXT NOT NULL DEFAULT '',
+	image         TEXT NOT NULL DEFAULT '',
+	group_id      TEXT,
+	study_enabled INTEGER NOT NULL DEFAULT 1,
 	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
@@ -152,6 +153,8 @@ CREATE INDEX IF NOT EXISTS idx_reviews_ts   ON reviews(user_id, timestamp);
 	if _, err := s.db.Exec(schema); err != nil {
 		return fmt.Errorf("creating schema: %w", err)
 	}
+	// Additive column for existing databases — safe to ignore if it already exists.
+	s.db.Exec(`ALTER TABLE decks ADD COLUMN study_enabled INTEGER NOT NULL DEFAULT 1`)
 	return nil
 }
 
@@ -277,16 +280,17 @@ func (s *SqliteSRS) CardsForFact(ctx context.Context, userID, factID string) ([]
 
 func (s *SqliteSRS) AddDeck(ctx context.Context, d *srs.Deck) error {
 	groupID := nullableString(d.GroupID)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO decks (id, user_id, name, color, description, image, group_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		d.ID, d.UserID, d.Name, d.Color, d.Description, d.Image, groupID)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO decks (id, user_id, name, color, description, image, group_id, study_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		d.ID, d.UserID, d.Name, d.Color, d.Description, d.Image, groupID, boolToInt(d.StudyEnabled))
 	return err
 }
 
 func (s *SqliteSRS) GetDeck(ctx context.Context, userID, id string) (*srs.Deck, error) {
 	var d srs.Deck
 	var groupID sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT id, user_id, name, color, description, image, group_id FROM decks WHERE id=? AND user_id=?`, id, userID).
-		Scan(&d.ID, &d.UserID, &d.Name, &d.Color, &d.Description, &d.Image, &groupID)
+	var studyEnabled int
+	err := s.db.QueryRowContext(ctx, `SELECT id, user_id, name, color, description, image, group_id, study_enabled FROM decks WHERE id=? AND user_id=?`, id, userID).
+		Scan(&d.ID, &d.UserID, &d.Name, &d.Color, &d.Description, &d.Image, &groupID, &studyEnabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, srs.ErrNotFound
 	}
@@ -296,19 +300,20 @@ func (s *SqliteSRS) GetDeck(ctx context.Context, userID, id string) (*srs.Deck, 
 	if groupID.Valid {
 		d.GroupID = groupID.String
 	}
+	d.StudyEnabled = studyEnabled != 0
 	return &d, nil
 }
 
 func (s *SqliteSRS) UpdateDeck(ctx context.Context, d *srs.Deck) error {
 	groupID := nullableString(d.GroupID)
-	_, err := s.db.ExecContext(ctx, `UPDATE decks SET name=?, color=?, description=?, image=?, group_id=? WHERE id=? AND user_id=?`,
-		d.Name, d.Color, d.Description, d.Image, groupID, d.ID, d.UserID)
+	_, err := s.db.ExecContext(ctx, `UPDATE decks SET name=?, color=?, description=?, image=?, group_id=?, study_enabled=? WHERE id=? AND user_id=?`,
+		d.Name, d.Color, d.Description, d.Image, groupID, boolToInt(d.StudyEnabled), d.ID, d.UserID)
 	return err
 }
 
 func (s *SqliteSRS) ListDecks(ctx context.Context, userID string) ([]*srs.Deck, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, user_id, name, color, description, image, group_id FROM decks WHERE user_id=? ORDER BY group_id IS NULL, group_id, name`, userID)
+		`SELECT id, user_id, name, color, description, image, group_id, study_enabled FROM decks WHERE user_id=? ORDER BY group_id IS NULL, group_id, name`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -317,15 +322,35 @@ func (s *SqliteSRS) ListDecks(ctx context.Context, userID string) ([]*srs.Deck, 
 	for rows.Next() {
 		var d srs.Deck
 		var groupID sql.NullString
-		if err := rows.Scan(&d.ID, &d.UserID, &d.Name, &d.Color, &d.Description, &d.Image, &groupID); err != nil {
+		var studyEnabled int
+		if err := rows.Scan(&d.ID, &d.UserID, &d.Name, &d.Color, &d.Description, &d.Image, &groupID, &studyEnabled); err != nil {
 			return nil, err
 		}
 		if groupID.Valid {
 			d.GroupID = groupID.String
 		}
+		d.StudyEnabled = studyEnabled != 0
 		decks = append(decks, &d)
 	}
 	return decks, rows.Err()
+}
+
+func (s *SqliteSRS) ListStudyEnabledDeckIDs(ctx context.Context, userID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id FROM decks WHERE user_id=? AND study_enabled=1`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func (s *SqliteSRS) DeleteDeck(ctx context.Context, userID, id string) error {

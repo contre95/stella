@@ -15,6 +15,9 @@ type Deck struct {
 	Image string
 	// GroupID is the ID of the Group this deck belongs to; empty means none.
 	GroupID string
+	// StudyEnabled controls whether this deck is included in the global study
+	// session (when no explicit deck filter is selected). Defaults to true.
+	StudyEnabled bool
 }
 
 // TruncatedName returns the first 12 runes of the name, appending ellipsis if

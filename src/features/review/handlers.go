@@ -40,6 +40,16 @@ func parseDeckFilter(raw string) []string {
 	return out
 }
 
+// resolveDeckIDs returns the deck IDs for a study session. When raw is empty
+// (no explicit filter), it returns only the study-enabled decks. When raw is
+// non-empty it parses and uses those IDs directly.
+func (h *Handler) resolveDeckIDs(c *fiber.Ctx, raw string) ([]string, error) {
+	if raw != "" {
+		return parseDeckFilter(raw), nil
+	}
+	return h.service.EnabledDeckIDs(c.Context(), auth.UserID(c))
+}
+
 // doneData builds the template data for the session-complete page, offering a
 // learn-ahead session when future-scheduled cards exist.
 func (h *Handler) doneData(c *fiber.Ctx, title, deckFilter string, deckIDs []string) fiber.Map {
@@ -53,9 +63,13 @@ func (h *Handler) doneData(c *fiber.Ctx, title, deckFilter string, deckIDs []str
 // RenderSession serves GET /review — shows the first card or the done state.
 // Optional ?decks=id1,id2 restricts the session to those decks, and
 // ?learnahead=1 keeps serving future-scheduled cards once the queue is empty.
+// When no ?decks= filter is given, only study-enabled decks are included.
 func (h *Handler) RenderSession(c *fiber.Ctx) error {
 	deckFilter := c.Query("decks")
-	deckIDs := parseDeckFilter(deckFilter)
+	deckIDs, err := h.resolveDeckIDs(c, deckFilter)
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
 	learnAhead := c.Query("learnahead") == "1"
 
 	ci, err := h.service.NextCard(c.Context(), auth.UserID(c), deckIDs, learnAhead)
@@ -87,7 +101,10 @@ func (h *Handler) RenderSession(c *fiber.Ctx) error {
 func (h *Handler) GradeCard(c *fiber.Ctx) error {
 	cardID := c.Params("cardId")
 	deckFilter := c.Query("decks")
-	deckIDs := parseDeckFilter(deckFilter)
+	deckIDs, err := h.resolveDeckIDs(c, deckFilter)
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
 	learnAhead := c.Query("learnahead") == "1"
 
 	grade, err := strconv.Atoi(c.FormValue("grade"))
@@ -126,5 +143,9 @@ func (h *Handler) GradeCard(c *fiber.Ctx) error {
 // Done serves GET /review/done — session complete page.
 func (h *Handler) Done(c *fiber.Ctx) error {
 	deckFilter := c.Query("decks")
-	return respond.Section(c, "review_done", h.doneData(c, "Review Complete", deckFilter, parseDeckFilter(deckFilter)))
+	deckIDs, err := h.resolveDeckIDs(c, deckFilter)
+	if err != nil {
+		deckIDs = nil
+	}
+	return respond.Section(c, "review_done", h.doneData(c, "Review Complete", deckFilter, deckIDs))
 }
