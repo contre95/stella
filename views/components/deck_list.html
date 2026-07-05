@@ -32,7 +32,7 @@
           </div>
         </div>
         {{if .Decks}}
-          <div class="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div class="deck-row flex gap-5 overflow-x-auto px-2 pt-1 pb-5">
             {{range .Decks}}{{template "deck-card" .}}{{end}}
           </div>
         {{else}}
@@ -49,7 +49,7 @@
               <div class="h-px flex-1 bg-gray-200 dark:bg-white/10"></div>
             </div>
           {{end}}
-          <div class="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div class="deck-row flex gap-5 overflow-x-auto px-2 pt-1 pb-5">
             {{range .Decks}}{{template "deck-card" .}}{{end}}
           </div>
         </div>
@@ -63,7 +63,7 @@
 {{end}}
 
 {{define "deck-card"}}
-<div class="deck-stack">
+<div class="deck-stack w-40 shrink-0 sm:w-44">
   <span class="deck-layer deck-layer-b" style="background-color:{{.Color}}2b; border-color:{{.Color}}45;"></span>
   <span class="deck-layer deck-layer-a" style="background-color:{{.Color}}40; border-color:{{.Color}}59;"></span>
   <div class="deck-face glass relative flex aspect-[5/7] flex-col rounded-2xl p-3">
@@ -124,6 +124,10 @@
 {{end}}
 
 <style>
+  .deck-row { scrollbar-width: thin; scrollbar-color: rgba(120, 120, 120, 0.35) transparent; }
+  .deck-row::-webkit-scrollbar { height: 6px; }
+  .deck-row::-webkit-scrollbar-thumb { border-radius: 9999px; background: rgba(120, 120, 120, 0.35); }
+  .deck-row::-webkit-scrollbar-track { background: transparent; }
   .deck-stack { position: relative; }
   .deck-layer {
     position: absolute; inset: 0;
