@@ -12,7 +12,7 @@ func defaultConfig() Config {
 			BodyLimit: 10 * 1024 * 1024,
 		},
 		Auth: Auth{
-			SingleUser: true,
+			Enabled: false,
 		},
 		MCP: MCP{
 			Enabled: false,

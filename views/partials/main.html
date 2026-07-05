@@ -22,6 +22,8 @@
               {{template "sections/decks" .}}
             {{else if eq .Section "deck_page"}}
               {{template "sections/deck_page" .}}
+            {{else if eq .Section "tokens"}}
+              {{template "sections/tokens" .}}
             {{else}}
               {{template "sections/dashboard" .}}
             {{end}}

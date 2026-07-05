@@ -1,5 +1,5 @@
-// Package auth owns users, login sessions, and the OIDC login flow. In
-// single-user mode (auth.singleUser: true) it collapses to a middleware that
+// Package auth owns users, login sessions, and the OIDC login flow. When
+// auth.enabled is false (single-user mode) it collapses to a middleware that
 // pins every request to the built-in local user and registers no routes.
 package auth
 
@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -26,6 +27,18 @@ const LocalUserID = "local"
 // ErrNoSession is returned by Store.UserBySession for unknown or expired
 // session tokens.
 var ErrNoSession = errors.New("no session")
+
+// ErrInvalidAPIToken is returned by Store.UserByAPIToken when the token is
+// unknown.
+var ErrInvalidAPIToken = errors.New("invalid api token")
+
+// APIToken grants bearer-token access to the MCP endpoint for its owner.
+type APIToken struct {
+	Hash    string // SHA-256 hex of the raw token (never store raw)
+	UserID  string
+	Name    string
+	Created int64 // POSIX seconds
+}
 
 // User is an account that owns decks, groups, facts, cards, and reviews.
 type User struct {
@@ -49,7 +62,7 @@ func (u *User) DisplayName() string {
 	}
 }
 
-// Store is the persistence contract for users and sessions.
+// Store is the persistence contract for users, sessions, and API tokens.
 type Store interface {
 	// UpsertUser returns the user with u's (issuer, subject) identity, creating
 	// it with u's ID if missing and refreshing name/email if they changed.
@@ -60,6 +73,12 @@ type Store interface {
 	UserBySession(ctx context.Context, tokenHash string, now int64) (*User, error)
 	DeleteSession(ctx context.Context, tokenHash string) error
 	DeleteExpiredSessions(ctx context.Context, now int64) error
+	AddAPIToken(ctx context.Context, tokenHash, userID, name string, created int64) error
+	// UserByAPIToken resolves a token hash to its owner; ErrInvalidAPIToken
+	// when the token is unknown.
+	UserByAPIToken(ctx context.Context, tokenHash string) (*User, error)
+	DeleteAPIToken(ctx context.Context, tokenHash string) error
+	ListAPITokens(ctx context.Context, userID string) ([]*APIToken, error)
 }
 
 // Service drives authentication: the OIDC login flow, session cookies, and
@@ -77,7 +96,7 @@ type Service struct {
 func NewService(ctx context.Context, store Store, cfg *config.Manager) (*Service, error) {
 	s := &Service{store: store, cfg: cfg}
 	a := cfg.Get().Auth
-	if a.SingleUser {
+	if !a.Enabled {
 		_, err := store.UpsertUser(ctx, &User{
 			ID: LocalUserID, Issuer: "local", Subject: "local", Created: time.Now().Unix(),
 		})
@@ -101,8 +120,8 @@ func NewService(ctx context.Context, store Store, cfg *config.Manager) (*Service
 	return s, nil
 }
 
-// SingleUser reports whether authentication is disabled.
-func (s *Service) SingleUser() bool { return s.cfg.Get().Auth.SingleUser }
+// SingleUser reports whether authentication is disabled (auth.enabled: false).
+func (s *Service) SingleUser() bool { return !s.cfg.Get().Auth.Enabled }
 
 // secureCookies reports whether cookies should carry the Secure flag, derived
 // from the instance being served over https.
@@ -124,4 +143,62 @@ func randomToken() string {
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
+}
+
+// GenerateAPIToken mints a new random bearer token for the user. The raw token
+// is returned once — only its SHA-256 hash is persisted.
+func (s *Service) GenerateAPIToken(ctx context.Context, userID, name string) (string, error) {
+	raw := randomToken()
+	return raw, s.store.AddAPIToken(ctx, hashToken(raw), userID, name, time.Now().Unix())
+}
+
+// ListAPITokens returns all API tokens for the user (hashes, never raw values).
+func (s *Service) ListAPITokens(ctx context.Context, userID string) ([]*APIToken, error) {
+	return s.store.ListAPITokens(ctx, userID)
+}
+
+// RevokeAPIToken deletes an API token by its hash.
+func (s *Service) RevokeAPIToken(ctx context.Context, tokenHash string) error {
+	return s.store.DeleteAPIToken(ctx, tokenHash)
+}
+
+// userByRawAPIToken resolves a raw bearer token to its owner by hashing first.
+func (s *Service) userByRawAPIToken(ctx context.Context, raw string) (*User, error) {
+	return s.store.UserByAPIToken(ctx, hashToken(raw))
+}
+
+// mcpUserIDKey is the context key used to propagate the authenticated user ID
+// into the net/http MCP handler.
+type mcpUserIDKey struct{}
+
+// MCPUserIDFromContext returns the user ID injected by MCPBearerMiddleware, or
+// the empty string if the middleware was not run.
+func MCPUserIDFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(mcpUserIDKey{}).(string)
+	return v
+}
+
+// MCPBearerMiddleware is a net/http middleware that authenticates requests to
+// the MCP endpoint. In single-user mode the local user is assumed without a
+// token check; in multi-user mode a valid Bearer token is required.
+func (s *Service) MCPBearerMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var userID string
+		if s.SingleUser() {
+			userID = LocalUserID
+		} else {
+			parts := strings.Fields(r.Header.Get("Authorization"))
+			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
+				http.Error(w, "missing bearer token", http.StatusUnauthorized)
+				return
+			}
+			user, err := s.userByRawAPIToken(r.Context(), parts[1])
+			if err != nil {
+				http.Error(w, "invalid token", http.StatusUnauthorized)
+				return
+			}
+			userID = user.ID
+		}
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), mcpUserIDKey{}, userID)))
+	})
 }

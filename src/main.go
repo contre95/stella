@@ -65,16 +65,12 @@ func main() {
 	cardsHandler := cards.NewHandler(cardsService)
 	reviewHandler := review.NewHandler(reviewService, cfgManager)
 
-	// 5. Routes + server. MCP has no login of its own, so it is only served in
-	// single-user mode, where every tool call runs as the local account.
-	registrars := []hosting.RouteRegistrar{uiHandler, cardsHandler, reviewHandler}
+	// 5. Routes + server.
+	tokenHandler := authService.NewTokenHandler()
+	registrars := []hosting.RouteRegistrar{uiHandler, cardsHandler, reviewHandler, tokenHandler}
 	if cfgManager.Get().MCP.Enabled {
-		if cfgManager.Get().Auth.SingleUser {
-			registrars = append(registrars, mcppresenter.NewHTTPRegistrar(cfgManager.Get().Server.AppName, version, cardsService, auth.LocalUserID))
-			slog.Info("mcp enabled", "path", "/mcp")
-		} else {
-			slog.Warn("mcp is only available in single-user mode; not serving /mcp")
-		}
+		registrars = append(registrars, mcppresenter.NewHTTPRegistrar(cfgManager.Get().Server.AppName, version, cardsService, authService))
+		slog.Info("mcp enabled", "path", "/mcp")
 	}
 	server := hosting.NewServer(cfgManager, authService, registrars...)
 

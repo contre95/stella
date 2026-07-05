@@ -68,6 +68,14 @@ CREATE TABLE IF NOT EXISTS sessions (
 	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS api_tokens (
+	token_hash TEXT PRIMARY KEY,
+	user_id    TEXT NOT NULL,
+	name       TEXT NOT NULL,
+	created    INTEGER NOT NULL,
+	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS groups (
 	id      TEXT PRIMARY KEY,
 	user_id TEXT NOT NULL,

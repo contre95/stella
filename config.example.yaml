@@ -6,10 +6,11 @@ server:
   appName: Stella
   bodyLimit: 10485760
 auth:
-  # true = no login; everything belongs to one built-in local user.
-  # false = multi-user mode: OIDC login is required and every user gets their
-  # own decks, cards, and review history. Requires the oidc settings below.
-  singleUser: true
+  # false (default) = single-user mode: no login, everything belongs to one
+  # built-in local account.
+  # true = multi-user mode: OIDC login required; every user gets their own
+  # decks, cards, and review history. Requires the oidc settings below.
+  enabled: false
   oidc:
     # Issuer URL of your OpenID Connect provider (Keycloak, Authentik, etc.);
     # its discovery document must live at <issuer>/.well-known/openid-configuration.

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -35,6 +36,10 @@ func (s *Service) Middleware() fiber.Handler {
 		}
 	}
 	return func(c *fiber.Ctx) error {
+		// /mcp uses bearer token auth (MCPBearerMiddleware); skip session check.
+		if strings.HasPrefix(c.Path(), "/mcp") {
+			return c.Next()
+		}
 		if token := c.Cookies(sessionCookieName); token != "" {
 			user, err := s.store.UserBySession(c.Context(), hashToken(token), time.Now().Unix())
 			switch {

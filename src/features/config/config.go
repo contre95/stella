@@ -19,10 +19,11 @@ type Config struct {
 
 // Auth holds authentication settings.
 type Auth struct {
-	// SingleUser disables login entirely: no OIDC, no sessions, and all data
-	// belongs to one built-in local account.
-	SingleUser bool `yaml:"singleUser"`
-	// OIDC configures the OpenID Connect provider used when SingleUser is false.
+	// Enabled activates multi-user OIDC login. When false (the default) the app
+	// runs in single-user mode: no login required and all data belongs to one
+	// built-in local account.
+	Enabled bool `yaml:"enabled"`
+	// OIDC configures the OpenID Connect provider used when Enabled is true.
 	OIDC OIDC `yaml:"oidc"`
 }
 
@@ -41,7 +42,7 @@ type OIDC struct {
 // Validate enforces the conditional requirement struct tags cannot express:
 // multi-user mode needs a fully configured OIDC provider.
 func (a *Auth) Validate() error {
-	if a.SingleUser {
+	if !a.Enabled {
 		return nil
 	}
 	var missing []string
@@ -54,7 +55,7 @@ func (a *Auth) Validate() error {
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("auth.singleUser is false but %s not set", strings.Join(missing, ", "))
+		return fmt.Errorf("auth.enabled is true but %s not set", strings.Join(missing, ", "))
 	}
 	return nil
 }
