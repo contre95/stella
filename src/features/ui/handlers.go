@@ -37,7 +37,6 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 		heatmap = nil
 	}
 	return respond.Section(c, "dashboard", fiber.Map{
-		"Title":      "Dashboard",
 		"DueToday":   stats.DueToday,
 		"TotalCards": stats.TotalCards,
 		"NewCards":   stats.NewCards,
