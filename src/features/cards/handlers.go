@@ -42,13 +42,28 @@ func (h *Handler) RenderSection(c *fiber.Ctx) error {
 	return respond.Section(c, "cards", fiber.Map{"Title": "Cards", "Decks": decks})
 }
 
-// List returns the fact/card list partial.
+// List returns the fact/card list partial, optionally filtered by ?q=.
 func (h *Handler) List(c *fiber.Ctx) error {
 	rows, err := h.service.ListFacts(c.Context(), auth.UserID(c))
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
+	if q := strings.TrimSpace(c.Query("q")); q != "" {
+		rows = filterFacts(rows, q)
+	}
 	return respond.Partial(c, "components/card_list", fiber.Map{"Facts": rows})
+}
+
+func filterFacts(rows []*FactRow, q string) []*FactRow {
+	q = strings.ToLower(q)
+	out := make([]*FactRow, 0, len(rows))
+	for _, r := range rows {
+		if strings.Contains(strings.ToLower(r.Fact.Front), q) ||
+			strings.Contains(strings.ToLower(r.Fact.Back), q) {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // saveImage saves the uploaded image file from the given form field and returns

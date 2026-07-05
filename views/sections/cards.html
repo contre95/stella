@@ -136,5 +136,19 @@
     </div>
   </form>
 
-  <div id="card-list" hx-get="/cards/list" hx-trigger="load" class="mt-5"></div>
+  <div class="mt-5 mb-3">
+    <input
+      id="card-search"
+      type="search"
+      name="q"
+      placeholder="Search cards…"
+      class="glass-input w-full rounded-xl px-3 py-2 text-sm"
+      hx-get="/cards/list"
+      hx-trigger="input changed delay:300ms"
+      hx-target="#card-list"
+      hx-swap="innerHTML"
+    />
+  </div>
+
+  <div id="card-list" hx-get="/cards/list" hx-trigger="load" class="mt-2"></div>
 </div>
