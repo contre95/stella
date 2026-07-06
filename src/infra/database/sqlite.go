@@ -492,11 +492,11 @@ func (s *SqliteSRS) ReviewTimestampsSince(ctx context.Context, userID string, fr
 //
 
 func (s *SqliteSRS) ActiveCount(ctx context.Context, userID string) (int, error) {
-	return s.count(ctx, `SELECT count(*) FROM cards WHERE user_id=? AND active=1`, userID)
+	return s.count(ctx, `SELECT count(DISTINCT fact_id) FROM cards WHERE user_id=? AND active=1`, userID)
 }
 
 func (s *SqliteSRS) ActiveCountForDecks(ctx context.Context, userID string, deckIDs []string) (int, error) {
-	q, args := buildCountQuery(`SELECT count(*) FROM cards WHERE user_id=? AND active=1`, []any{userID}, deckIDs)
+	q, args := buildCountQuery(`SELECT count(DISTINCT fact_id) FROM cards WHERE user_id=? AND active=1`, []any{userID}, deckIDs)
 	return s.count(ctx, q, args...)
 }
 
@@ -511,7 +511,7 @@ func (s *SqliteSRS) ScheduledCount(ctx context.Context, userID string, now int64
 }
 
 func (s *SqliteSRS) NonMemorisedCount(ctx context.Context, userID string, deckIDs []string) (int, error) {
-	q, args := buildCountQuery(`SELECT count(*) FROM cards WHERE user_id=? AND active=1 AND grade<2`, []any{userID}, deckIDs)
+	q, args := buildCountQuery(`SELECT count(DISTINCT fact_id) FROM cards WHERE user_id=? AND active=1 AND grade<2`, []any{userID}, deckIDs)
 	return s.count(ctx, q, args...)
 }
 
