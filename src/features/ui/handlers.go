@@ -39,6 +39,7 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 	return respond.Section(c, "dashboard", fiber.Map{
 		"DueToday":   stats.DueToday,
 		"TotalCards": stats.TotalCards,
+		"StudyCards": stats.StudyCards,
 		"NewCards":   stats.NewCards,
 		"Forecast":   forecast,
 		"Heatmap":    heatmap,

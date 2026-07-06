@@ -62,6 +62,10 @@ type Repository interface {
 	// Aggregate counts.
 	ActiveCount(ctx context.Context, userID string) (int, error)
 	// deckIDs filters to specific decks; nil or empty means all decks.
+	ActiveCountForDecks(ctx context.Context, userID string, deckIDs []string) (int, error)
+	// FactCountForDecks counts distinct facts (not cards) for the given decks,
+	// so reverse-card pairs are not double-counted.
+	FactCountForDecks(ctx context.Context, userID string, deckIDs []string) (int, error)
 	ScheduledCount(ctx context.Context, userID string, now int64, deckIDs []string) (int, error)
 	NonMemorisedCount(ctx context.Context, userID string, deckIDs []string) (int, error)
 

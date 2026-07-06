@@ -17,7 +17,8 @@ import (
 type Stats struct {
 	DueToday   int
 	TotalCards int
-	NewCards   int
+	StudyCards int // active cards in study-enabled decks
+	NewCards   int // non-memorised cards in study-enabled decks
 	DeckCount  int
 }
 
@@ -244,7 +245,15 @@ func (s *Service) Stats(ctx context.Context, userID string) (*Stats, error) {
 	if err != nil {
 		return nil, err
 	}
-	newCards, err := s.repo.NonMemorisedCount(ctx, userID, nil)
+	enabledIDs, err := s.repo.ListStudyEnabledDeckIDs(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	studyCards, err := s.repo.FactCountForDecks(ctx, userID, enabledIDs)
+	if err != nil {
+		return nil, err
+	}
+	newCards, err := s.repo.NonMemorisedCount(ctx, userID, enabledIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +261,7 @@ func (s *Service) Stats(ctx context.Context, userID string) (*Stats, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Stats{DueToday: due, TotalCards: total, NewCards: newCards, DeckCount: len(decks)}, nil
+	return &Stats{DueToday: due, TotalCards: total, StudyCards: studyCards, NewCards: newCards, DeckCount: len(decks)}, nil
 }
 
 // ForecastDay is one bar in the upcoming-reviews chart: how many cards fall

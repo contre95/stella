@@ -495,6 +495,16 @@ func (s *SqliteSRS) ActiveCount(ctx context.Context, userID string) (int, error)
 	return s.count(ctx, `SELECT count(*) FROM cards WHERE user_id=? AND active=1`, userID)
 }
 
+func (s *SqliteSRS) ActiveCountForDecks(ctx context.Context, userID string, deckIDs []string) (int, error) {
+	q, args := buildCountQuery(`SELECT count(*) FROM cards WHERE user_id=? AND active=1`, []any{userID}, deckIDs)
+	return s.count(ctx, q, args...)
+}
+
+func (s *SqliteSRS) FactCountForDecks(ctx context.Context, userID string, deckIDs []string) (int, error) {
+	q, args := buildCountQuery(`SELECT count(*) FROM facts WHERE user_id=?`, []any{userID}, deckIDs)
+	return s.count(ctx, q, args...)
+}
+
 func (s *SqliteSRS) ScheduledCount(ctx context.Context, userID string, now int64, deckIDs []string) (int, error) {
 	q, args := buildCountQuery(`SELECT count(*) FROM cards WHERE user_id=? AND active=1 AND grade>=2 AND next_rep<=?`, []any{userID, now}, deckIDs)
 	return s.count(ctx, q, args...)

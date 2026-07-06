@@ -7,16 +7,46 @@
   <!-- Stats grid -->
   <dl class="grid grid-cols-3 gap-2 sm:gap-4 sm:grid-cols-3">
     <div class="glass lift rounded-2xl p-3 sm:p-5">
-      <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Due today</dt>
-      <dd class="mt-2 text-2xl sm:text-3xl font-bold text-gradient">{{.DueToday}}</dd>
+      <dt class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+        Due today
+        <span title="Retention cards overdue or scheduled for today." class="cursor-help text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-500 transition-colors">
+          <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 16v-4m0-4h.01"/></svg>
+        </span>
+      </dt>
+      <dd class="mt-2 flex items-center gap-1.5 text-2xl sm:text-3xl font-bold text-gradient">
+        <svg class="h-6 w-6 shrink-0 text-gray-400 dark:text-gray-500" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+          <rect x="9" y="2" width="13" height="17" rx="2" opacity="0.4"/>
+          <rect x="2" y="5" width="13" height="17" rx="2"/>
+        </svg>
+        {{.DueToday}}
+      </dd>
     </div>
     <div class="glass lift rounded-2xl p-3 sm:p-5">
-      <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Total cards</dt>
-      <dd class="mt-2 text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">{{.TotalCards}}</dd>
+      <dt class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+        Total cards
+        <span title="Active cards across all your decks. The brain shows cards in study-enabled decks only." class="cursor-help text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-500 transition-colors">
+          <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 16v-4m0-4h.01"/></svg>
+        </span>
+      </dt>
+      <dd class="mt-2 flex items-center gap-1.5 text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+        <svg fill="#F09C9D" viewBox="0 -32 576 576" class="h-5 w-5 shrink-0" xmlns="http://www.w3.org/2000/svg"><path d="M208 0c-29.9 0-54.7 20.5-61.8 48.2-.8 0-1.4-.2-2.2-.2-35.3 0-64 28.7-64 64 0 4.8.6 9.5 1.7 14C52.5 138 32 166.6 32 200c0 12.6 3.2 24.3 8.3 34.9C16.3 248.7 0 274.3 0 304c0 33.3 20.4 61.9 49.4 73.9-.9 4.6-1.4 9.3-1.4 14.1 0 39.8 32.2 72 72 72 4.1 0 8.1-.5 12-1.2 9.6 28.5 36.2 49.2 68 49.2 39.8 0 72-32.2 72-72V64c0-35.3-28.7-64-64-64zm368 304c0-29.7-16.3-55.3-40.3-69.1 5.2-10.6 8.3-22.3 8.3-34.9 0-33.4-20.5-62-49.7-74 1-4.5 1.7-9.2 1.7-14 0-35.3-28.7-64-64-64-.8 0-1.5.2-2.2.2C422.7 20.5 397.9 0 368 0c-35.3 0-64 28.6-64 64v376c0 39.8 32.2 72 72 72 31.8 0 58.4-20.7 68-49.2 3.9.7 7.9 1.2 12 1.2 39.8 0 72-32.2 72-72 0-4.8-.5-9.5-1.4-14.1 29-12 49.4-40.6 49.4-73.9z"/></svg>
+        {{.StudyCards}}
+      </dd>
+      <dd class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{.TotalCards}} total</dd>
     </div>
     <div class="glass lift rounded-2xl p-3 sm:p-5">
-      <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Not yet memorised</dt>
-      <dd class="mt-2 text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">{{.NewCards}}</dd>
+      <dt class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+        Not yet memorised
+        <span title="Cards in study-enabled decks not yet committed to long-term memory (grade &lt; 2)." class="cursor-help text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-500 transition-colors">
+          <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 16v-4m0-4h.01"/></svg>
+        </span>
+      </dt>
+      <dd class="mt-2 flex items-center gap-1.5 text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+        <svg class="h-6 w-6 shrink-0 text-gray-400 dark:text-gray-500" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M11.25 4.533A9.707 9.707 0 006 3a9.735 9.735 0 00-3.25.555.75.75 0 00-.5.707v14.25a.75.75 0 001 .707A8.237 8.237 0 016 18.75c1.995 0 3.823.707 5.25 1.886V4.533zM12.75 20.636A8.214 8.214 0 0118 18.75c.966 0 1.89.166 2.75.47a.75.75 0 001-.708V4.262a.75.75 0 00-.5-.707A9.735 9.735 0 0018 3a9.707 9.707 0 00-5.25 1.533v16.103z" />
+        </svg>
+        {{.NewCards}}
+      </dd>
     </div>
   </dl>
 

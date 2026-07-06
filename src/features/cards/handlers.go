@@ -460,10 +460,14 @@ func (h *Handler) Import(c *fiber.Ctx) error {
 	return h.DeckList(c)
 }
 
-// ToggleDeckStudy flips a deck's study-enabled flag and returns the refreshed deck list.
+// ToggleDeckStudy flips a deck's study-enabled flag and returns the refreshed
+// deck list, or the deck page when called from there.
 func (h *Handler) ToggleDeckStudy(c *fiber.Ctx) error {
 	if _, err := h.service.ToggleDeckStudy(c.Context(), auth.UserID(c), c.Params("id")); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	if c.Query("source") == "deck_page" {
+		return h.RenderDeckPage(c)
 	}
 	return h.DeckList(c)
 }
@@ -517,6 +521,21 @@ func (h *Handler) AddDeck(c *fiber.Ctx) error {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return h.DeckList(c)
+}
+
+// RenameDeck updates the deck's name and re-renders the deck page.
+func (h *Handler) RenameDeck(c *fiber.Ctx) error {
+	name := strings.TrimSpace(c.FormValue("name"))
+	if name == "" {
+		return respond.ToastErr(c, fiber.StatusBadRequest, "Name is required")
+	}
+	if len([]rune(name)) > 12 {
+		name = string([]rune(name)[:12])
+	}
+	if _, err := h.service.RenameDeck(c.Context(), auth.UserID(c), c.Params("id"), name); err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return h.RenderDeckPage(c)
 }
 
 // SetDeckImage uploads a deck cover picture, replaces any previous one, and

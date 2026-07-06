@@ -99,6 +99,11 @@ func NewServer(name, version string, cardsService *cards.Service, userID string)
 		Description: "Assign a deck to a group, or remove it from its current group by passing an empty groupId. Use list_decks and list_groups to find the IDs.",
 	}, s.setDeckGroup)
 
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name:        "rename_deck",
+		Description: "Rename a deck by ID. Use list_decks to find the deckId.",
+	}, s.renameDeck)
+
 	return srv
 }
 
@@ -537,6 +542,36 @@ func (s *Server) deleteGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in 
 		return nil, DeleteGroupOutput{}, fmt.Errorf("deleting group: %w", err)
 	}
 	return nil, DeleteGroupOutput{Deleted: true, GroupID: in.GroupID}, nil
+}
+
+// RenameDeckInput is the argument schema for rename_deck.
+type RenameDeckInput struct {
+	DeckID string `json:"deckId" jsonschema:"Deck ID to rename. Required — use list_decks to find it."`
+	Name   string `json:"name" jsonschema:"New name for the deck. Required. Maximum 12 characters."`
+}
+
+// RenameDeckOutput is the result schema for rename_deck.
+type RenameDeckOutput struct {
+	DeckID string `json:"deckId"`
+	Name   string `json:"name"`
+}
+
+func (s *Server) renameDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in RenameDeckInput) (*mcpsdk.CallToolResult, RenameDeckOutput, error) {
+	if strings.TrimSpace(in.DeckID) == "" {
+		return nil, RenameDeckOutput{}, fmt.Errorf("deckId is required")
+	}
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, RenameDeckOutput{}, fmt.Errorf("name is required")
+	}
+	if len([]rune(name)) > 12 {
+		name = string([]rune(name)[:12])
+	}
+	d, err := s.cards.RenameDeck(ctx, s.userID, in.DeckID, name)
+	if err != nil {
+		return nil, RenameDeckOutput{}, fmt.Errorf("renaming deck: %w", err)
+	}
+	return nil, RenameDeckOutput{DeckID: d.ID, Name: d.Name}, nil
 }
 
 // SetDeckGroupInput is the argument schema for set_deck_group.
