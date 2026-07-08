@@ -104,6 +104,14 @@ func NewServer(name, version string, cardsService *cards.Service, userID string)
 		Description: "Rename a deck by ID. Use list_decks to find the deckId.",
 	}, s.renameDeck)
 
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name: "create_cards",
+		Description: "Create multiple flashcards in one call. All cards are filed under the " +
+			"same deck. Each item follows the same rules as create_card: a forward card is " +
+			"always made; set reverse on an item to also make a back -> front card. On " +
+			"failure the tool reports how many cards were created before the error.",
+	}, s.createCards)
+
 	return srv
 }
 
@@ -594,6 +602,91 @@ func (s *Server) setDeckGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in
 		return nil, SetDeckGroupOutput{}, fmt.Errorf("setting deck group: %w", err)
 	}
 	return nil, SetDeckGroupOutput{DeckID: in.DeckID, GroupID: strings.TrimSpace(in.GroupID)}, nil
+}
+
+// BulkCardItem is one card in a create_cards request.
+type BulkCardItem struct {
+	Front      string `json:"front" jsonschema:"The front side / question of the card. Required."`
+	Back       string `json:"back,omitempty" jsonschema:"The back side / answer of the card."`
+	Reverse    bool   `json:"reverse,omitempty" jsonschema:"Also create a reverse card quizzing back -> front."`
+	Grade      *int   `json:"grade,omitempty" jsonschema:"Initial self-grade 0-5. Omit to leave the card unseen."`
+	ImageFront string `json:"imageFront,omitempty" jsonschema:"http(s) URL or local file path of an image for the front side."`
+	ImageBack  string `json:"imageBack,omitempty" jsonschema:"http(s) URL or local file path of an image for the back side."`
+	AudioFront string `json:"audioFront,omitempty" jsonschema:"http(s) URL or local file path of audio for the front side."`
+	AudioBack  string `json:"audioBack,omitempty" jsonschema:"http(s) URL or local file path of audio for the back side."`
+}
+
+// CreateCardsInput is the argument schema for create_cards.
+type CreateCardsInput struct {
+	DeckID string         `json:"deckId" jsonschema:"Deck id to file all cards under. Required — use list_decks or create_deck first."`
+	Cards  []BulkCardItem `json:"cards" jsonschema:"List of cards to create. Required — must not be empty."`
+}
+
+// CreateCardsOutput is the result schema for create_cards.
+type CreateCardsOutput struct {
+	Created    int                `json:"created"`
+	CardsAdded int                `json:"cardsAdded"`
+	Facts      []CreateCardOutput `json:"facts"`
+}
+
+func (s *Server) createCards(ctx context.Context, _ *mcpsdk.CallToolRequest, in CreateCardsInput) (*mcpsdk.CallToolResult, CreateCardsOutput, error) {
+	if strings.TrimSpace(in.DeckID) == "" {
+		return nil, CreateCardsOutput{}, fmt.Errorf("deckId is required — use list_decks or create_deck first")
+	}
+	if len(in.Cards) == 0 {
+		return nil, CreateCardsOutput{}, fmt.Errorf("cards must not be empty")
+	}
+	out := CreateCardsOutput{Facts: make([]CreateCardOutput, 0, len(in.Cards))}
+	for i, item := range in.Cards {
+		front := strings.TrimSpace(item.Front)
+		if front == "" {
+			return nil, out, fmt.Errorf("card[%d]: front is required", i)
+		}
+		grade := srs.GradeUnseen
+		if item.Grade != nil {
+			grade = *item.Grade
+			if grade < 0 || grade > 5 {
+				return nil, out, fmt.Errorf("card[%d]: grade must be between 0 and 5", i)
+			}
+		}
+		imgFront, err := s.saveImageFromSource(item.ImageFront)
+		if err != nil {
+			return nil, out, fmt.Errorf("card[%d]: saving front image: %w", i, err)
+		}
+		imgBack, err := s.saveImageFromSource(item.ImageBack)
+		if err != nil {
+			s.removeMedia(imgFront)
+			return nil, out, fmt.Errorf("card[%d]: saving back image: %w", i, err)
+		}
+		audFront, err := s.saveAudioFromSource(item.AudioFront)
+		if err != nil {
+			s.removeMedia(imgFront, imgBack)
+			return nil, out, fmt.Errorf("card[%d]: saving front audio: %w", i, err)
+		}
+		audBack, err := s.saveAudioFromSource(item.AudioBack)
+		if err != nil {
+			s.removeMedia(imgFront, imgBack, audFront)
+			return nil, out, fmt.Errorf("card[%d]: saving back audio: %w", i, err)
+		}
+		fact, err := s.cards.AddFact(ctx, s.userID, front, item.Back, in.DeckID, grade, item.Reverse, imgFront, imgBack, audFront, audBack)
+		if err != nil {
+			s.removeMedia(imgFront, imgBack, audFront, audBack)
+			return nil, out, fmt.Errorf("card[%d]: creating card: %w", i, err)
+		}
+		added := 1
+		if item.Reverse && strings.TrimSpace(item.Back) != "" {
+			added = 2
+		}
+		out.Created++
+		out.CardsAdded += added
+		out.Facts = append(out.Facts, CreateCardOutput{
+			FactID:     fact.ID,
+			Front:      fact.Front,
+			Back:       fact.Back,
+			CardsAdded: added,
+		})
+	}
+	return nil, out, nil
 }
 
 // removeMedia deletes named media files from the media directory, silently

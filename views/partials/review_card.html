@@ -46,6 +46,9 @@
       <span class="inline-block rounded-xl border-4 border-pink-500 px-4 py-1 text-lg font-black uppercase tracking-widest text-pink-500">Perfect · 5</span>
     </div>
 
+    {{$frontImg := ""}}{{if eq .Card.View "forward"}}{{$frontImg = .Fact.ImageFront}}{{else}}{{$frontImg = .Fact.ImageBack}}{{end}}
+    {{$backImg := ""}}{{if eq .Card.View "forward"}}{{$backImg = .Fact.ImageBack}}{{else}}{{$backImg = .Fact.ImageFront}}{{end}}
+
     <!-- The card itself (gets drag-transformed) -->
     <div
       id="flip-card"
@@ -58,11 +61,11 @@
         class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-10 overflow-hidden rounded-2xl glass-strong"
         style="transition: opacity 0.32s ease;"
       >
-        {{if and .DeckImage (not .Fact.ImageFront)}}
+        {{if and .DeckImage (not $frontImg)}}
         <img src="/images/{{.DeckImage}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover grayscale blur-xl opacity-[0.13] dark:opacity-10" aria-hidden="true" />
         {{end}}
-        {{if .Fact.ImageFront}}
-        <img src="/images/{{.Fact.ImageFront}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
+        {{if $frontImg}}
+        <img src="/images/{{$frontImg}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
         <div class="pointer-events-none absolute inset-0 bg-white/60 dark:bg-[#17161e]/70"></div>
         {{end}}
         <span class="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-xs font-semibold uppercase tracking-widest text-pink-500/80 dark:text-pink-300/70">
@@ -70,9 +73,9 @@
         </span>
         {{$frontAudio := ""}}{{if eq .Card.View "forward"}}{{$frontAudio = .Fact.AudioFront}}{{else}}{{$frontAudio = .Fact.AudioBack}}{{end}}
         <div class="relative z-10 flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-3">
-          {{if .Fact.ImageFront}}
+          {{if $frontImg}}
           <div class="flex min-h-0 w-full flex-1 items-center justify-center">
-            <img src="/images/{{.Fact.ImageFront}}" alt="" class="max-h-full w-auto max-w-full rounded-lg object-contain pointer-events-none" />
+            <img src="/images/{{$frontImg}}" alt="" class="max-h-full w-auto max-w-full rounded-lg object-contain pointer-events-none" />
           </div>
           {{end}}
           <p class="text-center text-xl font-medium leading-relaxed text-gray-800 dark:text-gray-100 sm:text-2xl"
@@ -103,19 +106,19 @@
         class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-10 overflow-hidden rounded-2xl glass-strong"
         style="display: none; opacity: 0; pointer-events: none;"
       >
-        {{if and .DeckImage (not .Fact.ImageBack)}}
+        {{if and .DeckImage (not $backImg)}}
         <img src="/images/{{.DeckImage}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover grayscale blur-xl opacity-[0.13] dark:opacity-10" aria-hidden="true" />
         {{end}}
-        {{if .Fact.ImageBack}}
-        <img src="/images/{{.Fact.ImageBack}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
+        {{if $backImg}}
+        <img src="/images/{{$backImg}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
         <div class="pointer-events-none absolute inset-0 bg-white/60 dark:bg-[#17161e]/70"></div>
         {{end}}
         <span class="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-xs font-semibold uppercase tracking-widest text-emerald-500/80 dark:text-emerald-300/70">Answer</span>
         {{$backAudio := ""}}{{if eq .Card.View "forward"}}{{$backAudio = .Fact.AudioBack}}{{else}}{{$backAudio = .Fact.AudioFront}}{{end}}
         <div class="relative z-10 flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-3">
-          {{if .Fact.ImageBack}}
+          {{if $backImg}}
           <div class="flex min-h-0 w-full flex-1 items-center justify-center">
-            <img src="/images/{{.Fact.ImageBack}}" alt="" class="max-h-full w-auto max-w-full rounded-lg object-contain pointer-events-none" />
+            <img src="/images/{{$backImg}}" alt="" class="max-h-full w-auto max-w-full rounded-lg object-contain pointer-events-none" />
           </div>
           {{end}}
           <p class="text-center text-xl font-medium leading-relaxed text-gray-900 dark:text-white sm:text-2xl"
@@ -138,6 +141,14 @@
           </div>
         </div>
         {{end}}
+        <button
+          id="show-question-btn"
+          data-label="{{if eq .Card.View "forward"}}Question{{else}}Reverse{{end}}"
+          data-image="{{if eq .Card.View "forward"}}{{.Fact.ImageFront}}{{else}}{{.Fact.ImageBack}}{{end}}"
+          data-audio="{{if eq .Card.View "forward"}}{{.Fact.AudioFront}}{{else}}{{.Fact.AudioBack}}{{end}}"
+          data-text="{{if eq .Card.View "forward"}}{{.Fact.Front}}{{else}}{{.Fact.Back}}{{end}}"
+          class="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 text-base font-medium text-gray-400 hover:text-pink-500 transition-colors dark:text-gray-500 dark:hover:text-pink-400 whitespace-nowrap"
+        >Show question</button>
       </div>
     </div>
   </div>
@@ -151,55 +162,48 @@
 
     <!-- Grade buttons — shown after flip. Mnemosyne grades 0-5. -->
     {{$gradeURL := printf "/review/%s/grade?decks=%s" .Card.ID .DeckFilter}}{{if .LearnAhead}}{{$gradeURL = printf "%s&learnahead=1" $gradeURL}}{{end}}
+    <p id="grade-help" class="hidden mb-1.5 text-center text-sm text-gray-400 dark:text-gray-500">
+      Not sure how to grade? <a href="https://mnemosyne-proj.org/help/getting-started.php" target="_blank" rel="noopener noreferrer" class="underline hover:text-pink-500 dark:hover:text-pink-400 transition-colors">Learn about grades</a>
+    </p>
     <div id="grade-buttons" class="hidden grid grid-cols-6 gap-1.5 sm:gap-2 transition duration-300">
     <button
       data-grade="0" data-url="{{$gradeURL}}"
       title="Complete blackout — no recall at all · {{index .Previews 0}}"
-      class="rounded-2xl py-2 transition-colors bg-red-500/15 text-red-600 ring-1 ring-inset ring-red-500/20 active:bg-red-500/25 dark:text-red-400"
+      class="cursor-pointer rounded-2xl py-2 transition-colors bg-red-500/25 text-red-600 ring-1 ring-inset ring-red-500/40 hover:bg-red-500/40 active:bg-red-500/50 dark:text-red-400 dark:ring-red-400/40 dark:hover:bg-red-500/35"
       style="min-height: 56px;"
     ><span class="block text-lg font-black leading-none">0</span><span class="mt-1 block text-[10px] font-semibold uppercase tracking-wide opacity-80">Blackout</span></button>
     <button
       data-grade="1" data-url="{{$gradeURL}}"
       title="Complete failure — the answer only felt familiar · {{index .Previews 1}}"
-      class="rounded-2xl py-2 transition-colors bg-rose-500/15 text-rose-600 ring-1 ring-inset ring-rose-500/20 active:bg-rose-500/25 dark:text-rose-400"
+      class="cursor-pointer rounded-2xl py-2 transition-colors bg-rose-500/25 text-rose-600 ring-1 ring-inset ring-rose-500/40 hover:bg-rose-500/40 active:bg-rose-500/50 dark:text-rose-400 dark:ring-rose-400/40 dark:hover:bg-rose-500/35"
       style="min-height: 56px;"
     ><span class="block text-lg font-black leading-none">1</span><span class="mt-1 block text-[10px] font-semibold uppercase tracking-wide opacity-80">Fail</span></button>
     <button
       data-grade="2" data-url="{{$gradeURL}}"
       title="Incorrect, but you knew it was wrong · {{index .Previews 2}}"
-      class="rounded-2xl py-2 transition-colors bg-orange-500/15 text-orange-600 ring-1 ring-inset ring-orange-500/20 active:bg-orange-500/25 dark:text-orange-400"
+      class="cursor-pointer rounded-2xl py-2 transition-colors bg-orange-500/25 text-orange-600 ring-1 ring-inset ring-orange-500/40 hover:bg-orange-500/40 active:bg-orange-500/50 dark:text-orange-400 dark:ring-orange-400/40 dark:hover:bg-orange-500/35"
       style="min-height: 56px;"
     ><span class="block text-lg font-black leading-none">2</span><span class="mt-1 block text-[10px] font-semibold uppercase tracking-wide opacity-80">Wrong</span></button>
     <button
       data-grade="3" data-url="{{$gradeURL}}"
       title="Correct, but difficult to remember · {{index .Previews 3}}"
-      class="rounded-2xl py-2 transition-colors bg-amber-500/15 text-amber-600 ring-1 ring-inset ring-amber-500/20 active:bg-amber-500/25 dark:text-amber-400"
+      class="cursor-pointer rounded-2xl py-2 transition-colors bg-amber-500/25 text-amber-600 ring-1 ring-inset ring-amber-500/40 hover:bg-amber-500/40 active:bg-amber-500/50 dark:text-amber-400 dark:ring-amber-400/40 dark:hover:bg-amber-500/35"
       style="min-height: 56px;"
     ><span class="block text-lg font-black leading-none">3</span><span class="mt-1 block text-[10px] font-semibold uppercase tracking-wide opacity-80">Hard</span></button>
     <button
       data-grade="4" data-url="{{$gradeURL}}"
       title="Correct with slight hesitation · {{index .Previews 4}}"
-      class="rounded-2xl py-2 transition-colors bg-emerald-500/15 text-emerald-600 ring-1 ring-inset ring-emerald-500/20 active:bg-emerald-500/25 dark:text-emerald-400"
+      class="cursor-pointer rounded-2xl py-2 transition-colors bg-emerald-500/25 text-emerald-600 ring-1 ring-inset ring-emerald-500/40 hover:bg-emerald-500/40 active:bg-emerald-500/50 dark:text-emerald-400 dark:ring-emerald-400/40 dark:hover:bg-emerald-500/35"
       style="min-height: 56px;"
     ><span class="block text-lg font-black leading-none">4</span><span class="mt-1 block text-[10px] font-semibold uppercase tracking-wide opacity-80">Good</span></button>
     <button
       data-grade="5" data-url="{{$gradeURL}}"
       title="Perfect recall · {{index .Previews 5}}"
-      class="rounded-2xl py-2 transition-colors bg-pink-500/15 text-pink-600 ring-1 ring-inset ring-pink-500/20 active:bg-pink-500/25 dark:text-pink-400"
+      class="cursor-pointer rounded-2xl py-2 transition-colors bg-pink-500/25 text-pink-600 ring-1 ring-inset ring-pink-500/40 hover:bg-pink-500/40 active:bg-pink-500/50 dark:text-pink-400 dark:ring-pink-400/40 dark:hover:bg-pink-500/35"
       style="min-height: 56px;"
     ><span class="block text-lg font-black leading-none">5</span><span class="mt-1 block text-[10px] font-semibold uppercase tracking-wide opacity-80">Perfect</span></button>
     </div>
   </div>
-
-  <!-- Show question button — shown after reveal -->
-  <button
-    id="show-question-btn"
-    data-label="{{if eq .Card.View "forward"}}Question{{else}}Reverse{{end}}"
-    data-image="{{if eq .Card.View "forward"}}{{.Fact.ImageFront}}{{else}}{{.Fact.ImageBack}}{{end}}"
-    data-audio="{{if eq .Card.View "forward"}}{{.Fact.AudioFront}}{{else}}{{.Fact.AudioBack}}{{end}}"
-    data-text="{{if eq .Card.View "forward"}}{{.Fact.Front}}{{else}}{{.Fact.Back}}{{end}}"
-    class="hidden mt-2 shrink-0 w-full text-center text-xs font-medium text-gray-400 hover:text-pink-500 transition-colors dark:text-gray-500 dark:hover:text-pink-400"
-  >Show question</button>
 
   <script>
   (function () {
@@ -209,8 +213,9 @@
     var cardFront   = document.getElementById('card-front');
     var cardBack    = document.getElementById('card-back');
     var gradeBtn    = document.getElementById('grade-buttons');
+    var gradeHelp   = document.getElementById('grade-help');
     var tapBtn      = document.getElementById('tap-to-reveal-btn');
-    var showQBtn    = document.getElementById('show-question-btn');
+    var showQBtn    = document.getElementById('show-question-btn'); // inside card-back
     var lblAgain    = document.getElementById('drag-label-again');
     var lblGood     = document.getElementById('drag-label-good');
     var lblUp       = document.getElementById('drag-label-up');
@@ -286,8 +291,8 @@
       cardBack.style.pointerEvents  = 'auto';
       flipCard.style.cursor = 'default';
       tapBtn.classList.add('hidden');
+      gradeHelp.classList.remove('hidden');
       gradeBtn.classList.remove('hidden');
-      showQBtn.classList.remove('hidden');
       if (autoplayAudio && audioBack) audioBack.play().catch(function(){});
     }
 
