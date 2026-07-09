@@ -12,17 +12,31 @@
     <button
       type="button"
       _="on click
-           toggle .dark on document.documentElement
-           then if document.documentElement.classList.contains('dark')
-             call localStorage.setItem('theme', 'dark')
-           else
+           if document.documentElement.classList.contains('dark')
+             remove .dark from document.documentElement
+             add .eink to document.documentElement
+             call localStorage.setItem('theme', 'eink')
+           else if document.documentElement.classList.contains('eink')
+             remove .eink from document.documentElement
              call localStorage.setItem('theme', 'light')
+           else
+             add .dark to document.documentElement
+             call localStorage.setItem('theme', 'dark')
            end"
       class="btn-ghost rounded-xl p-1.5"
       title="Toggle theme"
     >
-      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <!-- light mode → moon (go dark) -->
+      <svg class="theme-icon-moon h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+      </svg>
+      <!-- dark mode → document/page icon (go e-ink) -->
+      <svg class="theme-icon-eink-indicator h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <!-- e-ink mode → sun (go light) -->
+      <svg class="theme-icon-sun h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
       </svg>
     </button>
     {{if .MultiUser}}

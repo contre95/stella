@@ -485,11 +485,252 @@
     .swal2-icon { width: 3.5rem !important; height: 3.5rem !important; margin: 0 auto 1rem !important; }
     .swal2-icon .swal2-icon-content { font-size: 2rem !important; }
     .swal2-icon.swal2-warning { border-color: #f59e0b !important; color: #f59e0b !important; }
+
+    /* ── Theme toggle icons ─────────────────────────────────────── */
+    .theme-icon-eink-indicator { display: none; }
+    .theme-icon-sun             { display: none; }
+    .dark .theme-icon-moon             { display: none; }
+    .dark .theme-icon-eink-indicator   { display: block; }
+    .dark .theme-icon-sun              { display: none; }
+    .eink .theme-icon-moon             { display: none; }
+    .eink .theme-icon-eink-indicator   { display: none; }
+    .eink .theme-icon-sun              { display: block; }
+
+    /* ── E-ink theme ────────────────────────────────────────────── */
+    .eink .app-bg {
+      background-color: #ffffff;
+      background-image: none;
+    }
+    .eink .glass {
+      background: #ffffff;
+      border: 1px solid #1a1a1a;
+      box-shadow: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    .eink .glass-strong {
+      background: #ffffff;
+      border: 1px solid #1a1a1a;
+      box-shadow: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    .eink .glass-nav {
+      background: #f4f4f4;
+      border-color: #1a1a1a;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    .eink .glass-input {
+      background: #ffffff;
+      border: 1px solid #1a1a1a;
+      color: #000000;
+    }
+    .eink .glass-input::placeholder { color: #777777; }
+    .eink input.glass-input:focus,
+    .eink select.glass-input:focus,
+    .eink textarea.glass-input:focus {
+      border-color: #000000;
+      box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.15);
+    }
+    .eink .btn-primary {
+      background-image: none;
+      background-color: #000000;
+      color: #ffffff;
+      box-shadow: none;
+    }
+    .eink .btn-primary:hover  { filter: none; transform: none; box-shadow: none; background-color: #222222; }
+    .eink .btn-primary:active { transform: none; filter: none; }
+    .eink .btn-ghost {
+      background: #ffffff;
+      border: 1px solid #1a1a1a;
+      color: #000000;
+    }
+    .eink .btn-ghost:hover { background: #f0f0f0; transform: none; }
+    .eink .lift:hover { transform: none; box-shadow: none; }
+    .eink .swipe-btn-del   { background: #333333; }
+    .eink .swipe-btn-reset { background: #666666; }
+    .eink .audio-chip {
+      color: #000000;
+      background:
+        radial-gradient(closest-side, #ffffff 74%, transparent 75% 100%),
+        conic-gradient(#000000 var(--p), #cccccc var(--p));
+    }
+    .eink .audio-pill {
+      color: #000000;
+      background-image: linear-gradient(90deg, rgba(0,0,0,0.12) var(--p), rgba(0,0,0,0.04) var(--p));
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.45);
+    }
+    .eink .audio-pill:hover { transform: none; box-shadow: inset 0 0 0 1.5px #000000; }
+    .eink .review-player {
+      background: #ffffff;
+      border: 1px solid #1a1a1a;
+      box-shadow: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    .eink .review-player.playing { box-shadow: none; }
+    .eink .review-player.playing .rp-btn::after { animation: none; opacity: 0; }
+    .eink .rp-btn {
+      background-image: none;
+      background-color: #000000;
+      box-shadow: none;
+    }
+    .eink .rp-btn:hover { transform: none; }
+    .eink .rp-track { background: #e0e0e0; }
+    .eink .rp-fill  { background: #000000; box-shadow: none; }
+    .eink .rp-time  { color: #555555; }
+    .eink .rp-eq    { color: #000000; }
+    .eink aside .nav-link.nav-active {
+      background-image: none;
+      background-color: #e8e8e8;
+      color: #000000;
+      box-shadow: inset 0 0 0 1px #1a1a1a;
+      font-weight: 600;
+    }
+    .eink nav .nav-link.nav-active { color: #000000; font-weight: 600; }
+    .eink .nav-icon { filter: grayscale(1); }
+    .eink .nav-link.nav-active .nav-icon { filter: none; transform: none; }
+    .eink .text-gradient {
+      background: none;
+      -webkit-background-clip: unset;
+      background-clip: unset;
+      color: #000000;
+    }
+    .eink .bg-clip-text {
+      -webkit-background-clip: unset !important;
+      background-clip: unset !important;
+      background-image: none !important;
+    }
+    .eink .text-transparent { color: #000000 !important; }
+    .eink * { scrollbar-color: rgba(0,0,0,0.35) transparent; }
+    .eink ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); }
+    .eink ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.5); }
+    .eink .swal2-container { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+    .eink .swal2-popup {
+      background: #ffffff !important;
+      border: 1px solid #1a1a1a !important;
+      box-shadow: none !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    .eink .swal2-title { color: #000000 !important; }
+    .eink .swal2-html-container { color: #555555 !important; }
+    .eink .swal2-confirm.swal2-styled {
+      background-image: none !important;
+      background-color: #000000 !important;
+      box-shadow: none !important;
+    }
+    .eink .swal2-confirm.swal2-styled:hover { filter: none !important; background-color: #222222 !important; box-shadow: none !important; }
+    .eink .swal2-cancel.swal2-styled {
+      background: #ffffff !important;
+      border: 1px solid #1a1a1a !important;
+      color: #000000 !important;
+    }
+    .eink .swal2-cancel.swal2-styled:hover { background: #f0f0f0 !important; }
+    .eink .swal2-icon.swal2-warning { border-color: #555555 !important; color: #555555 !important; }
+
+    /* ── E-ink: review UI ──────────────────────────────────────── */
+    .eink #tap-to-reveal-btn {
+      background: transparent !important;
+      color: #1a1a1a !important;
+      border: 1.5px solid #1a1a1a !important;
+      box-shadow: none !important;
+    }
+    .eink #tap-to-reveal-btn:hover { background: rgba(0,0,0,0.05) !important; }
+    .eink #grade-buttons button {
+      background: transparent !important;
+      background-color: transparent !important;
+      border: 1.5px solid #1a1a1a !important;
+      color: #1a1a1a !important;
+      box-shadow: none !important;
+    }
+    .eink #grade-buttons button:hover { background: rgba(0,0,0,0.05) !important; }
+    .eink #show-question-btn {
+      color: #555555;
+      border: 1px solid #888888;
+      padding: 0.4rem 0.75rem;
+      border-radius: 0.5rem;
+      margin-top: 0.75rem;
+    }
+    .eink #show-question-btn:hover { color: #000000; border-color: #1a1a1a; }
+    .eink .deck-badge {
+      background-color: transparent !important;
+      color: #1a1a1a !important;
+      box-shadow: inset 0 0 0 1px #1a1a1a !important;
+    }
+    .eink #drag-label-again span,
+    .eink #drag-label-good span,
+    .eink #drag-label-up span,
+    .eink #drag-label-dn span {
+      border-color: #1a1a1a !important;
+      color: #1a1a1a !important;
+    }
+
+    /* ── E-ink: no background images ───────────────────────────── */
+    .eink .fact-face-bg,
+    .eink img.blur-xl,
+    .eink img.blur-3xl,
+    .eink .deck-face > img.absolute,
+    .eink .deck-face > span.absolute,
+    .eink #card-front div.pointer-events-none.absolute,
+    .eink #card-back div.pointer-events-none.absolute { display: none !important; }
+    /* Fix deck card text that is white-on-image in normal mode */
+    .eink .deck-face .text-white,
+    .eink .deck-face [class*="text-white"] { color: #1a1a1a !important; }
+
+    /* ── E-ink: heatmap & forecast ──────────────────────────────── */
+    .eink .heat-l0 { background: rgba(0,0,0,0.05) !important; }
+    .eink .heat-l1 { background: rgba(0,0,0,0.20) !important; }
+    .eink .heat-l2 { background: rgba(0,0,0,0.38) !important; }
+    .eink .heat-l3 { background: rgba(0,0,0,0.58) !important; }
+    .eink .heat-l4 { background: rgba(0,0,0,0.78) !important; }
+    .eink .heat-today { box-shadow: 0 0 0 2px #000000 !important; }
+    .eink .bg-gradient-to-t {
+      background-image: linear-gradient(to top, #555555, #888888) !important;
+    }
+
+    /* ── E-ink: deck cards ──────────────────────────────────────── */
+    .eink .deck-face {
+      background: transparent !important;
+      border: 1.5px solid #1a1a1a;
+      box-shadow: none;
+    }
+    .eink .deck-layer {
+      background-color: transparent !important;
+      border-color: #1a1a1a !important;
+      opacity: 0.45;
+      transform: none !important;
+      transition: none !important;
+    }
+    .eink .deck-stack:hover .deck-layer-a,
+    .eink .deck-stack:hover .deck-layer-b { transform: none !important; }
+    .eink .deck-title { text-shadow: none !important; }
+
+    /* ── E-ink: fact/card tiles ─────────────────────────────────── */
+    .eink .fact-face {
+      background: transparent !important;
+      border: 1.5px solid #1a1a1a !important;
+      box-shadow: none !important;
+    }
+    .eink .fact-card:hover { transform: none; }
+    .eink .fact-card:focus-visible { outline-color: #000000; }
+    .eink .fact-pip i          { background: #1a1a1a; }
+    .eink .fact-pip i.unseen   { background: #aaaaaa; }
+    .eink .fact-pip i.learning { background: #555555; }
+    /* status badges on card back: monochrome */
+    .eink .fact-face-back .rounded-full {
+      background: transparent !important;
+      color: #333333 !important;
+      --tw-ring-color: rgba(0, 0, 0, 0.3) !important;
+    }
   </style>
   <script>
-    if (localStorage.getItem("theme") === "dark") {
-      document.documentElement.classList.add("dark");
-    }
+    (function() {
+      var t = localStorage.getItem("theme");
+      if (t === "dark") document.documentElement.classList.add("dark");
+      if (t === "eink") document.documentElement.classList.add("eink");
+    })();
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
     }
