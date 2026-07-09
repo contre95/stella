@@ -17,10 +17,7 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	app.Get("/decks/list", h.DeckList)
 	app.Get("/decks/list-options", h.DeckOptions)
 	app.Post("/decks", h.AddDeck)
-	app.Post("/decks/import", h.ImportDeck)
-	app.Post("/import", h.Import)
 	app.Delete("/decks/:id", h.DeleteDeck)
-	app.Get("/decks/:id/export", h.ExportDeck)
 	app.Put("/decks/:id/name", h.RenameDeck)
 	app.Put("/decks/:id/description", h.UpdateDeckDescription)
 	app.Post("/decks/:id/image", h.SetDeckImage)
@@ -34,6 +31,4 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	app.Post("/groups", h.AddGroup)
 	app.Put("/groups/:id", h.UpdateGroup)
 	app.Delete("/groups/:id", h.DeleteGroup)
-	app.Get("/groups/:id/export", h.ExportGroup)
-	app.Post("/groups/import", h.ImportGroup)
 }

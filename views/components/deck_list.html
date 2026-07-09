@@ -80,14 +80,12 @@
       class="absolute inset-0 z-0 rounded-2xl"
       aria-label="Open deck {{.Name}}"
     ></a>
-    <span class="deck-pip{{if .Image}} deck-pip-shadow{{end}}" style="color:{{.Color}}" aria-hidden="true">{{printf "%.1s" .Name}}<i style="background:{{.Color}}"></i></span>
     <div class="pointer-events-none relative flex flex-1 flex-col items-center justify-center gap-1 px-2 text-center">
       <p class="deck-title font-semibold break-words leading-snug {{if .Image}}text-white{{else}}text-gray-900 dark:text-gray-100{{end}}">{{.Name}}</p>
       {{if .Description}}
         <p class="text-[11px] leading-snug line-clamp-2 {{if .Image}}text-white/75{{else}}text-gray-400 dark:text-gray-500{{end}}">{{.Description}}</p>
       {{end}}
     </div>
-    <span class="deck-pip deck-pip-br{{if .Image}} deck-pip-shadow{{end}}" style="color:{{.Color}}" aria-hidden="true">{{printf "%.1s" .Name}}<i style="background:{{.Color}}"></i></span>
     <div class="relative z-10 mt-1 flex items-center justify-center gap-1">
       <a
         href="/review?decks={{.ID}}"
@@ -151,15 +149,6 @@
   @media (prefers-reduced-motion: reduce) {
     .deck-layer { transition: none; }
   }
-  .deck-pip {
-    position: absolute; top: 0.5rem; left: 0.625rem;
-    display: flex; flex-direction: column; align-items: center; gap: 3px;
-    font-weight: 700; font-size: 0.8rem; line-height: 1;
-    pointer-events: none;
-  }
-  .deck-pip i { display: block; width: 5px; height: 5px; transform: rotate(45deg); }
-  .deck-pip-br { top: auto; left: auto; bottom: 0.5rem; right: 0.625rem; transform: rotate(180deg); }
-  .deck-pip-shadow { filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6)); }
   .deck-title { text-shadow: 0 1px 4px rgba(0,0,0,0.2); }
   .deck-title.text-white { text-shadow: 0 2px 12px rgba(0,0,0,0.7), 0 1px 4px rgba(0,0,0,0.5); }
   .deck-face { background: rgba(255,255,255,0.65); }

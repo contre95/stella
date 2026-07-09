@@ -1,4 +1,4 @@
-package cards
+package portability
 
 import (
 	"archive/zip"
@@ -43,7 +43,7 @@ func writeDeckZip(w io.Writer, exp *DeckExport) error {
 	}
 	for i := range exp.Facts {
 		fe := &exp.Facts[i]
-		files := []struct {
+		for _, m := range []struct {
 			name string
 			data []byte
 		}{
@@ -51,14 +51,12 @@ func writeDeckZip(w io.Writer, exp *DeckExport) error {
 			{fe.ImageBack, fe.ImageBackData},
 			{fe.AudioFront, fe.AudioFrontData},
 			{fe.AudioBack, fe.AudioBackData},
-		}
-		for _, m := range files {
+		} {
 			if err := add(m.name, m.data); err != nil {
 				return err
 			}
 		}
 	}
-
 	manifest := *exp
 	manifest.ImageData = nil
 	manifest.Facts = make([]FactExport, len(exp.Facts))
@@ -120,7 +118,10 @@ func writeGroupZip(w io.Writer, exp *GroupExport) error {
 		}
 		for j := range de.Facts {
 			fe := &de.Facts[j]
-			for _, m := range []struct{ name string; data []byte }{
+			for _, m := range []struct {
+				name string
+				data []byte
+			}{
 				{fe.ImageFront, fe.ImageFrontData},
 				{fe.ImageBack, fe.ImageBackData},
 				{fe.AudioFront, fe.AudioFrontData},
@@ -152,6 +153,56 @@ func writeGroupZip(w io.Writer, exp *GroupExport) error {
 	return zw.Close()
 }
 
+// readDeckZip parses a deck export zip back into a DeckExport with the media
+// bytes reattached from the media/ entries.
+func readDeckZip(r io.ReaderAt, size int64) (*DeckExport, error) {
+	zr, err := zip.NewReader(r, size)
+	if err != nil {
+		return nil, fmt.Errorf("invalid zip: %w", err)
+	}
+	var exp *DeckExport
+	media := map[string][]byte{}
+	for _, zf := range zr.File {
+		switch {
+		case zf.Name == deckManifestName:
+			rc, err := zf.Open()
+			if err != nil {
+				return nil, err
+			}
+			exp = new(DeckExport)
+			err = json.NewDecoder(rc).Decode(exp)
+			rc.Close()
+			if err != nil {
+				return nil, fmt.Errorf("invalid %s: %w", deckManifestName, err)
+			}
+		case strings.HasPrefix(zf.Name, mediaDir+"/") && !zf.FileInfo().IsDir():
+			rc, err := zf.Open()
+			if err != nil {
+				return nil, err
+			}
+			data, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				return nil, err
+			}
+			// Base defuses any path segments a hand-crafted zip might carry.
+			media[path.Base(zf.Name)] = data
+		}
+	}
+	if exp == nil {
+		return nil, fmt.Errorf("%s not found in zip", deckManifestName)
+	}
+	exp.ImageData = media[exp.Image]
+	for i := range exp.Facts {
+		fe := &exp.Facts[i]
+		fe.ImageFrontData = media[fe.ImageFront]
+		fe.ImageBackData = media[fe.ImageBack]
+		fe.AudioFrontData = media[fe.AudioFront]
+		fe.AudioBackData = media[fe.AudioBack]
+	}
+	return exp, nil
+}
+
 // readGroupZip parses a group export zip back into a GroupExport with all
 // media bytes reattached.
 func readGroupZip(r io.ReaderAt, size int64) (*GroupExport, error) {
@@ -163,9 +214,7 @@ func readGroupZip(r io.ReaderAt, size int64) (*GroupExport, error) {
 		Name string `json:"name"`
 	}
 	var meta *groupMeta
-	// deckIdx → manifest
 	manifests := map[string]*DeckExport{}
-	// deckIdx/filename → bytes
 	mediaBytes := map[string]map[string][]byte{}
 
 	for _, zf := range zr.File {
@@ -182,7 +231,6 @@ func readGroupZip(r io.ReaderAt, size int64) (*GroupExport, error) {
 				return nil, fmt.Errorf("invalid %s: %w", groupManifestName, err)
 			}
 		case strings.HasPrefix(zf.Name, decksDir+"/") && !zf.FileInfo().IsDir():
-			// Path: decks/<idx>/deck.json  or  decks/<idx>/media/<file>
 			rest := strings.TrimPrefix(zf.Name, decksDir+"/")
 			parts := strings.SplitN(rest, "/", 3)
 			if len(parts) < 2 {
@@ -233,7 +281,6 @@ func readGroupZip(r io.ReaderAt, size int64) (*GroupExport, error) {
 			fe.AudioFrontData = media[fe.AudioFront]
 			fe.AudioBackData = media[fe.AudioBack]
 		}
-		// idx is a numeric string; parse it to place decks in order.
 		n := 0
 		fmt.Sscanf(idx, "%d", &n)
 		if n < len(exp.Decks) {
@@ -243,8 +290,8 @@ func readGroupZip(r io.ReaderAt, size int64) (*GroupExport, error) {
 	return exp, nil
 }
 
-// zipHasEntry reports whether the zip archive (r, size) contains an entry with
-// the given name at the root level.
+// zipHasEntry reports whether the zip archive contains an entry with the given
+// name at the root level.
 func zipHasEntry(r io.ReaderAt, size int64, name string) (bool, error) {
 	zr, err := zip.NewReader(r, size)
 	if err != nil {
@@ -256,55 +303,4 @@ func zipHasEntry(r io.ReaderAt, size int64, name string) (bool, error) {
 		}
 	}
 	return false, nil
-}
-
-// readDeckZip parses a deck export zip back into a DeckExport with the media
-// bytes reattached from the mediaDir/ entries.
-func readDeckZip(r io.ReaderAt, size int64) (*DeckExport, error) {
-	zr, err := zip.NewReader(r, size)
-	if err != nil {
-		return nil, fmt.Errorf("invalid zip: %w", err)
-	}
-	var exp *DeckExport
-	media := map[string][]byte{}
-	for _, zf := range zr.File {
-		switch {
-		case zf.Name == deckManifestName:
-			rc, err := zf.Open()
-			if err != nil {
-				return nil, err
-			}
-			exp = new(DeckExport)
-			err = json.NewDecoder(rc).Decode(exp)
-			rc.Close()
-			if err != nil {
-				return nil, fmt.Errorf("invalid %s: %w", deckManifestName, err)
-			}
-		case strings.HasPrefix(zf.Name, mediaDir+"/") && !zf.FileInfo().IsDir():
-			rc, err := zf.Open()
-			if err != nil {
-				return nil, err
-			}
-			data, err := io.ReadAll(rc)
-			rc.Close()
-			if err != nil {
-				return nil, err
-			}
-			// Base defuses any path segments a hand-crafted zip might carry;
-			// the manifest only ever references bare filenames.
-			media[path.Base(zf.Name)] = data
-		}
-	}
-	if exp == nil {
-		return nil, fmt.Errorf("%s not found in zip", deckManifestName)
-	}
-	exp.ImageData = media[exp.Image]
-	for i := range exp.Facts {
-		fe := &exp.Facts[i]
-		fe.ImageFrontData = media[fe.ImageFront]
-		fe.ImageBackData = media[fe.ImageBack]
-		fe.AudioFrontData = media[fe.AudioFront]
-		fe.AudioBackData = media[fe.AudioBack]
-	}
-	return exp, nil
 }

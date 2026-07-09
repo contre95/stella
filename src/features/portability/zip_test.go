@@ -1,4 +1,4 @@
-package cards
+package portability
 
 import (
 	"bytes"
@@ -61,11 +61,6 @@ func TestDeckZipRoundTrip(t *testing.T) {
 }
 
 func TestReadDeckZipRejectsMissingManifest(t *testing.T) {
-	var buf bytes.Buffer
-	if err := writeDeckZip(&buf, &DeckExport{Name: "x"}); err != nil {
-		t.Fatalf("writeDeckZip: %v", err)
-	}
-	// An empty zip (no deck.json) must be rejected.
 	empty := []byte("PK\x05\x06" + string(make([]byte, 18)))
 	if _, err := readDeckZip(bytes.NewReader(empty), int64(len(empty))); err == nil {
 		t.Error("expected error for zip without deck.json")
