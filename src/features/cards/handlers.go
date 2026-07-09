@@ -507,8 +507,8 @@ func (h *Handler) AddDeck(c *fiber.Ctx) error {
 	if name == "" {
 		return respond.ToastErr(c, fiber.StatusBadRequest, "Name is required")
 	}
-	if len([]rune(name)) > 12 {
-		name = string([]rune(name)[:12])
+	if len([]rune(name)) > 32 {
+		name = string([]rune(name)[:32])
 	}
 	desc := strings.TrimSpace(c.FormValue("description"))
 	groupID := strings.TrimSpace(c.FormValue("group_id"))
@@ -523,14 +523,23 @@ func (h *Handler) AddDeck(c *fiber.Ctx) error {
 	return h.DeckList(c)
 }
 
+// UpdateDeckDescription updates the deck's description and re-renders the deck page.
+func (h *Handler) UpdateDeckDescription(c *fiber.Ctx) error {
+	desc := strings.TrimSpace(c.FormValue("description"))
+	if _, err := h.service.UpdateDeckDescription(c.Context(), auth.UserID(c), c.Params("id"), desc); err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return h.RenderDeckPage(c)
+}
+
 // RenameDeck updates the deck's name and re-renders the deck page.
 func (h *Handler) RenameDeck(c *fiber.Ctx) error {
 	name := strings.TrimSpace(c.FormValue("name"))
 	if name == "" {
 		return respond.ToastErr(c, fiber.StatusBadRequest, "Name is required")
 	}
-	if len([]rune(name)) > 12 {
-		name = string([]rune(name)[:12])
+	if len([]rune(name)) > 32 {
+		name = string([]rune(name)[:32])
 	}
 	if _, err := h.service.RenameDeck(c.Context(), auth.UserID(c), c.Params("id"), name); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())

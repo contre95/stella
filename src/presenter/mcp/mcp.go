@@ -554,14 +554,16 @@ func (s *Server) deleteGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in 
 
 // RenameDeckInput is the argument schema for rename_deck.
 type RenameDeckInput struct {
-	DeckID string `json:"deckId" jsonschema:"Deck ID to rename. Required — use list_decks to find it."`
-	Name   string `json:"name" jsonschema:"New name for the deck. Required. Maximum 12 characters."`
+	DeckID      string  `json:"deckId" jsonschema:"Deck ID to rename. Required — use list_decks to find it."`
+	Name        string  `json:"name" jsonschema:"New name for the deck. Required. Maximum 32 characters."`
+	Description *string `json:"description,omitempty" jsonschema:"Optional new description for the deck. Omit to leave unchanged; pass an empty string to clear it."`
 }
 
 // RenameDeckOutput is the result schema for rename_deck.
 type RenameDeckOutput struct {
-	DeckID string `json:"deckId"`
-	Name   string `json:"name"`
+	DeckID      string `json:"deckId"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
 }
 
 func (s *Server) renameDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in RenameDeckInput) (*mcpsdk.CallToolResult, RenameDeckOutput, error) {
@@ -572,14 +574,20 @@ func (s *Server) renameDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in R
 	if name == "" {
 		return nil, RenameDeckOutput{}, fmt.Errorf("name is required")
 	}
-	if len([]rune(name)) > 12 {
-		name = string([]rune(name)[:12])
+	if len([]rune(name)) > 32 {
+		name = string([]rune(name)[:32])
 	}
 	d, err := s.cards.RenameDeck(ctx, s.userID, in.DeckID, name)
 	if err != nil {
 		return nil, RenameDeckOutput{}, fmt.Errorf("renaming deck: %w", err)
 	}
-	return nil, RenameDeckOutput{DeckID: d.ID, Name: d.Name}, nil
+	if in.Description != nil {
+		d, err = s.cards.UpdateDeckDescription(ctx, s.userID, in.DeckID, strings.TrimSpace(*in.Description))
+		if err != nil {
+			return nil, RenameDeckOutput{}, fmt.Errorf("updating deck description: %w", err)
+		}
+	}
+	return nil, RenameDeckOutput{DeckID: d.ID, Name: d.Name, Description: d.Description}, nil
 }
 
 // SetDeckGroupInput is the argument schema for set_deck_group.

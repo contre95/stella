@@ -339,6 +339,19 @@ func (s *Service) RenameDeck(ctx context.Context, userID, id, name string) (*srs
 	return deck, nil
 }
 
+// UpdateDeckDescription updates the description of a deck.
+func (s *Service) UpdateDeckDescription(ctx context.Context, userID, id, description string) (*srs.Deck, error) {
+	deck, err := s.repo.GetDeck(ctx, userID, id)
+	if err != nil {
+		return nil, err
+	}
+	deck.Description = description
+	if err := s.repo.UpdateDeck(ctx, deck); err != nil {
+		return nil, err
+	}
+	return deck, nil
+}
+
 // SetDeckImage assigns an already-saved media filename as the deck's cover
 // picture and returns the previous filename so callers can clean it up.
 func (s *Service) SetDeckImage(ctx context.Context, userID, id, filename string) (string, error) {

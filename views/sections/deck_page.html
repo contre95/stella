@@ -79,7 +79,7 @@
               id="deck-name-input"
               name="name"
               value="{{.Deck.Name}}"
-              maxlength="12"
+              maxlength="32"
               class="glass-input rounded-lg px-2 py-0.5 text-2xl font-bold w-36 text-gray-900 dark:text-white"
             />
             <button type="submit" class="rounded p-1 text-gray-400 hover:text-green-600 transition-colors dark:hover:text-green-400" title="Save">
@@ -98,9 +98,52 @@
               </svg>
             </button>
           </form>
-          <p class="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
-            {{len .Facts}} card{{if ne (len .Facts) 1}}s{{end}}{{if .Deck.Description}} · {{.Deck.Description}}{{end}}
-          </p>
+          <div class="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+            <span>{{len .Facts}} card{{if ne (len .Facts) 1}}s{{end}}</span>
+            <span id="deck-desc-view" class="inline-flex items-center gap-1">
+              {{if .Deck.Description}} · <span>{{.Deck.Description}}</span>{{end}}
+              <button
+                type="button"
+                _="on click add .hidden to #deck-desc-view then remove .hidden from #deck-desc-edit then call #deck-desc-input.focus()"
+                class="rounded p-0.5 text-gray-300 hover:text-pink-600 transition-colors dark:text-gray-600 dark:hover:text-pink-400"
+                title="Edit description"
+              >
+                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487z" />
+                </svg>
+              </button>
+            </span>
+            <form
+              id="deck-desc-edit"
+              hx-put="/decks/{{.Deck.ID}}/description"
+              hx-target="#contenido"
+              hx-swap="outerHTML"
+              class="hidden mt-1 flex items-center gap-1.5"
+            >
+              <input
+                id="deck-desc-input"
+                name="description"
+                value="{{.Deck.Description}}"
+                placeholder="Add a description…"
+                class="glass-input rounded-lg px-2 py-0.5 text-sm w-64"
+              />
+              <button type="submit" class="rounded p-1 text-gray-400 hover:text-green-600 transition-colors dark:hover:text-green-400" title="Save">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                _="on click add .hidden to #deck-desc-edit then remove .hidden from #deck-desc-view"
+                class="rounded p-1 text-gray-400 hover:text-red-500 transition-colors dark:hover:text-red-400"
+                title="Cancel"
+              >
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </form>
+          </div>
         </div>
       </div>
 
