@@ -14,6 +14,8 @@
               {{template "sections/review" .}}
             {{else if eq .Section "review_done"}}
               {{template "sections/review_done" .}}
+            {{else if eq .Section "study_pick"}}
+              {{template "sections/study_pick" .}}
             {{else if eq .Section "about"}}
               {{template "sections/about" .}}
             {{else if eq .Section "cards"}}

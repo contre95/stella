@@ -756,6 +756,50 @@ func (s *Service) EnabledDeckIDs(ctx context.Context, userID string) ([]string, 
 	return s.repo.ListStudyEnabledDeckIDs(ctx, userID)
 }
 
+// GroupForPicker is one entry in the pre-session group selector.
+type GroupForPicker struct {
+	Group     *srs.Group // nil for the "ungrouped" synthetic entry
+	DeckIDs   string     // comma-joined deck IDs, used as the ?decks= param
+	DeckCount int
+}
+
+// GroupsForPicker returns named groups and an optional ungrouped entry, each
+// paired with their deck IDs. Used by the study-picker screen.
+func (s *Service) GroupsForPicker(ctx context.Context, userID string) (named []GroupForPicker, ungrouped *GroupForPicker, err error) {
+	groups, err := s.repo.ListGroups(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	decks, err := s.repo.ListDecks(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	byGroup := make(map[string][]string)
+	for _, d := range decks {
+		byGroup[d.GroupID] = append(byGroup[d.GroupID], d.ID)
+	}
+
+	named = make([]GroupForPicker, 0, len(groups))
+	for _, g := range groups {
+		ids := byGroup[g.ID]
+		named = append(named, GroupForPicker{
+			Group:     g,
+			DeckIDs:   strings.Join(ids, ","),
+			DeckCount: len(ids),
+		})
+	}
+
+	if unids := byGroup[""]; len(unids) > 0 {
+		ungrouped = &GroupForPicker{
+			DeckIDs:   strings.Join(unids, ","),
+			DeckCount: len(unids),
+		}
+	}
+
+	return named, ungrouped, nil
+}
+
 // HasLearnAhead reports whether any retention card is scheduled in the future,
 // i.e. whether a learn-ahead session would have something to show.
 func (s *Service) HasLearnAhead(ctx context.Context, userID string, deckIDs []string) (bool, error) {

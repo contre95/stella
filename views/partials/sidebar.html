@@ -23,13 +23,13 @@
       Dashboard
     </a>
     <a
-      href="/review"
-      hx-get="/review"
+      href="/review/pick"
+      hx-get="/review/pick"
       hx-target="#contenido"
       hx-swap="outerHTML"
       hx-push-url="true"
       _="on click remove .nav-active from .nav-link then add .nav-active to me"
-      class="nav-link {{if or (eq .Section "review") (eq .Section "review_done")}}nav-active{{end}} flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-600 hover:bg-white/60 hover:text-gray-900 transition-colors dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-100"
+      class="nav-link {{if or (eq .Section "review") (eq .Section "review_done") (eq .Section "study_pick")}}nav-active{{end}} flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-600 hover:bg-white/60 hover:text-gray-900 transition-colors dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-100"
     >
       <img src="/icons/study.svg" alt="" class="nav-icon h-5 w-5 shrink-0" />
       Study
@@ -99,7 +99,7 @@
     document.querySelectorAll('.nav-link').forEach(function(el) {
       var href = el.getAttribute('href');
       var active = (href === '/' && path === '/') ||
-                   (href !== '/' && (path === href || path.startsWith(href + '/')));
+                   (href !== '/' && (path === href || path.startsWith(href + '/') || (href === '/review/pick' && path.startsWith('/review'))));
       el.classList.toggle('nav-active', active);
     });
   }

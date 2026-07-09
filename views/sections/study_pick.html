@@ -1,0 +1,73 @@
+<div id="contenido">
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Study</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Choose a group to study.</p>
+  </div>
+
+  <div class="space-y-2.5 max-w-lg">
+    <!-- All enabled decks -->
+    <a href="/review"
+       hx-get="/review"
+       hx-target="#contenido"
+       hx-swap="outerHTML"
+       hx-push-url="true"
+       class="glass lift flex items-center justify-between rounded-2xl px-5 py-4 transition-colors hover:bg-white/80 dark:hover:bg-white/10 group">
+      <div>
+        <p class="font-semibold text-gray-900 dark:text-white">All enabled decks</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400">Study everything in your queue</p>
+      </div>
+      <svg class="h-5 w-5 text-gray-400 group-hover:text-pink-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+      </svg>
+    </a>
+
+    {{if .Groups}}
+      <div class="flex items-center gap-3 pt-2 pb-1">
+        <div class="h-px flex-1 bg-gray-200 dark:bg-white/10"></div>
+        <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Groups</span>
+        <div class="h-px flex-1 bg-gray-200 dark:bg-white/10"></div>
+      </div>
+
+      {{range .Groups}}
+        {{if .DeckIDs}}
+          <a href="/review?decks={{.DeckIDs}}"
+             hx-get="/review?decks={{.DeckIDs}}"
+             hx-target="#contenido"
+             hx-swap="outerHTML"
+             hx-push-url="true"
+             class="glass lift flex items-center justify-between rounded-2xl px-5 py-4 transition-colors hover:bg-white/80 dark:hover:bg-white/10 group">
+            <div>
+              <p class="font-semibold text-gray-900 dark:text-white">{{.Group.Name}}</p>
+              <p class="text-sm text-gray-500 dark:text-gray-400">{{.DeckCount}} deck{{if ne .DeckCount 1}}s{{end}}</p>
+            </div>
+            <svg class="h-5 w-5 text-gray-400 group-hover:text-pink-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </a>
+        {{else}}
+          <div class="glass rounded-2xl px-5 py-4 opacity-50">
+            <p class="font-semibold text-gray-900 dark:text-white">{{.Group.Name}}</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400">No decks</p>
+          </div>
+        {{end}}
+      {{end}}
+    {{end}}
+
+    {{if .Ungrouped}}
+      <a href="/review?decks={{.Ungrouped.DeckIDs}}"
+         hx-get="/review?decks={{.Ungrouped.DeckIDs}}"
+         hx-target="#contenido"
+         hx-swap="outerHTML"
+         hx-push-url="true"
+         class="glass lift flex items-center justify-between rounded-2xl px-5 py-4 transition-colors hover:bg-white/80 dark:hover:bg-white/10 group">
+        <div>
+          <p class="font-semibold text-gray-400 dark:text-gray-500">Ungrouped</p>
+          <p class="text-sm text-gray-500 dark:text-gray-400">{{.Ungrouped.DeckCount}} deck{{if ne .Ungrouped.DeckCount 1}}s{{end}}</p>
+        </div>
+        <svg class="h-5 w-5 text-gray-400 group-hover:text-pink-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+      </a>
+    {{end}}
+  </div>
+</div>

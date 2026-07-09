@@ -60,6 +60,23 @@ func (h *Handler) doneData(c *fiber.Ctx, title, deckFilter string, deckIDs []str
 	return fiber.Map{"Title": title, "CanLearnAhead": canLearnAhead, "DeckFilter": deckFilter}
 }
 
+// PickGroup serves GET /review/pick — group selection before a study session.
+// When no groups exist it falls through directly to RenderSession.
+func (h *Handler) PickGroup(c *fiber.Ctx) error {
+	named, ungrouped, err := h.service.GroupsForPicker(c.Context(), auth.UserID(c))
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	if len(named) == 0 && ungrouped == nil {
+		return h.RenderSession(c)
+	}
+	return respond.Section(c, "study_pick", fiber.Map{
+		"Title":     "Study",
+		"Groups":    named,
+		"Ungrouped": ungrouped,
+	})
+}
+
 // RenderSession serves GET /review — shows the first card or the done state.
 // Optional ?decks=id1,id2 restricts the session to those decks, and
 // ?learnahead=1 keeps serving future-scheduled cards once the queue is empty.
