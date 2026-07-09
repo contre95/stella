@@ -53,8 +53,7 @@ func (h *Handler) SidebarStats(c *fiber.Ctx) error {
 		return c.SendString("")
 	}
 	return c.Render("partials/sidebar_stats", fiber.Map{
-		"DeckCount":  stats.DeckCount,
-		"TotalCards": stats.TotalCards,
+		"StudyCards": stats.StudyCards,
 	})
 }
 

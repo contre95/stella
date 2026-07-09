@@ -1,8 +1,11 @@
 <header class="glass-nav flex items-center justify-between border-b px-4 py-3 sm:px-6">
   <!-- Mobile brand -->
-  <div class="flex items-center gap-2 sm:hidden">
+  <div class="flex items-center gap-2 lg:hidden">
     <img src="/logo.png" alt="Stella" class="h-12 w-12 rounded-lg object-contain" />
-    <span class="text-xl font-bold bg-gradient-to-r from-pink-400 to-pink-600 bg-clip-text text-transparent">Stella</span>
+    <div>
+      <span class="text-xl font-bold bg-gradient-to-r from-pink-400 to-pink-600 bg-clip-text text-transparent">Stella</span>
+      <div hx-get="/sidebar-stats" hx-trigger="load" hx-target="this"></div>
+    </div>
   </div>
 
   <div class="ml-auto flex items-center gap-2">
