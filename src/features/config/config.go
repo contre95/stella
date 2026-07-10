@@ -80,8 +80,9 @@ type MCP struct {
 
 // Logger holds logging settings.
 type Logger struct {
-	Level string `yaml:"level"`
-	Debug bool   `yaml:"debug"`
+	Level  string `yaml:"level"`
+	Format string `yaml:"format"` // json, text, logfmt (default)
+	Debug  bool   `yaml:"debug"`
 }
 
 // Review holds scheduler tunables ported from Mnemosyne's config keys.

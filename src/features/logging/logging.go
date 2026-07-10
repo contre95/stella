@@ -3,23 +3,43 @@ package logging
 import (
 	"log/slog"
 	"os"
-	"strings"
+	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/contre95/stella/src/features/config"
 )
 
-// SetupLogger builds a structured slog logger from config.
 func SetupLogger(cm *config.Manager) *slog.Logger {
 	cfg := cm.Get()
-	level := slog.LevelInfo
-	switch strings.ToLower(cfg.Logger.Level) {
-	case "debug":
-		level = slog.LevelDebug
-	case "warn":
-		level = slog.LevelWarn
-	case "error":
-		level = slog.LevelError
+
+	var formatter log.Formatter
+	switch cfg.Logger.Format {
+	case "json":
+		formatter = log.JSONFormatter
+	case "text":
+		formatter = log.TextFormatter
+	default:
+		formatter = log.LogfmtFormatter
 	}
-	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level})
+
+	level := log.InfoLevel
+	switch cfg.Logger.Level {
+	case "debug":
+		level = log.DebugLevel
+	case "warn":
+		level = log.WarnLevel
+	case "error":
+		level = log.ErrorLevel
+	}
+
+	handler := log.NewWithOptions(os.Stderr, log.Options{
+		ReportCaller:    true,
+		ReportTimestamp: true,
+		TimeFormat:      time.Kitchen,
+		Prefix:          "Stella",
+		Formatter:       formatter,
+		Level:           level,
+	})
+
 	return slog.New(handler)
 }

@@ -20,7 +20,7 @@ func LogRequestsMiddleware() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		start := time.Now()
 		err := c.Next()
-		slog.Debug("request",
+		slog.Info("request",
 			"method", c.Method(),
 			"path", c.Path(),
 			"status", c.Response().StatusCode(),
