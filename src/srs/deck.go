@@ -5,8 +5,11 @@ import "unicode/utf8"
 // Deck is a named grouping of facts/cards (Mnemosyne's tags collapsed into a
 // single grouping dimension for this simpler app).
 type Deck struct {
-	ID          string
-	UserID      string
+	ID     string
+	UserID string
+	// SyncID is the compact 8-hex-char identity used by the device sync
+	// protocol; unique per user, assigned by the repository on insert.
+	SyncID      string
 	Name        string
 	Color       string
 	Description string

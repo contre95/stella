@@ -130,7 +130,7 @@
           {{if gt .Heatmap.CurrentStreak 0}}· <span class="text-gradient font-semibold">{{.Heatmap.CurrentStreak}}-day streak</span>{{end}}
         </span>
       </div>
-      <div class="overflow-x-auto pb-0.5" id="heatmapContainer">
+      <div class="max-w-[750px] mx-auto overflow-x-auto pb-0.5" id="heatmapContainer">
         <div style="width: fit-content; padding-right: 2px;">
           <div class="mb-0.5 flex gap-[2px]">
             {{range .Heatmap.MonthLabels}}

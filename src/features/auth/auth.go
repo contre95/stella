@@ -167,6 +167,12 @@ func (s *Service) userByRawAPIToken(ctx context.Context, raw string) (*User, err
 	return s.store.UserByAPIToken(ctx, hashToken(raw))
 }
 
+// UserByBearer resolves a raw bearer token to its owning user. Used by the
+// device sync API, which authenticates with API tokens in all auth modes.
+func (s *Service) UserByBearer(ctx context.Context, raw string) (*User, error) {
+	return s.userByRawAPIToken(ctx, raw)
+}
+
 // mcpUserIDKey is the context key used to propagate the authenticated user ID
 // into the net/http MCP handler.
 type mcpUserIDKey struct{}

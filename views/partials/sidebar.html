@@ -72,7 +72,6 @@
       </svg>
       About
     </a>
-    {{if .MultiUser}}
     <a
       href="/settings/tokens"
       hx-get="/settings/tokens"
@@ -87,7 +86,6 @@
       </svg>
       API Tokens
     </a>
-    {{end}}
   </nav>
 
   <a href="https://codeberg.org/monopieza/stella" target="_blank" rel="noopener" class="px-5 py-4 text-xs text-center text-gradient hover:opacity-80 transition-opacity">{{ .Version }}</a>

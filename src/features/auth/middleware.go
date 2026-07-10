@@ -36,8 +36,9 @@ func (s *Service) Middleware() fiber.Handler {
 		}
 	}
 	return func(c *fiber.Ctx) error {
-		// /mcp uses bearer token auth (MCPBearerMiddleware); skip session check.
-		if strings.HasPrefix(c.Path(), "/mcp") {
+		// /mcp and /api/x4 use bearer token auth (MCPBearerMiddleware and
+		// devicesync's bearerAuth); skip the session check.
+		if strings.HasPrefix(c.Path(), "/mcp") || strings.HasPrefix(c.Path(), "/api/x4") {
 			return c.Next()
 		}
 		if token := c.Cookies(sessionCookieName); token != "" {

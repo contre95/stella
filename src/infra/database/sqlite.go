@@ -23,7 +23,7 @@ var _ srs.Repository = (*SqliteSRS)(nil)
 
 // cardColumns is the fixed column list used by every card SELECT, matching the
 // order scanCard expects.
-const cardColumns = `id, user_id, fact_id, deck_id, card_view, grade, easiness,
+const cardColumns = `id, user_id, sync_id, fact_id, deck_id, card_view, grade, easiness,
 	acq_reps, ret_reps, lapses, acq_reps_since_lapse, ret_reps_since_lapse,
 	last_rep, next_rep, active`
 
@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS groups (
 CREATE TABLE IF NOT EXISTS decks (
 	id            TEXT PRIMARY KEY,
 	user_id       TEXT NOT NULL,
+	sync_id       TEXT NOT NULL DEFAULT '',
 	name          TEXT NOT NULL,
 	color         TEXT NOT NULL DEFAULT '#8b5cf6',
 	description   TEXT NOT NULL DEFAULT '',
@@ -114,6 +115,7 @@ CREATE TABLE IF NOT EXISTS facts (
 CREATE TABLE IF NOT EXISTS cards (
 	id                   TEXT PRIMARY KEY,
 	user_id              TEXT NOT NULL,
+	sync_id              TEXT NOT NULL DEFAULT '',
 	fact_id              TEXT NOT NULL,
 	deck_id              TEXT NOT NULL,
 	card_view            TEXT NOT NULL,
@@ -145,6 +147,7 @@ CREATE TABLE IF NOT EXISTS reviews (
 	actual_interval    INTEGER NOT NULL,
 	thinking_time      INTEGER NOT NULL,
 	timestamp          INTEGER NOT NULL,
+	source             TEXT NOT NULL DEFAULT 'web',
 	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_reviews_card ON reviews(card_id);
@@ -153,9 +156,35 @@ CREATE INDEX IF NOT EXISTS idx_reviews_ts   ON reviews(user_id, timestamp);
 	if _, err := s.db.Exec(schema); err != nil {
 		return fmt.Errorf("creating schema: %w", err)
 	}
-	// Additive column for existing databases — safe to ignore if it already exists.
+	// Additive columns for existing databases — safe to ignore if they already exist.
 	s.db.Exec(`ALTER TABLE decks ADD COLUMN study_enabled INTEGER NOT NULL DEFAULT 1`)
+	s.db.Exec(`ALTER TABLE decks ADD COLUMN sync_id TEXT NOT NULL DEFAULT ''`)
+	s.db.Exec(`ALTER TABLE cards ADD COLUMN sync_id TEXT NOT NULL DEFAULT ''`)
+	s.db.Exec(`ALTER TABLE reviews ADD COLUMN source TEXT NOT NULL DEFAULT 'web'`)
+	// Backfill sync IDs for rows created before the columns existed, then
+	// enforce per-user uniqueness. randomblob(4) collisions are ~1e-5 even at
+	// 10k cards; if one ever trips the index, rerunning the backfill by hand
+	// (UPDATE ... WHERE sync_id='') resolves it.
+	if _, err := s.db.Exec(`UPDATE decks SET sync_id = lower(hex(randomblob(4))) WHERE sync_id = ''`); err != nil {
+		return fmt.Errorf("backfilling deck sync ids: %w", err)
+	}
+	if _, err := s.db.Exec(`UPDATE cards SET sync_id = lower(hex(randomblob(4))) WHERE sync_id = ''`); err != nil {
+		return fmt.Errorf("backfilling card sync ids: %w", err)
+	}
+	const indexes = `
+CREATE UNIQUE INDEX IF NOT EXISTS idx_decks_sync ON decks(user_id, sync_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cards_sync ON cards(user_id, sync_id);
+`
+	if _, err := s.db.Exec(indexes); err != nil {
+		return fmt.Errorf("creating sync indexes: %w", err)
+	}
 	return nil
+}
+
+// isSyncIDCollision reports whether err is a violation of one of the per-user
+// sync_id unique indexes, so inserts can retry with a fresh ID.
+func isSyncIDCollision(err error) bool {
+	return err != nil && strings.Contains(err.Error(), ".sync_id")
 }
 
 //
@@ -231,16 +260,23 @@ func (s *SqliteSRS) queryFacts(ctx context.Context, query string, args ...any) (
 // Cards.
 //
 
+// AddCard inserts a card, assigning it a fresh sync ID (retrying the
+// astronomically rare per-user collision). c.SyncID is set on success.
 func (s *SqliteSRS) AddCard(ctx context.Context, c *srs.Card) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO cards (id, user_id, fact_id, deck_id, card_view, grade, easiness,
-			acq_reps, ret_reps, lapses, acq_reps_since_lapse, ret_reps_since_lapse,
-			last_rep, next_rep, active)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		c.ID, c.UserID, c.FactID, c.DeckID, string(c.View), c.Grade, c.Easiness,
-		c.AcqReps, c.RetReps, c.Lapses, c.AcqRepsSinceLapse, c.RetRepsSinceLapse,
-		c.LastRep, c.NextRep, boolToInt(c.Active))
-	return err
+	for {
+		c.SyncID = srs.NewSyncID()
+		_, err := s.db.ExecContext(ctx,
+			`INSERT INTO cards (id, user_id, sync_id, fact_id, deck_id, card_view, grade, easiness,
+				acq_reps, ret_reps, lapses, acq_reps_since_lapse, ret_reps_since_lapse,
+				last_rep, next_rep, active)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			c.ID, c.UserID, c.SyncID, c.FactID, c.DeckID, string(c.View), c.Grade, c.Easiness,
+			c.AcqReps, c.RetReps, c.Lapses, c.AcqRepsSinceLapse, c.RetRepsSinceLapse,
+			c.LastRep, c.NextRep, boolToInt(c.Active))
+		if !isSyncIDCollision(err) {
+			return err
+		}
+	}
 }
 
 func (s *SqliteSRS) GetCard(ctx context.Context, userID, id string) (*srs.Card, error) {
@@ -275,22 +311,90 @@ func (s *SqliteSRS) CardsForFact(ctx context.Context, userID, factID string) ([]
 }
 
 //
+// Device sync.
+//
+
+func (s *SqliteSRS) CardsByDeck(ctx context.Context, userID, deckID string) ([]*srs.Card, error) {
+	return s.queryCards(ctx, userID, `deck_id=?`, "rowid", -1, nil, deckID)
+}
+
+func (s *SqliteSRS) DeckExportRows(ctx context.Context, userID, deckID string, limit int) ([]srs.DeckExportRow, error) {
+	if limit <= 0 {
+		limit = -1
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT c.sync_id, c.card_view, f.front, f.back
+		 FROM cards c JOIN facts f ON c.fact_id = f.id
+		 WHERE c.user_id=? AND c.deck_id=? AND c.active=1
+		 ORDER BY c.rowid LIMIT ?`, userID, deckID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []srs.DeckExportRow
+	for rows.Next() {
+		var r srs.DeckExportRow
+		var view string
+		if err := rows.Scan(&r.SyncID, &view, &r.Front, &r.Back); err != nil {
+			return nil, err
+		}
+		if srs.CardView(view) == srs.ViewReverse {
+			r.Front, r.Back = r.Back, r.Front
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (s *SqliteSRS) CardIDsBySyncID(ctx context.Context, userID string) (map[string]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT sync_id, id FROM cards WHERE user_id=?`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var syncID, id string
+		if err := rows.Scan(&syncID, &id); err != nil {
+			return nil, err
+		}
+		out[syncID] = id
+	}
+	return out, rows.Err()
+}
+
+//
 // Decks.
 //
 
+// AddDeck inserts a deck, assigning it a fresh sync ID (retrying the
+// astronomically rare per-user collision). d.SyncID is set on success.
 func (s *SqliteSRS) AddDeck(ctx context.Context, d *srs.Deck) error {
 	groupID := nullableString(d.GroupID)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO decks (id, user_id, name, color, description, image, group_id, study_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		d.ID, d.UserID, d.Name, d.Color, d.Description, d.Image, groupID, boolToInt(d.StudyEnabled))
-	return err
+	for {
+		d.SyncID = srs.NewSyncID()
+		_, err := s.db.ExecContext(ctx, `INSERT INTO decks (id, user_id, sync_id, name, color, description, image, group_id, study_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			d.ID, d.UserID, d.SyncID, d.Name, d.Color, d.Description, d.Image, groupID, boolToInt(d.StudyEnabled))
+		if !isSyncIDCollision(err) {
+			return err
+		}
+	}
 }
 
 func (s *SqliteSRS) GetDeck(ctx context.Context, userID, id string) (*srs.Deck, error) {
+	return s.getDeckWhere(ctx, `id=? AND user_id=?`, id, userID)
+}
+
+func (s *SqliteSRS) GetDeckBySyncID(ctx context.Context, userID, syncID string) (*srs.Deck, error) {
+	return s.getDeckWhere(ctx, `sync_id=? AND user_id=?`, syncID, userID)
+}
+
+func (s *SqliteSRS) getDeckWhere(ctx context.Context, where string, args ...any) (*srs.Deck, error) {
 	var d srs.Deck
 	var groupID sql.NullString
 	var studyEnabled int
-	err := s.db.QueryRowContext(ctx, `SELECT id, user_id, name, color, description, image, group_id, study_enabled FROM decks WHERE id=? AND user_id=?`, id, userID).
-		Scan(&d.ID, &d.UserID, &d.Name, &d.Color, &d.Description, &d.Image, &groupID, &studyEnabled)
+	err := s.db.QueryRowContext(ctx, `SELECT id, user_id, sync_id, name, color, description, image, group_id, study_enabled FROM decks WHERE `+where, args...).
+		Scan(&d.ID, &d.UserID, &d.SyncID, &d.Name, &d.Color, &d.Description, &d.Image, &groupID, &studyEnabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, srs.ErrNotFound
 	}
@@ -313,7 +417,7 @@ func (s *SqliteSRS) UpdateDeck(ctx context.Context, d *srs.Deck) error {
 
 func (s *SqliteSRS) ListDecks(ctx context.Context, userID string) ([]*srs.Deck, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, user_id, name, color, description, image, group_id, study_enabled FROM decks WHERE user_id=? ORDER BY group_id IS NULL, group_id, name`, userID)
+		`SELECT id, user_id, sync_id, name, color, description, image, group_id, study_enabled FROM decks WHERE user_id=? ORDER BY group_id IS NULL, group_id, name`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +427,7 @@ func (s *SqliteSRS) ListDecks(ctx context.Context, userID string) ([]*srs.Deck, 
 		var d srs.Deck
 		var groupID sql.NullString
 		var studyEnabled int
-		if err := rows.Scan(&d.ID, &d.UserID, &d.Name, &d.Color, &d.Description, &d.Image, &groupID, &studyEnabled); err != nil {
+		if err := rows.Scan(&d.ID, &d.UserID, &d.SyncID, &d.Name, &d.Color, &d.Description, &d.Image, &groupID, &studyEnabled); err != nil {
 			return nil, err
 		}
 		if groupID.Valid {
@@ -427,13 +531,33 @@ func (s *SqliteSRS) UnsetGroupForDecks(ctx context.Context, userID, groupID stri
 //
 
 func (s *SqliteSRS) AddReview(ctx context.Context, r *srs.Review) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO reviews (id, user_id, card_id, grade, ret_reps, scheduled_interval,
-			actual_interval, thinking_time, timestamp)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		r.ID, r.UserID, r.CardID, r.Grade, r.RetReps, r.ScheduledInterval, r.ActualInterval,
-		r.ThinkingTime, r.Timestamp)
+	_, err := s.db.ExecContext(ctx, insertReviewSQL, reviewArgs(r)...)
 	return err
+}
+
+// AddReviewIfNew inserts a review unless its ID already exists, reporting
+// whether a row was inserted. Deterministic IDs make device uploads
+// idempotent across retries.
+func (s *SqliteSRS) AddReviewIfNew(ctx context.Context, r *srs.Review) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `INSERT OR IGNORE`+insertReviewSQL[len(`INSERT`):], reviewArgs(r)...)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+const insertReviewSQL = `INSERT INTO reviews (id, user_id, card_id, grade, ret_reps, scheduled_interval,
+		actual_interval, thinking_time, timestamp, source)
+	 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+func reviewArgs(r *srs.Review) []any {
+	source := r.Source
+	if source == "" {
+		source = "web"
+	}
+	return []any{r.ID, r.UserID, r.CardID, r.Grade, r.RetReps, r.ScheduledInterval, r.ActualInterval,
+		r.ThinkingTime, r.Timestamp, source}
 }
 
 // FactIDsLearnedToday unions Mnemosyne's fact_ids_newly_learned_today (a
@@ -619,7 +743,7 @@ func scanCard(sc rowScanner) (*srs.Card, error) {
 	var c srs.Card
 	var view string
 	var active int
-	err := sc.Scan(&c.ID, &c.UserID, &c.FactID, &c.DeckID, &view, &c.Grade, &c.Easiness,
+	err := sc.Scan(&c.ID, &c.UserID, &c.SyncID, &c.FactID, &c.DeckID, &view, &c.Grade, &c.Easiness,
 		&c.AcqReps, &c.RetReps, &c.Lapses, &c.AcqRepsSinceLapse, &c.RetRepsSinceLapse,
 		&c.LastRep, &c.NextRep, &active)
 	if err != nil {

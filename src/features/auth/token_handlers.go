@@ -18,14 +18,6 @@ func (s *Service) NewTokenHandler() *TokenHandler {
 	return &TokenHandler{svc: s}
 }
 
-// RegisterRoutes mounts token management routes. These sit behind the auth
-// middleware so only logged-in users can reach them.
-func (h *TokenHandler) RegisterRoutes(app *fiber.App) {
-	app.Get("/settings/tokens", h.listTokens)
-	app.Post("/settings/tokens", h.createToken)
-	app.Delete("/settings/tokens/:hash", h.revokeToken)
-}
-
 type tokenView struct {
 	Hash    string
 	Name    string

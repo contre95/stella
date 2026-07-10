@@ -11,6 +11,7 @@ import (
 	"github.com/contre95/stella/src/features/auth"
 	"github.com/contre95/stella/src/features/cards"
 	"github.com/contre95/stella/src/features/config"
+	"github.com/contre95/stella/src/features/devicesync"
 	"github.com/contre95/stella/src/features/hosting"
 	"github.com/contre95/stella/src/features/portability"
 	"github.com/contre95/stella/src/features/logging"
@@ -70,7 +71,8 @@ func main() {
 
 	// 5. Routes + server.
 	tokenHandler := authService.NewTokenHandler()
-	registrars := []hosting.RouteRegistrar{uiHandler, cardsHandler, portabilityHandler, reviewHandler, tokenHandler}
+	deviceSyncHandler := devicesync.NewHandler(devicesync.NewService(db), authService)
+	registrars := []hosting.RouteRegistrar{uiHandler, cardsHandler, portabilityHandler, reviewHandler, tokenHandler, deviceSyncHandler}
 	if cfgManager.Get().MCP.Enabled {
 		registrars = append(registrars, mcppresenter.NewHTTPRegistrar(cfgManager.Get().Server.AppName, version, cardsService, authService))
 		slog.Info("mcp enabled", "path", "/mcp")

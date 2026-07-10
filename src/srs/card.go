@@ -22,10 +22,15 @@ const GradeUnseen = -1
 //   - LastRep/NextRep: POSIX seconds. NextRep is stored as midnight UTC for
 //     retention reps so all cards due the same day share a value.
 type Card struct {
-	ID                string
-	UserID            string
-	FactID            string
-	DeckID            string
+	ID     string
+	UserID string
+	FactID string
+	DeckID string
+	// SyncID is the compact 8-hex-char identity used by the device sync
+	// protocol (stella-x4 packs IDs into 12-byte fields). Unique per user;
+	// assigned by the repository on insert. Unlike ID it is exposed on the
+	// wire, and unlike a content hash it survives fact edits.
+	SyncID            string
 	View              CardView
 	Grade             int
 	Easiness          float64

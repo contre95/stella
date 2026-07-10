@@ -48,6 +48,21 @@ type Repository interface {
 	DeleteGroup(ctx context.Context, userID, id string) error
 	UnsetGroupForDecks(ctx context.Context, userID, groupID string) error
 
+	// Device sync (stella-x4). Devices address decks and cards by their
+	// compact sync IDs, never by primary keys.
+	GetDeckBySyncID(ctx context.Context, userID, syncID string) (*Deck, error)
+	// CardsByDeck returns every card in the deck (active and suspended),
+	// used to key the sync state exchange by card sync ID.
+	CardsByDeck(ctx context.Context, userID, deckID string) ([]*Card, error)
+	// DeckExportRows returns the deck's active cards joined with their fact
+	// text, view direction applied, in insertion order, capped at limit.
+	DeckExportRows(ctx context.Context, userID, deckID string, limit int) ([]DeckExportRow, error)
+	// CardIDsBySyncID maps every card sync ID of the user to its primary key.
+	CardIDsBySyncID(ctx context.Context, userID string) (map[string]string, error)
+	// AddReviewIfNew inserts a review unless its ID already exists; reports
+	// whether a row was inserted. Device uploads retry idempotently.
+	AddReviewIfNew(ctx context.Context, r *Review) (bool, error)
+
 	// Reviews (append-only log).
 	AddReview(ctx context.Context, r *Review) error
 	// ReviewTimestampsSince returns POSIX timestamps of reviews at or after
