@@ -12,6 +12,7 @@ import (
 	"github.com/contre95/stella/src/features/cards"
 	"github.com/contre95/stella/src/features/config"
 	"github.com/contre95/stella/src/features/hosting"
+	"github.com/contre95/stella/src/features/opds"
 	"github.com/contre95/stella/src/features/portability"
 	"github.com/contre95/stella/src/features/logging"
 	"github.com/contre95/stella/src/features/review"
@@ -61,16 +62,18 @@ func main() {
 	cardsService := cards.NewService(db, scheduler, cfgManager)
 	reviewService := review.NewService(db, scheduler)
 	portabilityService := portability.NewService(cardsService)
+	opdsService := opds.NewService(cardsService)
 
 	// 4. Handlers.
 	uiHandler := ui.NewHandler(reviewService)
 	cardsHandler := cards.NewHandler(cardsService)
 	reviewHandler := review.NewHandler(reviewService, cfgManager)
 	portabilityHandler := portability.NewHandler(portabilityService, cardsHandler)
+	opdsHandler := opds.NewHandler(opdsService)
 
 	// 5. Routes + server.
 	tokenHandler := authService.NewTokenHandler()
-	registrars := []hosting.RouteRegistrar{uiHandler, cardsHandler, portabilityHandler, reviewHandler, tokenHandler}
+	registrars := []hosting.RouteRegistrar{uiHandler, cardsHandler, portabilityHandler, reviewHandler, tokenHandler, opdsHandler}
 	if cfgManager.Get().MCP.Enabled {
 		registrars = append(registrars, mcppresenter.NewHTTPRegistrar(cfgManager.Get().Server.AppName, version, cardsService, authService))
 		slog.Info("mcp enabled", "path", "/mcp")
