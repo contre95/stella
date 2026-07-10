@@ -43,8 +43,9 @@ func NewServer(name, version string, cardsService *cards.Service, userID string)
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
 		Name: "edit_card",
 		Description: "Edit an existing fact by fact ID: change its front/back text, " +
-			"replace or remove its images and audio, and add or remove the reverse " +
-			"card. Omitted fields keep their current value. Scheduling data is not " +
+			"replace or remove its images and audio, and add or remove the reverse card. " +
+			"Use addReverse: true to add the reverse card, or removeReverse: true to delete it. " +
+			"Omitted fields keep their current value. Scheduling data is not " +
 			"touched. Use list_recent_cards to find the factId and see current content.",
 	}, s.editCard)
 
@@ -103,6 +104,14 @@ func NewServer(name, version string, cardsService *cards.Service, userID string)
 		Name:        "rename_deck",
 		Description: "Rename a deck by ID. Use list_decks to find the deckId.",
 	}, s.renameDeck)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name: "set_deck_reverse",
+		Description: "Add or remove the reverse (back -> front) card for every fact in a deck in one call. " +
+			"Pass enabled: true to add reverse cards to all facts that don't have one yet, or " +
+			"enabled: false to remove reverse cards from all facts that have one. " +
+			"Facts with no back text are skipped. Returns the number of facts actually changed.",
+	}, s.setDeckReverse)
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
 		Name: "create_cards",
@@ -192,7 +201,8 @@ type EditCardInput struct {
 	FactID           string  `json:"factId" jsonschema:"Fact ID of the card to edit. Required — use list_recent_cards to find it."`
 	Front            *string `json:"front,omitempty" jsonschema:"New front text. Omit to keep the current front."`
 	Back             *string `json:"back,omitempty" jsonschema:"New back text. Omit to keep the current back; pass an empty string to clear it (which also removes any reverse card)."`
-	Reverse          *bool   `json:"reverse,omitempty" jsonschema:"true creates the reverse (back -> front) card if missing; false deletes it (its learning history is lost). Omit to leave the sister cards as they are."`
+	AddReverse       bool    `json:"addReverse,omitempty" jsonschema:"Set to true to create the reverse (back -> front) card if it does not already exist."`
+	RemoveReverse    bool    `json:"removeReverse,omitempty" jsonschema:"Set to true to delete the reverse (back -> front) card (its learning history is lost). Ignored when addReverse is also true."`
 	ImageFront       string  `json:"imageFront,omitempty" jsonschema:"http(s) URL or local file path of a new front image; replaces the current one. Supports jpg, png, gif, webp."`
 	ImageBack        string  `json:"imageBack,omitempty" jsonschema:"http(s) URL or local file path of a new back image; replaces the current one. Supports jpg, png, gif, webp."`
 	AudioFront       string  `json:"audioFront,omitempty" jsonschema:"http(s) URL or local file path of a new front audio file; replaces the current one. Supports mp3, ogg, wav, m4a, webm, aac, flac."`
@@ -267,7 +277,15 @@ func (s *Server) editCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in Edi
 		s.removeMedia(saved...)
 		return nil, EditCardOutput{}, fmt.Errorf("saving back audio: %w", err)
 	}
-	updated, err := s.cards.UpdateFact(ctx, s.userID, in.FactID, front, back, imgFront, imgBack, audFront, audBack, in.Reverse)
+	var reversePtr *bool
+	if in.AddReverse {
+		t := true
+		reversePtr = &t
+	} else if in.RemoveReverse {
+		f := false
+		reversePtr = &f
+	}
+	updated, err := s.cards.UpdateFact(ctx, s.userID, in.FactID, front, back, imgFront, imgBack, audFront, audBack, reversePtr)
 	if err != nil {
 		s.removeMedia(saved...)
 		return nil, EditCardOutput{}, fmt.Errorf("updating card: %w", err)
@@ -695,6 +713,30 @@ func (s *Server) createCards(ctx context.Context, _ *mcpsdk.CallToolRequest, in 
 		})
 	}
 	return nil, out, nil
+}
+
+// SetDeckReverseInput is the argument schema for set_deck_reverse.
+type SetDeckReverseInput struct {
+	DeckID  string `json:"deckId" jsonschema:"Deck ID whose facts should be updated. Required — use list_decks to find it."`
+	Enabled bool   `json:"enabled" jsonschema:"true adds a reverse card to every fact that lacks one; false removes it from every fact that has one."`
+}
+
+// SetDeckReverseOutput is the result schema for set_deck_reverse.
+type SetDeckReverseOutput struct {
+	DeckID  string `json:"deckId"`
+	Enabled bool   `json:"enabled"`
+	Changed int    `json:"changed"`
+}
+
+func (s *Server) setDeckReverse(ctx context.Context, _ *mcpsdk.CallToolRequest, in SetDeckReverseInput) (*mcpsdk.CallToolResult, SetDeckReverseOutput, error) {
+	if strings.TrimSpace(in.DeckID) == "" {
+		return nil, SetDeckReverseOutput{}, fmt.Errorf("deckId is required — use list_decks to find it")
+	}
+	changed, err := s.cards.SetDeckReverse(ctx, s.userID, in.DeckID, in.Enabled)
+	if err != nil {
+		return nil, SetDeckReverseOutput{}, fmt.Errorf("setting deck reverse: %w", err)
+	}
+	return nil, SetDeckReverseOutput{DeckID: in.DeckID, Enabled: in.Enabled, Changed: changed}, nil
 }
 
 // removeMedia deletes named media files from the media directory, silently

@@ -216,15 +216,21 @@ func (s *Service) ListFacts(ctx context.Context, userID string) ([]*FactRow, err
 			return nil, err
 		}
 		cardRows := make([]*CardRow, 0, len(cards))
+		hasReverse := false
 		for _, c := range cards {
 			cardRows = append(cardRows, &CardRow{Card: c, Status: s.status(c, now)})
+			if c.View == srs.ViewReverse {
+				hasReverse = true
+			}
 		}
 		dk := deckMap[f.DeckID]
 		dn, dc := "", ""
 		if dk != nil {
 			dn, dc = dk.Name, dk.Color
 		}
-		rows = append(rows, &FactRow{Fact: f, DeckName: dn, DeckColor: dc, Cards: cardRows})
+		hasImage := f.ImageFront != "" || f.ImageBack != ""
+		hasAudio := f.AudioFront != "" || f.AudioBack != ""
+		rows = append(rows, &FactRow{Fact: f, DeckName: dn, DeckColor: dc, Cards: cardRows, HasReverse: hasReverse, HasImage: hasImage, HasAudio: hasAudio})
 	}
 	return rows, nil
 }
@@ -261,6 +267,46 @@ func (s *Service) ResetDeck(ctx context.Context, userID, deckID string) error {
 		}
 	}
 	return nil
+}
+
+// SetDeckReverse adds or removes the reverse sister card for every fact in the
+// deck. Facts with an empty back are skipped (they can't have a reverse card).
+// Returns the number of facts that were actually changed.
+func (s *Service) SetDeckReverse(ctx context.Context, userID, deckID string, enable bool) (int, error) {
+	facts, err := s.repo.ListFactsByDeck(ctx, userID, deckID)
+	if err != nil {
+		return 0, err
+	}
+	changed := 0
+	for _, f := range facts {
+		if f.Back == "" {
+			continue
+		}
+		cards, err := s.repo.CardsForFact(ctx, userID, f.ID)
+		if err != nil {
+			return changed, err
+		}
+		var revCard *srs.Card
+		for _, c := range cards {
+			if c.View == srs.ViewReverse {
+				revCard = c
+				break
+			}
+		}
+		switch {
+		case enable && revCard == nil:
+			if err := s.repo.AddCard(ctx, newCard(f, srs.ViewReverse)); err != nil {
+				return changed, err
+			}
+			changed++
+		case !enable && revCard != nil:
+			if err := s.repo.DeleteCard(ctx, userID, revCard.ID); err != nil {
+				return changed, err
+			}
+			changed++
+		}
+	}
+	return changed, nil
 }
 
 // ListDecks returns all decks ordered by name.
@@ -454,10 +500,16 @@ func (s *Service) ListFactsByDeck(ctx context.Context, userID, deckID string) ([
 			return nil, err
 		}
 		cardRows := make([]*CardRow, 0, len(cards))
+		hasReverse := false
 		for _, c := range cards {
 			cardRows = append(cardRows, &CardRow{Card: c, Status: s.status(c, now)})
+			if c.View == srs.ViewReverse {
+				hasReverse = true
+			}
 		}
-		rows = append(rows, &FactRow{Fact: f, DeckName: dn, DeckColor: dc, Cards: cardRows})
+		hasImage := f.ImageFront != "" || f.ImageBack != ""
+		hasAudio := f.AudioFront != "" || f.AudioBack != ""
+		rows = append(rows, &FactRow{Fact: f, DeckName: dn, DeckColor: dc, Cards: cardRows, HasReverse: hasReverse, HasImage: hasImage, HasAudio: hasAudio})
 	}
 	return rows, nil
 }
