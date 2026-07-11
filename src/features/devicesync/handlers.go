@@ -3,6 +3,7 @@ package devicesync
 import (
 	"bytes"
 	"errors"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -86,15 +87,23 @@ func (h *Handler) reviews(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
+	slog.Info("reviews ingested", "device", devID, "received", received, "accepted", accepted)
 	return c.JSON(fiber.Map{"accepted": accepted, "received": received})
 }
 
 func (h *Handler) state(c *fiber.Ctx) error {
 	c.Set(fiber.HeaderContentType, "application/x-ndjson")
-	err := h.svc.ExchangeState(c.Context(), userID(c), c.Params("id"),
+	devID, _ := device(c)
+	deckID := c.Params("id")
+	slog.Info("state exchange start", "deck", deckID, "device", devID, "body_bytes", len(c.Body()))
+	err := h.svc.ExchangeState(c.Context(), userID(c), deckID,
 		bytes.NewReader(c.Body()), c.Response().BodyWriter())
 	if errors.Is(err, srs.ErrNotFound) {
+		slog.Error("state exchange: deck not found", "deck", deckID, "device", devID)
 		return fiber.ErrNotFound
+	}
+	if err != nil {
+		slog.Error("state exchange failed", "deck", deckID, "device", devID, "err", err)
 	}
 	return err
 }

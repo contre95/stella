@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 
 	"github.com/contre95/stella/src/srs"
@@ -249,6 +250,8 @@ func (s *Service) ExchangeState(ctx context.Context, userID, deckSyncID string, 
 	if err != nil {
 		return err
 	}
+	slog.Info("state exchange", "deck", deck.Name, "server_cards", len(cards))
+
 	bySync := make(map[string]*srs.Card, len(cards))
 	for _, c := range cards {
 		bySync[c.SyncID] = c
@@ -259,6 +262,8 @@ func (s *Service) ExchangeState(ctx context.Context, userID, deckSyncID string, 
 	sc := bufio.NewScanner(in)
 	sc.Buffer(make([]byte, 0, 4096), maxLine)
 	line := 0
+	applied := 0
+	sentBack := 0
 	for sc.Scan() {
 		text := strings.TrimSpace(sc.Text())
 		if text == "" {
@@ -283,13 +288,16 @@ func (s *Service) ExchangeState(ctx context.Context, userID, deckSyncID string, 
 			if err := s.repo.UpdateCard(ctx, card); err != nil {
 				return err
 			}
+			applied++
 		case card.LastRep > st.LastRep: // server is ahead: send back
 			if err := enc.Encode(stateOf(card)); err != nil {
 				return err
 			}
+			sentBack++
 		}
 	}
 	if err := sc.Err(); err != nil {
+		slog.Error("state exchange: scanner error", "deck", deck.Name, "lines_read", line, "err", err)
 		return err
 	}
 	// Cards the device did not mention: new since its last pull, or state the
@@ -302,6 +310,8 @@ func (s *Service) ExchangeState(ctx context.Context, userID, deckSyncID string, 
 		if err := enc.Encode(stateOf(c)); err != nil {
 			return err
 		}
+		sentBack++
 	}
+	slog.Info("state exchange done", "deck", deck.Name, "device_lines", line, "applied", applied, "sent_back", sentBack)
 	return nil
 }
