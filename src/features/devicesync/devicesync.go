@@ -235,6 +235,82 @@ func applyState(c *srs.Card, st CardState) {
 	c.NextRep = st.NextRep
 }
 
+// ApplyState merges one batch of device state records for a deck; the upload
+// half of the batched exchange. Same conflict rule as ExchangeState —
+// per-card last-writer-wins on lastRep — which makes every batch idempotent
+// and order-free, so devices retry failed batches at will. Records for cards
+// the server no longer has are dropped.
+func (s *Service) ApplyState(ctx context.Context, userID, deckSyncID string, in io.Reader) (applied, received int, err error) {
+	deck, err := s.repo.GetDeckBySyncID(ctx, userID, deckSyncID)
+	if err != nil {
+		return 0, 0, err
+	}
+	cards, err := s.repo.CardsByDeck(ctx, userID, deck.ID)
+	if err != nil {
+		return 0, 0, err
+	}
+	bySync := make(map[string]*srs.Card, len(cards))
+	for _, c := range cards {
+		bySync[c.SyncID] = c
+	}
+
+	sc := bufio.NewScanner(in)
+	sc.Buffer(make([]byte, 0, 4096), maxLine)
+	for sc.Scan() {
+		text := strings.TrimSpace(sc.Text())
+		if text == "" {
+			continue
+		}
+		var st CardState
+		if err := json.Unmarshal([]byte(text), &st); err != nil {
+			return applied, received, fmt.Errorf("state line %d: %w", received+1, err)
+		}
+		if st.Grade < srs.GradeUnseen || st.Grade > 5 || (st.Grade != srs.GradeUnseen && st.Easiness < 1.0) {
+			return applied, received, fmt.Errorf("state line %d: implausible grade/easiness", received+1)
+		}
+		received++
+		card, ok := bySync[st.ID]
+		if !ok || st.LastRep <= card.LastRep {
+			continue
+		}
+		applyState(card, st)
+		if err := s.repo.UpdateCard(ctx, card); err != nil {
+			return applied, received, err
+		}
+		applied++
+	}
+	return applied, received, sc.Err()
+}
+
+// WriteState streams every reviewed card's state for a deck; the download
+// half of the batched exchange. The device merges with per-card
+// last-writer-wins, so records it just pushed come back as harmless no-ops.
+// Unseen cards carry no information — the deck CSV already delivers them as
+// unseen — so they are omitted.
+func (s *Service) WriteState(ctx context.Context, userID, deckSyncID string, out io.Writer) error {
+	deck, err := s.repo.GetDeckBySyncID(ctx, userID, deckSyncID)
+	if err != nil {
+		return err
+	}
+	cards, err := s.repo.CardsByDeck(ctx, userID, deck.ID)
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(out)
+	sent := 0
+	for _, c := range cards {
+		if c.LastRep < 0 {
+			continue
+		}
+		if err := enc.Encode(stateOf(c)); err != nil {
+			return err
+		}
+		sent++
+	}
+	slog.Info("state download", "deck", deck.Name, "server_cards", len(cards), "sent", sent)
+	return nil
+}
+
 // ExchangeState merges the device's scheduling state for one deck and streams
 // back every record where the server is ahead. Conflict rule is per-card
 // last-writer-wins on lastRep: whichever side graded the card most recently

@@ -193,6 +193,59 @@ func TestExchangeStateLastWriterWins(t *testing.T) {
 	}
 }
 
+func TestBatchedStatePushAndDownload(t *testing.T) {
+	svc, db := newTestService(t)
+	deck, fwd, rev := fixture(t, db)
+	ctx := context.Background()
+
+	// Server side: fwd was reviewed at t=2000.
+	fwd.Grade = 3
+	fwd.LastRep = 2000
+	fwd.NextRep = 100000
+	if err := db.UpdateCard(ctx, fwd); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	// Device pushes two one-record batches: a stale fwd (loses) and a fresh
+	// rev (wins). Repeating a batch must be a no-op (retries are idempotent).
+	batches := []string{
+		`{"id":"` + fwd.SyncID + `","g":2,"e":2.2,"ar":1,"rr":1,"l":0,"arl":1,"rrl":1,"lr":1500,"nr":90000}` + "\n",
+		`{"id":"` + rev.SyncID + `","g":5,"e":2.7,"ar":1,"rr":2,"l":0,"arl":1,"rrl":2,"lr":3000,"nr":200000}` + "\n",
+	}
+	for _, b := range append(batches, batches[1]) {
+		if _, _, err := svc.ApplyState(ctx, testUser, deck.SyncID, strings.NewReader(b)); err != nil {
+			t.Fatalf("push: %v", err)
+		}
+	}
+
+	got, _ := db.GetCard(ctx, testUser, rev.ID)
+	if got.Grade != 5 || got.LastRep != 3000 {
+		t.Errorf("device state not applied: %+v", got)
+	}
+	got, _ = db.GetCard(ctx, testUser, fwd.ID)
+	if got.LastRep != 2000 || got.Grade != 3 {
+		t.Errorf("server state clobbered by stale device state: %+v", got)
+	}
+
+	// Download returns both reviewed cards, nothing for unseen ones.
+	var out bytes.Buffer
+	if err := svc.WriteState(ctx, testUser, deck.SyncID, &out); err != nil {
+		t.Fatalf("download: %v", err)
+	}
+	seen := map[string]int64{}
+	dec := json.NewDecoder(&out)
+	for dec.More() {
+		var st CardState
+		if err := dec.Decode(&st); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		seen[st.ID] = st.LastRep
+	}
+	if len(seen) != 2 || seen[fwd.SyncID] != 2000 || seen[rev.SyncID] != 3000 {
+		t.Errorf("unexpected download: %+v", seen)
+	}
+}
+
 func TestExchangeStateSendsCardsUnknownToDevice(t *testing.T) {
 	svc, db := newTestService(t)
 	deck, fwd, _ := fixture(t, db)

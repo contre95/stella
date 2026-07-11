@@ -3,18 +3,32 @@ package config
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Config is the root application configuration, loaded from YAML.
 type Config struct {
 	DbPath    string `yaml:"dbPath" validate:"required"`
 	ImagePath string `yaml:"imagePath"`
-	Server    Server `yaml:"server"`
-	Auth      Auth   `yaml:"auth"`
-	MCP       MCP    `yaml:"mcp"`
-	Logger    Logger `yaml:"logger"`
-	Review    Review `yaml:"review"`
-	Cards     Cards  `yaml:"cards"`
+	// Timezone is the IANA zone (e.g. "Europe/Madrid") used for review-day
+	// boundaries and sent to sync devices so their clocks show local time,
+	// DST included. Empty means the host's local timezone.
+	Timezone string `yaml:"timezone"`
+	Server   Server `yaml:"server"`
+	Auth     Auth   `yaml:"auth"`
+	MCP      MCP    `yaml:"mcp"`
+	Logger   Logger `yaml:"logger"`
+	Review   Review `yaml:"review"`
+	Cards    Cards  `yaml:"cards"`
+}
+
+// Location resolves Timezone, falling back to the host's local timezone when
+// unset. Errors only on a non-empty zone name that fails to load.
+func (c *Config) Location() (*time.Location, error) {
+	if strings.TrimSpace(c.Timezone) == "" {
+		return time.Local, nil
+	}
+	return time.LoadLocation(c.Timezone)
 }
 
 // Auth holds authentication settings.

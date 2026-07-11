@@ -8,6 +8,11 @@ import (
 	"syscall"
 	"time"
 
+	// Embed the IANA timezone database so config timezones resolve on hosts
+	// without system zoneinfo (NixOS, scratch/alpine containers). System files
+	// still take precedence when present.
+	_ "time/tzdata"
+
 	"github.com/contre95/stella/src/features/auth"
 	"github.com/contre95/stella/src/features/cards"
 	"github.com/contre95/stella/src/features/config"
@@ -45,9 +50,15 @@ func main() {
 	}
 	defer db.Close()
 
+	location, err := cfgManager.Get().Location()
+	if err != nil {
+		slog.Error("invalid timezone in config", "timezone", cfgManager.Get().Timezone, "err", err)
+		os.Exit(1)
+	}
+
 	scheduler := srs.NewScheduler(
 		schedulerParams(cfgManager.Get()),
-		time.Local,
+		location,
 		time.Now,
 		srs.NewMathRand(),
 	)
@@ -71,7 +82,7 @@ func main() {
 
 	// 5. Routes + server.
 	tokenHandler := authService.NewTokenHandler()
-	deviceSyncHandler := devicesync.NewHandler(devicesync.NewService(db), authService)
+	deviceSyncHandler := devicesync.NewHandler(devicesync.NewService(db), authService, location)
 	registrars := []hosting.RouteRegistrar{uiHandler, cardsHandler, portabilityHandler, reviewHandler, tokenHandler, deviceSyncHandler}
 	if cfgManager.Get().MCP.Enabled {
 		registrars = append(registrars, mcppresenter.NewHTTPRegistrar(cfgManager.Get().Server.AppName, version, cardsService, authService))

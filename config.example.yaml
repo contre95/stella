@@ -1,6 +1,10 @@
 dbPath: ./data/stella.db
 # Directory where uploaded card images are stored.
 imagePath: ./data/images
+# IANA timezone (e.g. Europe/Madrid) used for review-day boundaries and sent
+# to sync devices so their clocks show local time, DST included.
+# Empty = the host's local timezone.
+timezone: ""
 server:
   port: 8858
   appName: Stella

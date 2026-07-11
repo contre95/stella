@@ -6,6 +6,7 @@ func defaultConfig() Config {
 	return Config{
 		DbPath:    "./data/stella.db",
 		ImagePath: "./data/images",
+		Timezone:  "", // host's local timezone
 		Server: Server{
 			Port:      8858,
 			AppName:   "Stella",

@@ -19,11 +19,16 @@ import (
 type Handler struct {
 	svc     *Service
 	authSvc *auth.Service
+	loc     *time.Location
 }
 
-// NewHandler constructs the /api/x4 handler.
-func NewHandler(svc *Service, authSvc *auth.Service) *Handler {
-	return &Handler{svc: svc, authSvc: authSvc}
+// NewHandler constructs the /api/x4 handler. loc is the instance timezone;
+// hello reports its current UTC offset so devices can show local time.
+func NewHandler(svc *Service, authSvc *auth.Service, loc *time.Location) *Handler {
+	if loc == nil {
+		loc = time.Local
+	}
+	return &Handler{svc: svc, authSvc: authSvc, loc: loc}
 }
 
 const localsSyncUserID = "SyncUserID"
@@ -60,8 +65,13 @@ func device(c *fiber.Ctx) (id, name string) {
 	return id, name
 }
 
+// hello reports the current time plus the instance timezone's UTC offset in
+// seconds (DST-aware, so it flips between CET/CEST automatically). The device
+// keeps a timezone-less wall clock, so it adopts now + tzOffset.
 func (h *Handler) hello(c *fiber.Ctx) error {
-	return c.JSON(fiber.Map{"now": time.Now().Unix()})
+	now := time.Now()
+	_, offset := now.In(h.loc).Zone()
+	return c.JSON(fiber.Map{"now": now.Unix(), "tzOffset": offset})
 }
 
 func (h *Handler) manifest(c *fiber.Ctx) error {
@@ -89,6 +99,41 @@ func (h *Handler) reviews(c *fiber.Ctx) error {
 	}
 	slog.Info("reviews ingested", "device", devID, "received", received, "accepted", accepted)
 	return c.JSON(fiber.Map{"accepted": accepted, "received": received})
+}
+
+// statePush merges one small batch of device state records. Devices on weak
+// WiFi links upload in ~1 KB batches because one multi-KB POST needs a burst
+// of full-size frames that a marginal uplink cannot deliver; each batch is
+// idempotent (per-card last-writer-wins), so a failed one is simply retried.
+func (h *Handler) statePush(c *fiber.Ctx) error {
+	devID, _ := device(c)
+	deckID := c.Params("id")
+	applied, received, err := h.svc.ApplyState(c.Context(), userID(c), deckID, bytes.NewReader(c.Body()))
+	if errors.Is(err, srs.ErrNotFound) {
+		return fiber.ErrNotFound
+	}
+	if err != nil {
+		slog.Error("state push failed", "deck", deckID, "device", devID, "err", err)
+		return err
+	}
+	slog.Info("state push", "deck", deckID, "device", devID, "received", received, "applied", applied)
+	return c.JSON(fiber.Map{"applied": applied, "received": received})
+}
+
+// stateGet streams the deck's full scheduling state (reviewed cards only);
+// the download half of the batched exchange.
+func (h *Handler) stateGet(c *fiber.Ctx) error {
+	c.Set(fiber.HeaderContentType, "application/x-ndjson")
+	devID, _ := device(c)
+	deckID := c.Params("id")
+	err := h.svc.WriteState(c.Context(), userID(c), deckID, c.Response().BodyWriter())
+	if errors.Is(err, srs.ErrNotFound) {
+		return fiber.ErrNotFound
+	}
+	if err != nil {
+		slog.Error("state download failed", "deck", deckID, "device", devID, "err", err)
+	}
+	return err
 }
 
 func (h *Handler) state(c *fiber.Ctx) error {
