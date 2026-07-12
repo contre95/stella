@@ -30,9 +30,7 @@ type Server struct {
 // behind the auth middleware.
 func NewServer(cm *config.Manager, authSvc *auth.Service, registrars ...RouteRegistrar) *Server {
 	engine := html.New("./views", ".html")
-	engine.Reload(cm.Get().Logger.Debug)
 	engine.AddFunc("add", func(a, b int) int { return a + b })
-	engine.AddFunc("isDebug", func() bool { return cm.Get().Logger.Debug })
 	engine.AddFunc("dict", dict)
 
 	app := fiber.New(fiber.Config{

@@ -30,7 +30,6 @@ mcp:
 logger:
   level: info   # debug | info | warn | error
   format: ""    # logfmt (default) | text | json
-  debug: false
 review:
   # Hour (0-23) at which a new study day begins.
   dayStartsAt: 3

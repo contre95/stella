@@ -20,7 +20,6 @@ func defaultConfig() Config {
 		},
 		Logger: Logger{
 			Level: "info",
-			Debug: false,
 		},
 		Review: Review{
 			DayStartsAt:              3,
