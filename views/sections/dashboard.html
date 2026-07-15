@@ -23,7 +23,7 @@
     </div>
     <div class="glass lift rounded-2xl p-3 sm:p-5">
       <dt class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-        Total cards
+        Studying
         <span title="Active cards across all your decks. The brain shows cards in study-enabled decks only." class="cursor-help text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-500 transition-colors">
           <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 16v-4m0-4h.01"/></svg>
         </span>
@@ -36,7 +36,7 @@
     </div>
     <div class="glass lift rounded-2xl p-3 sm:p-5">
       <dt class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-        Not yet memorised
+        Not memorized
         <span title="Cards in study-enabled decks not yet committed to long-term memory (grade &lt; 2)." class="cursor-help text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-500 transition-colors">
           <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 16v-4m0-4h.01"/></svg>
         </span>
@@ -47,6 +47,9 @@
         </svg>
         {{.NewCards}}
       </dd>
+      {{if gt .UnseenCards 0}}
+      <dd class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{.UnseenCards}} unseen</dd>
+      {{end}}
     </div>
   </dl>
 

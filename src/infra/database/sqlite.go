@@ -639,6 +639,11 @@ func (s *SqliteSRS) NonMemorisedCount(ctx context.Context, userID string, deckID
 	return s.count(ctx, q, args...)
 }
 
+func (s *SqliteSRS) UnseenCount(ctx context.Context, userID string, deckIDs []string) (int, error) {
+	q, args := buildCountQuery(`SELECT count(DISTINCT fact_id) FROM cards WHERE user_id=? AND active=1 AND grade=-1`, []any{userID}, deckIDs)
+	return s.count(ctx, q, args...)
+}
+
 //
 // Queue selection.
 //

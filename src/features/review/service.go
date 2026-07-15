@@ -15,11 +15,12 @@ import (
 
 // Stats are the aggregate counts shown on the dashboard.
 type Stats struct {
-	DueToday   int
-	TotalCards int
-	StudyCards int // active cards in study-enabled decks
-	NewCards   int // non-memorised cards in study-enabled decks
-	DeckCount  int
+	DueToday    int
+	TotalCards  int
+	StudyCards  int // active cards in study-enabled decks
+	NewCards    int // non-memorised cards in study-enabled decks
+	UnseenCards int // never-reviewed cards in study-enabled decks (subset of NewCards)
+	DeckCount   int
 }
 
 // CardInSession pairs a card with its parent fact and session metadata.
@@ -30,6 +31,11 @@ type CardInSession struct {
 	DeckName  string
 	DeckColor string
 	DeckImage string
+	// DueLabel is a short badge describing when the card is due: "New",
+	// "Learning", "Today", "Tomorrow", "In 3 days", "2 days overdue". DueTone
+	// classifies it for styling: new, learning, today, future, overdue.
+	DueLabel string
+	DueTone  string
 	// Previews holds, per grade 0-5, the interval that grade would schedule,
 	// as a human label ("now", "in 3 days"). Computed with a dry run.
 	Previews [6]string
@@ -141,10 +147,44 @@ func (s *Service) NextCard(ctx context.Context, userID string, deckIDs []string,
 	}
 
 	ci := &CardInSession{Card: card, Fact: fact, Remaining: remaining, DeckName: dn, DeckColor: dc, DeckImage: di}
+	ci.DueLabel, ci.DueTone = dueBadge(s.scheduler, card, now)
 	for g := 0; g <= 5; g++ {
 		ci.Previews[g] = intervalLabel(s.scheduler.GradeAnswer(card, g, true))
 	}
 	return ci, nil
+}
+
+// dueBadge describes when a card is due, as a short label plus a tone used for
+// styling. Unseen cards read "New" and in-acquisition (grade 0/1) cards read
+// "Learning" — neither has a scheduled day. Retention cards borrow the
+// scheduler's next-rep phrasing ("Today", "Tomorrow", "In 3 days", "2 days
+// overdue"), with the tone split by whether they are future, due today, or
+// overdue (mirroring the scheduler's own on-time/late boundary at now-DAY).
+func dueBadge(sch *srs.Scheduler, card *srs.Card, now int64) (label, tone string) {
+	switch {
+	case card.Grade == srs.GradeUnseen:
+		return "New", "new"
+	case card.Grade < 2:
+		return "Learning", "learning"
+	}
+	label = capitalize(sch.NextRepToIntervalString(card.NextRep, now))
+	switch {
+	case card.NextRep > now:
+		tone = "future"
+	case card.NextRep <= now-srs.DAY:
+		tone = "overdue"
+	default:
+		tone = "today"
+	}
+	return label, tone
+}
+
+// capitalize upper-cases the first character of an ASCII label.
+func capitalize(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 // intervalLabel renders a dry-run interval as a short human label for the
@@ -257,11 +297,15 @@ func (s *Service) Stats(ctx context.Context, userID string) (*Stats, error) {
 	if err != nil {
 		return nil, err
 	}
+	unseenCards, err := s.repo.UnseenCount(ctx, userID, enabledIDs)
+	if err != nil {
+		return nil, err
+	}
 	decks, err := s.repo.ListDecks(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	return &Stats{DueToday: due, TotalCards: total, StudyCards: studyCards, NewCards: newCards, DeckCount: len(decks)}, nil
+	return &Stats{DueToday: due, TotalCards: total, StudyCards: studyCards, NewCards: newCards, UnseenCards: unseenCards, DeckCount: len(decks)}, nil
 }
 
 // ForecastDay is one bar in the upcoming-reviews chart: how many cards fall

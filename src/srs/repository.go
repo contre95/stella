@@ -83,6 +83,9 @@ type Repository interface {
 	FactCountForDecks(ctx context.Context, userID string, deckIDs []string) (int, error)
 	ScheduledCount(ctx context.Context, userID string, now int64, deckIDs []string) (int, error)
 	NonMemorisedCount(ctx context.Context, userID string, deckIDs []string) (int, error)
+	// UnseenCount counts distinct facts with at least one never-reviewed
+	// (grade = -1) card; a subset of NonMemorisedCount.
+	UnseenCount(ctx context.Context, userID string, deckIDs []string) (int, error)
 
 	// Queue selection. sortKey is one of "", "interval", "-interval",
 	// "next_rep", "random"; an empty limit (<=0) means no limit.

@@ -7,6 +7,16 @@
       {{if gt .Remaining 0}}{{.Remaining}} remaining{{else}}Learning ahead{{end}}
     </span>
     <div class="ml-auto flex items-center gap-3">
+    {{if .DueLabel}}
+      <span class="due-badge rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset
+        {{if eq .DueTone "overdue"}}bg-rose-500/15 text-rose-600 ring-rose-500/30 dark:text-rose-400
+        {{else if eq .DueTone "future"}}bg-indigo-500/15 text-indigo-600 ring-indigo-500/30 dark:text-indigo-400
+        {{else if eq .DueTone "new"}}bg-emerald-500/15 text-emerald-600 ring-emerald-500/30 dark:text-emerald-400
+        {{else if eq .DueTone "learning"}}bg-amber-500/15 text-amber-600 ring-amber-500/30 dark:text-amber-400
+        {{else}}bg-pink-500/15 text-pink-600 ring-pink-500/30 dark:text-pink-400{{end}}">
+        {{.DueLabel}}
+      </span>
+    {{end}}
     {{if .DeckName}}
       <a href="/decks/{{.Fact.DeckID}}"
          hx-get="/decks/{{.Fact.DeckID}}"
