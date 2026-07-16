@@ -477,6 +477,16 @@
       #contenido { padding-bottom: 7rem; }
     }
 
+    /* ── Immersive review ──────────────────────────────────────────
+       While a review card is on screen, hide the mobile bottom nav and
+       drop its bottom clearance. This keeps the card the same height
+       whether or not the sidebar is showing, so it doesn't shrink at the
+       lg breakpoint where the sidebar collapses into the mobile nav. */
+    body:has(#review-card-wrap) #mobile-nav { display: none; }
+    @media (max-width: 1023px) {
+      body:has(#review-card-wrap) #contenido { padding-bottom: 0; }
+    }
+
     /* ── SweetAlert2 glass theme ──────────────────────────────── */
     .swal2-container { backdrop-filter: blur(6px) !important; -webkit-backdrop-filter: blur(6px) !important; }
     .swal2-popup {

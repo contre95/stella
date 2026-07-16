@@ -294,9 +294,15 @@ func (h *Handler) RenderDecks(c *fiber.Ctx) error {
 	return respond.Section(c, "decks", fiber.Map{"Title": "Decks", "Groups": groups})
 }
 
-// DeckList returns the deck list partial.
+// DeckList returns the deck list partial. An optional ?tag=<id> query narrows
+// it to decks carrying that tag.
 func (h *Handler) DeckList(c *fiber.Ctx) error {
-	views, err := h.service.ListGroupViews(c.Context(), auth.UserID(c))
+	tagID := c.Query("tag")
+	views, err := h.service.ListGroupViews(c.Context(), auth.UserID(c), tagID)
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	tags, err := h.service.ListTags(c.Context(), auth.UserID(c))
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
@@ -307,7 +313,42 @@ func (h *Handler) DeckList(c *fiber.Ctx) error {
 			break
 		}
 	}
-	return respond.Partial(c, "components/deck_list", fiber.Map{"GroupViews": views, "HasGroups": hasGroups})
+	return respond.Partial(c, "components/deck_list", fiber.Map{
+		"GroupViews": views,
+		"HasGroups":  hasGroups,
+		"Tags":       tags,
+		"ActiveTag":  tagID,
+	})
+}
+
+// AddDeckTag labels a deck with the named tag (creating the tag when needed)
+// and re-renders the deck page it was called from.
+func (h *Handler) AddDeckTag(c *fiber.Ctx) error {
+	name := strings.TrimSpace(c.FormValue("name"))
+	if name == "" {
+		return respond.ToastErr(c, fiber.StatusBadRequest, "Tag name is required")
+	}
+	if _, err := h.service.TagDeck(c.Context(), auth.UserID(c), c.Params("id"), name); err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return h.RenderDeckPage(c)
+}
+
+// RemoveDeckTag removes a tag from a deck and re-renders the deck page.
+func (h *Handler) RemoveDeckTag(c *fiber.Ctx) error {
+	if err := h.service.UntagDeck(c.Context(), auth.UserID(c), c.Params("id"), c.Params("tagId")); err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return h.RenderDeckPage(c)
+}
+
+// DeleteTag removes a tag entirely (decks keep their other tags) and returns
+// the refreshed deck list.
+func (h *Handler) DeleteTag(c *fiber.Ctx) error {
+	if err := h.service.DeleteTag(c.Context(), auth.UserID(c), c.Params("id")); err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return h.DeckList(c)
 }
 
 // AddGroup creates a new group and returns the refreshed deck list.
@@ -474,6 +515,14 @@ func (h *Handler) RenderDeckPage(c *fiber.Ctx) error {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	groups, _ := h.service.ListGroups(c.Context(), auth.UserID(c))
+	deckTags, err := h.service.ListDeckTags(c.Context(), auth.UserID(c), id)
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	allTags, err := h.service.ListTags(c.Context(), auth.UserID(c))
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
 	return respond.Section(c, "deck_page", fiber.Map{
 		"Title":     deck.Name,
 		"Deck":      deck,
@@ -481,6 +530,8 @@ func (h *Handler) RenderDeckPage(c *fiber.Ctx) error {
 		"DeckImage": deck.Image,
 		"Facts":     facts,
 		"Groups":    groups,
+		"DeckTags":  deckTags,
+		"AllTags":   allTags,
 	})
 }
 

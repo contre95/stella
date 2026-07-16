@@ -48,6 +48,23 @@ type Repository interface {
 	DeleteGroup(ctx context.Context, userID, id string) error
 	UnsetGroupForDecks(ctx context.Context, userID, groupID string) error
 
+	// Tags. Only decks are taggable; a deck carries any number of tags and
+	// tag names are unique per user.
+	AddTag(ctx context.Context, t *Tag) error
+	GetTag(ctx context.Context, userID, id string) (*Tag, error)
+	GetTagByName(ctx context.Context, userID, name string) (*Tag, error)
+	UpdateTag(ctx context.Context, t *Tag) error
+	ListTags(ctx context.Context, userID string) ([]*Tag, error)
+	DeleteTag(ctx context.Context, userID, id string) error // unlinks its decks
+	// TagDeck links a deck to a tag; linking twice is a no-op.
+	TagDeck(ctx context.Context, userID, deckID, tagID string) error
+	UntagDeck(ctx context.Context, userID, deckID, tagID string) error
+	ListTagsForDeck(ctx context.Context, userID, deckID string) ([]*Tag, error)
+	DeckIDsByTag(ctx context.Context, userID, tagID string) ([]string, error)
+	// TagsByDeck maps every tagged deck ID to its tags, name-ordered. Decks
+	// without tags are absent from the map.
+	TagsByDeck(ctx context.Context, userID string) (map[string][]*Tag, error)
+
 	// Device sync (stella-x4). Devices address decks and cards by their
 	// compact sync IDs, never by primary keys.
 	GetDeckBySyncID(ctx context.Context, userID, syncID string) (*Deck, error)

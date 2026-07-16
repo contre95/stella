@@ -19,7 +19,10 @@ func TestReviewTemplatesParse(t *testing.T) {
 		"views/sections/review.html",
 		"views/sections/review_done.html",
 		"views/sections/cards.html",
+		"views/sections/study_pick.html",
+		"views/sections/deck_page.html",
 		"views/components/deck_facts.html",
+		"views/components/deck_list.html",
 	} {
 		b, err := os.ReadFile(filepath.Join("../../..", rel))
 		if err != nil {

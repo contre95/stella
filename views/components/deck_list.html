@@ -1,4 +1,34 @@
 {{$hasGroups := .HasGroups}}
+{{$activeTag := .ActiveTag}}
+{{if .Tags}}
+  <div class="mb-5 flex flex-wrap items-center gap-2">
+    <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Tags</span>
+    <button
+      hx-get="/decks/list"
+      hx-target="#deck-list"
+      hx-swap="innerHTML"
+      class="rounded-full px-3 py-1 text-xs font-semibold transition-colors {{if not $activeTag}}bg-pink-500/15 text-pink-700 dark:text-pink-300{{else}}glass text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200{{end}}"
+    >All</button>
+    {{range .Tags}}
+      <span class="inline-flex items-center gap-1 rounded-full py-1 px-2.5 transition-colors {{if eq $activeTag .ID}}bg-pink-500/15 text-pink-700 dark:text-pink-300{{else}}glass text-gray-500 dark:text-gray-400{{end}}">
+        <button
+          hx-get="/decks/list?tag={{.ID}}"
+          hx-target="#deck-list"
+          hx-swap="innerHTML"
+          class="text-xs font-semibold {{if ne $activeTag .ID}}hover:text-gray-800 dark:hover:text-gray-200{{end}}"
+        >#{{.Name}}</button>
+        <button
+          hx-delete="/tags/{{.ID}}"
+          hx-target="#deck-list"
+          hx-swap="innerHTML"
+          hx-confirm="Delete tag '{{.Name}}'? Decks keep their other tags."
+          class="inline-flex h-4 w-4 items-center justify-center rounded-full text-sm leading-none text-gray-400 transition-colors hover:bg-red-500/15 hover:text-red-500 dark:hover:text-red-400"
+          title="Delete tag"
+        >&times;</button>
+      </span>
+    {{end}}
+  </div>
+{{end}}
 {{if .GroupViews}}
   {{range .GroupViews}}
     {{if .Group}}
@@ -58,7 +88,7 @@
   {{end}}
 {{else}}
   <div class="glass rounded-2xl border-dashed p-10 text-center">
-    <p class="text-sm text-gray-500 dark:text-gray-400">No decks yet. Create one above.</p>
+    <p class="text-sm text-gray-500 dark:text-gray-400">{{if $activeTag}}No decks carry this tag.{{else}}No decks yet. Create one above.{{end}}</p>
   </div>
 {{end}}
 

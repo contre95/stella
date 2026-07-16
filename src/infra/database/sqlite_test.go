@@ -211,6 +211,86 @@ func TestSisterCardCountAndCascade(t *testing.T) {
 	}
 }
 
+// TestTags covers the tag CRUD, deck linking, the per-user name uniqueness,
+// and the cascades that clean up deck_tags rows.
+func TestTags(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	addDeck(t, db, "d1")
+	addDeck(t, db, "d2")
+
+	if err := db.AddTag(ctx, &srs.Tag{ID: "t1", UserID: testUser, Name: "spanish"}); err != nil {
+		t.Fatalf("add tag: %v", err)
+	}
+	if err := db.AddTag(ctx, &srs.Tag{ID: "t2", UserID: testUser, Name: "spanish"}); err == nil {
+		t.Error("duplicate tag name for the same user should fail")
+	}
+	got, err := db.GetTagByName(ctx, testUser, "spanish")
+	if err != nil || got.ID != "t1" {
+		t.Fatalf("get tag by name: got %v, %v", got, err)
+	}
+	if _, err := db.GetTag(ctx, testUser, "missing"); !errors.Is(err, srs.ErrNotFound) {
+		t.Errorf("missing tag: want ErrNotFound, got %v", err)
+	}
+
+	// Link both decks; re-linking must be a no-op.
+	for _, deckID := range []string{"d1", "d2", "d1"} {
+		if err := db.TagDeck(ctx, testUser, deckID, "t1"); err != nil {
+			t.Fatalf("tag deck %s: %v", deckID, err)
+		}
+	}
+	ids, err := db.DeckIDsByTag(ctx, testUser, "t1")
+	if err != nil || len(ids) != 2 {
+		t.Fatalf("deck ids by tag: got %v, %v; want 2 decks", ids, err)
+	}
+	tags, err := db.ListTagsForDeck(ctx, testUser, "d1")
+	if err != nil || len(tags) != 1 || tags[0].Name != "spanish" {
+		t.Fatalf("tags for deck: got %v, %v", tags, err)
+	}
+	byDeck, err := db.TagsByDeck(ctx, testUser)
+	if err != nil || len(byDeck) != 2 {
+		t.Fatalf("tags by deck: got %v, %v; want 2 entries", byDeck, err)
+	}
+
+	// Another user must neither see the tag nor be able to link against it.
+	addUser(t, db, "u2")
+	if tags, _ := db.ListTags(ctx, "u2"); len(tags) != 0 {
+		t.Errorf("cross-user tag visible: %v", tags)
+	}
+	if err := db.TagDeck(ctx, "u2", "d1", "t1"); err != nil {
+		t.Fatalf("cross-user tag deck: %v", err)
+	}
+	if ids, _ := db.DeckIDsByTag(ctx, testUser, "t1"); len(ids) != 2 {
+		t.Errorf("cross-user TagDeck inserted a link: %v", ids)
+	}
+
+	if err := db.UntagDeck(ctx, testUser, "d2", "t1"); err != nil {
+		t.Fatalf("untag deck: %v", err)
+	}
+	if ids, _ := db.DeckIDsByTag(ctx, testUser, "t1"); len(ids) != 1 || ids[0] != "d1" {
+		t.Errorf("after untag: got %v, want [d1]", ids)
+	}
+
+	// Deleting a deck removes its links (FK cascade) but keeps the tag.
+	if err := db.DeleteDeck(ctx, testUser, "d1"); err != nil {
+		t.Fatalf("delete deck: %v", err)
+	}
+	if ids, _ := db.DeckIDsByTag(ctx, testUser, "t1"); len(ids) != 0 {
+		t.Errorf("deck delete left links behind: %v", ids)
+	}
+	if _, err := db.GetTag(ctx, testUser, "t1"); err != nil {
+		t.Errorf("tag should survive deck deletion: %v", err)
+	}
+
+	// Deleting the tag frees its name for reuse.
+	if err := db.DeleteTag(ctx, testUser, "t1"); err != nil {
+		t.Fatalf("delete tag: %v", err)
+	}
+	if err := db.AddTag(ctx, &srs.Tag{ID: "t3", UserID: testUser, Name: "spanish"}); err != nil {
+		t.Errorf("re-adding deleted tag name: %v", err)
+	}
+}
+
 // TestSessions covers the auth store: session round trip, expiry, and delete.
 func TestSessions(t *testing.T) {
 	db := newTestDB(t)

@@ -96,6 +96,22 @@ CREATE TABLE IF NOT EXISTS decks (
 	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS tags (
+	id      TEXT PRIMARY KEY,
+	user_id TEXT NOT NULL,
+	name    TEXT NOT NULL,
+	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+	UNIQUE (user_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS deck_tags (
+	deck_id TEXT NOT NULL,
+	tag_id  TEXT NOT NULL,
+	PRIMARY KEY (deck_id, tag_id),
+	FOREIGN KEY (deck_id) REFERENCES decks(id) ON DELETE CASCADE,
+	FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS facts (
 	id          TEXT PRIMARY KEY,
 	user_id     TEXT NOT NULL,
@@ -511,6 +527,137 @@ func (s *SqliteSRS) DeleteGroup(ctx context.Context, userID, id string) error {
 func (s *SqliteSRS) UnsetGroupForDecks(ctx context.Context, userID, groupID string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE decks SET group_id=NULL WHERE group_id=? AND user_id=?`, groupID, userID)
 	return err
+}
+
+//
+// Tags.
+//
+
+func (s *SqliteSRS) AddTag(ctx context.Context, t *srs.Tag) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO tags (id, user_id, name) VALUES (?, ?, ?)`, t.ID, t.UserID, t.Name)
+	return err
+}
+
+func (s *SqliteSRS) GetTag(ctx context.Context, userID, id string) (*srs.Tag, error) {
+	return s.getTagWhere(ctx, `id=? AND user_id=?`, id, userID)
+}
+
+func (s *SqliteSRS) GetTagByName(ctx context.Context, userID, name string) (*srs.Tag, error) {
+	return s.getTagWhere(ctx, `name=? AND user_id=?`, name, userID)
+}
+
+func (s *SqliteSRS) getTagWhere(ctx context.Context, where string, args ...any) (*srs.Tag, error) {
+	var t srs.Tag
+	err := s.db.QueryRowContext(ctx, `SELECT id, user_id, name FROM tags WHERE `+where, args...).
+		Scan(&t.ID, &t.UserID, &t.Name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, srs.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func (s *SqliteSRS) UpdateTag(ctx context.Context, t *srs.Tag) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE tags SET name=? WHERE id=? AND user_id=?`, t.Name, t.ID, t.UserID)
+	return err
+}
+
+func (s *SqliteSRS) ListTags(ctx context.Context, userID string) ([]*srs.Tag, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, user_id, name FROM tags WHERE user_id=? ORDER BY name`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanTags(rows)
+}
+
+func (s *SqliteSRS) DeleteTag(ctx context.Context, userID, id string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM tags WHERE id=? AND user_id=?`, id, userID)
+	return err
+}
+
+// TagDeck links a deck to a tag. The join row is only inserted when both rows
+// belong to userID, and re-linking an already-tagged deck is a no-op.
+func (s *SqliteSRS) TagDeck(ctx context.Context, userID, deckID, tagID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO deck_tags (deck_id, tag_id)
+		 SELECT d.id, t.id FROM decks d JOIN tags t ON t.user_id = d.user_id
+		 WHERE d.id=? AND t.id=? AND d.user_id=?`, deckID, tagID, userID)
+	return err
+}
+
+func (s *SqliteSRS) UntagDeck(ctx context.Context, userID, deckID, tagID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM deck_tags WHERE deck_id=? AND tag_id IN (SELECT id FROM tags WHERE id=? AND user_id=?)`,
+		deckID, tagID, userID)
+	return err
+}
+
+func (s *SqliteSRS) ListTagsForDeck(ctx context.Context, userID, deckID string) ([]*srs.Tag, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT t.id, t.user_id, t.name FROM tags t
+		 JOIN deck_tags dt ON dt.tag_id = t.id
+		 WHERE dt.deck_id=? AND t.user_id=? ORDER BY t.name`, deckID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanTags(rows)
+}
+
+func (s *SqliteSRS) DeckIDsByTag(ctx context.Context, userID, tagID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT dt.deck_id FROM deck_tags dt
+		 JOIN decks d ON d.id = dt.deck_id
+		 WHERE dt.tag_id=? AND d.user_id=? ORDER BY d.name`, tagID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (s *SqliteSRS) TagsByDeck(ctx context.Context, userID string) (map[string][]*srs.Tag, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT dt.deck_id, t.id, t.user_id, t.name FROM deck_tags dt
+		 JOIN tags t ON t.id = dt.tag_id
+		 WHERE t.user_id=? ORDER BY t.name`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string][]*srs.Tag{}
+	for rows.Next() {
+		var deckID string
+		var t srs.Tag
+		if err := rows.Scan(&deckID, &t.ID, &t.UserID, &t.Name); err != nil {
+			return nil, err
+		}
+		out[deckID] = append(out[deckID], &t)
+	}
+	return out, rows.Err()
+}
+
+func scanTags(rows *sql.Rows) ([]*srs.Tag, error) {
+	var tags []*srs.Tag
+	for rows.Next() {
+		var t srs.Tag
+		if err := rows.Scan(&t.ID, &t.UserID, &t.Name); err != nil {
+			return nil, err
+		}
+		tags = append(tags, &t)
+	}
+	return tags, rows.Err()
 }
 
 //

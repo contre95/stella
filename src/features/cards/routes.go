@@ -22,6 +22,8 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	app.Put("/decks/:id/description", h.UpdateDeckDescription)
 	app.Post("/decks/:id/image", h.SetDeckImage)
 	app.Post("/decks/:id/group", h.SetDeckGroup)
+	app.Post("/decks/:id/tags", h.AddDeckTag)
+	app.Delete("/decks/:id/tags/:tagId", h.RemoveDeckTag)
 	app.Post("/decks/:id/reset", h.ResetDeck)
 	app.Post("/decks/:id/toggle-study", h.ToggleDeckStudy)
 	app.Get("/decks/:id/facts", h.DeckDetail)
@@ -31,4 +33,6 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	app.Post("/groups", h.AddGroup)
 	app.Put("/groups/:id", h.UpdateGroup)
 	app.Delete("/groups/:id", h.DeleteGroup)
+
+	app.Delete("/tags/:id", h.DeleteTag)
 }

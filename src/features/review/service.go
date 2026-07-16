@@ -844,6 +844,35 @@ func (s *Service) GroupsForPicker(ctx context.Context, userID string) (named []G
 	return named, ungrouped, nil
 }
 
+// TagForPicker is one entry in the pre-session tag selector.
+type TagForPicker struct {
+	Tag       *srs.Tag
+	DeckIDs   string // comma-joined deck IDs, used as the ?decks= param
+	DeckCount int
+}
+
+// TagsForPicker returns every tag paired with the IDs of the decks carrying
+// it. Used by the study-picker screen.
+func (s *Service) TagsForPicker(ctx context.Context, userID string) ([]TagForPicker, error) {
+	tags, err := s.repo.ListTags(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]TagForPicker, 0, len(tags))
+	for _, t := range tags {
+		ids, err := s.repo.DeckIDsByTag(ctx, userID, t.ID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, TagForPicker{
+			Tag:       t,
+			DeckIDs:   strings.Join(ids, ","),
+			DeckCount: len(ids),
+		})
+	}
+	return out, nil
+}
+
 // HasLearnAhead reports whether any retention card is scheduled in the future,
 // i.e. whether a learn-ahead session would have something to show.
 func (s *Service) HasLearnAhead(ctx context.Context, userID string, deckIDs []string) (bool, error) {

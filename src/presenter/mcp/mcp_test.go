@@ -261,17 +261,17 @@ func TestEditCardTextAndReverse(t *testing.T) {
 	factID := createSimpleCard(t, cs, deckID, "q", "a")
 
 	_, out := editCard(t, cs, map[string]any{
-		"factId": factID, "front": "q2", "back": "a2", "reverse": true,
+		"factId": factID, "front": "q2", "back": "a2", "addReverse": true,
 	})
 	if out.Front != "q2" || out.Back != "a2" {
 		t.Errorf("edited text = %q/%q, want q2/a2", out.Front, out.Back)
 	}
 	if !out.Reverse {
-		t.Error("expected a reverse card after reverse: true")
+		t.Error("expected a reverse card after addReverse: true")
 	}
 
-	// Omitted fields keep their values; reverse: false removes the sister card.
-	_, out = editCard(t, cs, map[string]any{"factId": factID, "reverse": false})
+	// Omitted fields keep their values; removeReverse deletes the sister card.
+	_, out = editCard(t, cs, map[string]any{"factId": factID, "removeReverse": true})
 	if out.Front != "q2" || out.Back != "a2" {
 		t.Errorf("text changed on a reverse-only edit: %q/%q", out.Front, out.Back)
 	}
@@ -389,6 +389,72 @@ func TestCreateCardMediaFromLocalFile(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(mediaDir, out.Facts[0].ImageBack)); err != nil {
 		t.Errorf("stored image missing from media dir: %v", err)
+	}
+}
+
+// TestTagTools drives the whole tag lifecycle over MCP: create (idempotent),
+// tag/untag decks by name, list, rename, and delete.
+func TestTagTools(t *testing.T) {
+	cs, _ := newTestSession(t)
+	ctx := context.Background()
+	deckID := createTestDeck(t, cs)
+
+	call := func(name string, args map[string]any) *mcpsdk.CallToolResult {
+		t.Helper()
+		res, err := cs.CallTool(ctx, &mcpsdk.CallToolParams{Name: name, Arguments: args})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		return res
+	}
+
+	// tag_deck creates the tag on the fly.
+	var tagged TagDeckOutput
+	decodeStructured(t, call("tag_deck", map[string]any{"deckId": deckID, "tag": "spanish"}), &tagged)
+	if tagged.TagID == "" || tagged.Tag != "spanish" {
+		t.Fatalf("tag_deck output: %+v", tagged)
+	}
+
+	// create_tag with the same name returns the existing tag.
+	var created TagOutput
+	decodeStructured(t, call("create_tag", map[string]any{"name": "spanish"}), &created)
+	if created.TagID != tagged.TagID {
+		t.Errorf("create_tag made a duplicate: %q vs %q", created.TagID, tagged.TagID)
+	}
+
+	var tags ListTagsOutput
+	decodeStructured(t, call("list_tags", nil), &tags)
+	if len(tags.Tags) != 1 || len(tags.Tags[0].Decks) != 1 || tags.Tags[0].Decks[0].DeckID != deckID {
+		t.Fatalf("list_tags: %+v", tags)
+	}
+
+	var decks ListDecksOutput
+	decodeStructured(t, call("list_decks", nil), &decks)
+	if len(decks.Decks) != 1 || len(decks.Decks[0].Tags) != 1 || decks.Decks[0].Tags[0] != "spanish" {
+		t.Errorf("list_decks should carry tag names: %+v", decks.Decks)
+	}
+
+	var renamed TagOutput
+	decodeStructured(t, call("rename_tag", map[string]any{"tagId": tagged.TagID, "name": "español"}), &renamed)
+	if renamed.Name != "español" {
+		t.Errorf("rename_tag: %+v", renamed)
+	}
+
+	decodeStructured(t, call("untag_deck", map[string]any{"deckId": deckID, "tag": "español"}), &tagged)
+	decodeStructured(t, call("list_tags", nil), &tags)
+	if len(tags.Tags) != 1 || len(tags.Tags[0].Decks) != 0 {
+		t.Errorf("untag_deck should keep the tag but drop the link: %+v", tags)
+	}
+
+	if res := call("untag_deck", map[string]any{"deckId": deckID, "tag": "missing"}); !res.IsError {
+		t.Error("untagging an unknown tag should be a tool error")
+	}
+
+	var deleted DeleteTagOutput
+	decodeStructured(t, call("delete_tag", map[string]any{"tagId": tagged.TagID}), &deleted)
+	decodeStructured(t, call("list_tags", nil), &tags)
+	if !deleted.Deleted || len(tags.Tags) != 0 {
+		t.Errorf("delete_tag: %+v, remaining %+v", deleted, tags)
 	}
 }
 

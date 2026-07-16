@@ -60,20 +60,25 @@ func (h *Handler) doneData(c *fiber.Ctx, title, deckFilter string, deckIDs []str
 	return fiber.Map{"Title": title, "CanLearnAhead": canLearnAhead, "DeckFilter": deckFilter}
 }
 
-// PickGroup serves GET /review/pick — group selection before a study session.
-// When no groups exist it falls through directly to RenderSession.
-func (h *Handler) PickGroup(c *fiber.Ctx) error {
+// Pick serves GET /review/pick — group/tag selection before a study session.
+// When neither groups nor tags exist it falls through directly to RenderSession.
+func (h *Handler) Pick(c *fiber.Ctx) error {
 	named, ungrouped, err := h.service.GroupsForPicker(c.Context(), auth.UserID(c))
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
-	if len(named) == 0 && ungrouped == nil {
+	tags, err := h.service.TagsForPicker(c.Context(), auth.UserID(c))
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	if len(named) == 0 && ungrouped == nil && len(tags) == 0 {
 		return h.RenderSession(c)
 	}
 	return respond.Section(c, "study_pick", fiber.Map{
 		"Title":     "Study",
 		"Groups":    named,
 		"Ungrouped": ungrouped,
+		"Tags":      tags,
 	})
 }
 

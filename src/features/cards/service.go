@@ -467,6 +467,89 @@ func (s *Service) DeleteGroup(ctx context.Context, userID, id string) error {
 	return s.repo.DeleteGroup(ctx, userID, id)
 }
 
+// EnsureTag returns the user's tag with the given (trimmed) name, creating it
+// first when it doesn't exist yet.
+func (s *Service) EnsureTag(ctx context.Context, userID, name string) (*srs.Tag, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, fmt.Errorf("tag name is required")
+	}
+	tag, err := s.repo.GetTagByName(ctx, userID, name)
+	if err == nil {
+		return tag, nil
+	}
+	if !errors.Is(err, srs.ErrNotFound) {
+		return nil, err
+	}
+	tag = &srs.Tag{ID: uuid.NewString(), UserID: userID, Name: name}
+	if err := s.repo.AddTag(ctx, tag); err != nil {
+		return nil, err
+	}
+	return tag, nil
+}
+
+// ListTags returns all tags ordered by name.
+func (s *Service) ListTags(ctx context.Context, userID string) ([]*srs.Tag, error) {
+	return s.repo.ListTags(ctx, userID)
+}
+
+// TagByName looks up a tag by its exact name.
+func (s *Service) TagByName(ctx context.Context, userID, name string) (*srs.Tag, error) {
+	return s.repo.GetTagByName(ctx, userID, strings.TrimSpace(name))
+}
+
+// RenameTag renames a tag.
+func (s *Service) RenameTag(ctx context.Context, userID, id, name string) (*srs.Tag, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, fmt.Errorf("tag name is required")
+	}
+	tag, err := s.repo.GetTag(ctx, userID, id)
+	if err != nil {
+		return nil, err
+	}
+	tag.Name = name
+	if err := s.repo.UpdateTag(ctx, tag); err != nil {
+		return nil, err
+	}
+	return tag, nil
+}
+
+// DeleteTag removes a tag; its decks just lose the label.
+func (s *Service) DeleteTag(ctx context.Context, userID, id string) error {
+	return s.repo.DeleteTag(ctx, userID, id)
+}
+
+// TagDeck labels a deck with the named tag, creating the tag when needed.
+func (s *Service) TagDeck(ctx context.Context, userID, deckID, name string) (*srs.Tag, error) {
+	if _, err := s.repo.GetDeck(ctx, userID, deckID); err != nil {
+		if errors.Is(err, srs.ErrNotFound) {
+			return nil, fmt.Errorf("deck %q not found", deckID)
+		}
+		return nil, err
+	}
+	tag, err := s.EnsureTag(ctx, userID, name)
+	if err != nil {
+		return nil, err
+	}
+	return tag, s.repo.TagDeck(ctx, userID, deckID, tag.ID)
+}
+
+// UntagDeck removes a tag from a deck. The tag itself is kept.
+func (s *Service) UntagDeck(ctx context.Context, userID, deckID, tagID string) error {
+	return s.repo.UntagDeck(ctx, userID, deckID, tagID)
+}
+
+// ListDeckTags returns the tags of one deck ordered by name.
+func (s *Service) ListDeckTags(ctx context.Context, userID, deckID string) ([]*srs.Tag, error) {
+	return s.repo.ListTagsForDeck(ctx, userID, deckID)
+}
+
+// TagsByDeck maps every tagged deck ID to its tags, name-ordered.
+func (s *Service) TagsByDeck(ctx context.Context, userID string) (map[string][]*srs.Tag, error) {
+	return s.repo.TagsByDeck(ctx, userID)
+}
+
 // SetDeckGroup assigns a deck to a group (or clears its group when groupID is empty).
 func (s *Service) SetDeckGroup(ctx context.Context, userID, deckID, groupID string) error {
 	deck, err := s.repo.GetDeck(ctx, userID, deckID)
@@ -489,8 +572,9 @@ func (s *Service) ToggleDeckStudy(ctx context.Context, userID, deckID string) (*
 
 // ListGroupViews returns decks organised into groups for the deck list page.
 // Named groups come first (sorted by name), ungrouped decks are last with a
-// nil Group field.
-func (s *Service) ListGroupViews(ctx context.Context, userID string) ([]GroupView, error) {
+// nil Group field. A non-empty tagID restricts the result to decks carrying
+// that tag; groups left with no matching decks are omitted.
+func (s *Service) ListGroupViews(ctx context.Context, userID, tagID string) ([]GroupView, error) {
 	groups, err := s.repo.ListGroups(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -498,6 +582,23 @@ func (s *Service) ListGroupViews(ctx context.Context, userID string) ([]GroupVie
 	decks, err := s.repo.ListDecks(ctx, userID)
 	if err != nil {
 		return nil, err
+	}
+	if tagID != "" {
+		ids, err := s.repo.DeckIDsByTag(ctx, userID, tagID)
+		if err != nil {
+			return nil, err
+		}
+		tagged := make(map[string]bool, len(ids))
+		for _, id := range ids {
+			tagged[id] = true
+		}
+		kept := decks[:0]
+		for _, d := range decks {
+			if tagged[d.ID] {
+				kept = append(kept, d)
+			}
+		}
+		decks = kept
 	}
 	byGroup := make(map[string][]*srs.Deck, len(groups))
 	var ungrouped []*srs.Deck
@@ -510,9 +611,14 @@ func (s *Service) ListGroupViews(ctx context.Context, userID string) ([]GroupVie
 	}
 	views := make([]GroupView, 0, len(groups)+1)
 	for _, g := range groups {
+		if tagID != "" && len(byGroup[g.ID]) == 0 {
+			continue
+		}
 		views = append(views, GroupView{Group: g, Decks: byGroup[g.ID]})
 	}
-	views = append(views, GroupView{Group: nil, Decks: ungrouped})
+	if len(ungrouped) > 0 {
+		views = append(views, GroupView{Group: nil, Decks: ungrouped})
+	}
 	return views, nil
 }
 

@@ -101,6 +101,38 @@ func NewServer(name, version string, cardsService *cards.Service, userID string)
 	}, s.setDeckGroup)
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name: "create_tag",
+		Description: "Create a tag that decks can be labelled with. Tag names are unique; " +
+			"if the tag already exists, its existing id is returned. Unlike groups (one per deck), " +
+			"a deck can carry any number of tags.",
+	}, s.createTag)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name:        "list_tags",
+		Description: "List all tags with the decks carrying each of them.",
+	}, s.listTags)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name:        "rename_tag",
+		Description: "Rename a tag by ID. Use list_tags to find the tagId.",
+	}, s.renameTag)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name:        "delete_tag",
+		Description: "Delete a tag by ID. Decks carrying it just lose the label (they and their cards are not deleted). Use list_tags to find the tagId.",
+	}, s.deleteTag)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name:        "tag_deck",
+		Description: "Label a deck with a tag, given by name. The tag is created if it doesn't exist yet; tagging a deck twice is a no-op.",
+	}, s.tagDeck)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name:        "untag_deck",
+		Description: "Remove a tag, given by name, from a deck. The tag itself is kept. Use list_decks or list_tags to see current tags.",
+	}, s.untagDeck)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
 		Name:        "rename_deck",
 		Description: "Rename a deck by ID. Use list_decks to find the deckId.",
 	}, s.renameDeck)
@@ -399,9 +431,10 @@ type ListDecksInput struct{}
 
 // DeckSummary is one deck in list_decks output.
 type DeckSummary struct {
-	DeckID  string `json:"deckId"`
-	Name    string `json:"name"`
-	GroupID string `json:"groupId,omitempty"`
+	DeckID  string   `json:"deckId"`
+	Name    string   `json:"name"`
+	GroupID string   `json:"groupId,omitempty"`
+	Tags    []string `json:"tags,omitempty"`
 }
 
 // ListDecksOutput is the result schema for list_decks.
@@ -409,14 +442,35 @@ type ListDecksOutput struct {
 	Decks []DeckSummary `json:"decks"`
 }
 
+// tagNamesByDeck maps every tagged deck ID to its tag names, name-ordered.
+func (s *Server) tagNamesByDeck(ctx context.Context) (map[string][]string, error) {
+	byDeck, err := s.cards.TagsByDeck(ctx, s.userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]string, len(byDeck))
+	for deckID, tags := range byDeck {
+		names := make([]string, 0, len(tags))
+		for _, t := range tags {
+			names = append(names, t.Name)
+		}
+		out[deckID] = names
+	}
+	return out, nil
+}
+
 func (s *Server) listDecks(ctx context.Context, _ *mcpsdk.CallToolRequest, _ ListDecksInput) (*mcpsdk.CallToolResult, ListDecksOutput, error) {
 	decks, err := s.cards.ListDecks(ctx, s.userID)
 	if err != nil {
 		return nil, ListDecksOutput{}, fmt.Errorf("listing decks: %w", err)
 	}
+	tagNames, err := s.tagNamesByDeck(ctx)
+	if err != nil {
+		return nil, ListDecksOutput{}, fmt.Errorf("listing deck tags: %w", err)
+	}
 	out := ListDecksOutput{Decks: make([]DeckSummary, 0, len(decks))}
 	for _, d := range decks {
-		out.Decks = append(out.Decks, DeckSummary{DeckID: d.ID, Name: d.Name, GroupID: d.GroupID})
+		out.Decks = append(out.Decks, DeckSummary{DeckID: d.ID, Name: d.Name, GroupID: d.GroupID, Tags: tagNames[d.ID]})
 	}
 	return nil, out, nil
 }
@@ -503,15 +557,19 @@ type ListGroupsOutput struct {
 }
 
 func (s *Server) listGroups(ctx context.Context, _ *mcpsdk.CallToolRequest, _ ListGroupsInput) (*mcpsdk.CallToolResult, ListGroupsOutput, error) {
-	views, err := s.cards.ListGroupViews(ctx, s.userID)
+	views, err := s.cards.ListGroupViews(ctx, s.userID, "")
 	if err != nil {
 		return nil, ListGroupsOutput{}, fmt.Errorf("listing groups: %w", err)
+	}
+	tagNames, err := s.tagNamesByDeck(ctx)
+	if err != nil {
+		return nil, ListGroupsOutput{}, fmt.Errorf("listing deck tags: %w", err)
 	}
 	out := ListGroupsOutput{Groups: make([]GroupSummary, 0), Ungrouped: make([]DeckSummary, 0)}
 	for _, v := range views {
 		decks := make([]DeckSummary, 0, len(v.Decks))
 		for _, d := range v.Decks {
-			decks = append(decks, DeckSummary{DeckID: d.ID, Name: d.Name, GroupID: d.GroupID})
+			decks = append(decks, DeckSummary{DeckID: d.ID, Name: d.Name, GroupID: d.GroupID, Tags: tagNames[d.ID]})
 		}
 		if v.Group == nil {
 			out.Ungrouped = decks
@@ -628,6 +686,152 @@ func (s *Server) setDeckGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in
 		return nil, SetDeckGroupOutput{}, fmt.Errorf("setting deck group: %w", err)
 	}
 	return nil, SetDeckGroupOutput{DeckID: in.DeckID, GroupID: strings.TrimSpace(in.GroupID)}, nil
+}
+
+// CreateTagInput is the argument schema for create_tag.
+type CreateTagInput struct {
+	Name string `json:"name" jsonschema:"Name of the tag. Required. If a tag with this name already exists, it is returned instead of creating a duplicate."`
+}
+
+// TagOutput echoes a tag's identity; the result schema for create_tag and rename_tag.
+type TagOutput struct {
+	TagID string `json:"tagId"`
+	Name  string `json:"name"`
+}
+
+func (s *Server) createTag(ctx context.Context, _ *mcpsdk.CallToolRequest, in CreateTagInput) (*mcpsdk.CallToolResult, TagOutput, error) {
+	tag, err := s.cards.EnsureTag(ctx, s.userID, in.Name)
+	if err != nil {
+		return nil, TagOutput{}, fmt.Errorf("creating tag: %w", err)
+	}
+	return nil, TagOutput{TagID: tag.ID, Name: tag.Name}, nil
+}
+
+// ListTagsInput is the argument schema for list_tags.
+type ListTagsInput struct{}
+
+// TagSummary is one tag with its decks in list_tags output.
+type TagSummary struct {
+	TagID string        `json:"tagId"`
+	Name  string        `json:"name"`
+	Decks []DeckSummary `json:"decks"`
+}
+
+// ListTagsOutput is the result schema for list_tags.
+type ListTagsOutput struct {
+	Tags []TagSummary `json:"tags"`
+}
+
+func (s *Server) listTags(ctx context.Context, _ *mcpsdk.CallToolRequest, _ ListTagsInput) (*mcpsdk.CallToolResult, ListTagsOutput, error) {
+	tags, err := s.cards.ListTags(ctx, s.userID)
+	if err != nil {
+		return nil, ListTagsOutput{}, fmt.Errorf("listing tags: %w", err)
+	}
+	decks, err := s.cards.ListDecks(ctx, s.userID)
+	if err != nil {
+		return nil, ListTagsOutput{}, fmt.Errorf("listing decks: %w", err)
+	}
+	byDeck, err := s.cards.TagsByDeck(ctx, s.userID)
+	if err != nil {
+		return nil, ListTagsOutput{}, fmt.Errorf("listing deck tags: %w", err)
+	}
+	decksByTag := map[string][]DeckSummary{}
+	for _, d := range decks {
+		for _, t := range byDeck[d.ID] {
+			decksByTag[t.ID] = append(decksByTag[t.ID], DeckSummary{DeckID: d.ID, Name: d.Name, GroupID: d.GroupID})
+		}
+	}
+	out := ListTagsOutput{Tags: make([]TagSummary, 0, len(tags))}
+	for _, t := range tags {
+		ds := decksByTag[t.ID]
+		if ds == nil {
+			ds = make([]DeckSummary, 0)
+		}
+		out.Tags = append(out.Tags, TagSummary{TagID: t.ID, Name: t.Name, Decks: ds})
+	}
+	return nil, out, nil
+}
+
+// RenameTagInput is the argument schema for rename_tag.
+type RenameTagInput struct {
+	TagID string `json:"tagId" jsonschema:"Tag ID to rename. Required — use list_tags to find it."`
+	Name  string `json:"name" jsonschema:"New name for the tag. Required."`
+}
+
+func (s *Server) renameTag(ctx context.Context, _ *mcpsdk.CallToolRequest, in RenameTagInput) (*mcpsdk.CallToolResult, TagOutput, error) {
+	if strings.TrimSpace(in.TagID) == "" {
+		return nil, TagOutput{}, fmt.Errorf("tagId is required")
+	}
+	tag, err := s.cards.RenameTag(ctx, s.userID, in.TagID, in.Name)
+	if err != nil {
+		return nil, TagOutput{}, fmt.Errorf("renaming tag: %w", err)
+	}
+	return nil, TagOutput{TagID: tag.ID, Name: tag.Name}, nil
+}
+
+// DeleteTagInput is the argument schema for delete_tag.
+type DeleteTagInput struct {
+	TagID string `json:"tagId" jsonschema:"Tag ID to delete. Decks carrying it just lose the label. Required."`
+}
+
+// DeleteTagOutput is the result schema for delete_tag.
+type DeleteTagOutput struct {
+	Deleted bool   `json:"deleted"`
+	TagID   string `json:"tagId"`
+}
+
+func (s *Server) deleteTag(ctx context.Context, _ *mcpsdk.CallToolRequest, in DeleteTagInput) (*mcpsdk.CallToolResult, DeleteTagOutput, error) {
+	if strings.TrimSpace(in.TagID) == "" {
+		return nil, DeleteTagOutput{}, fmt.Errorf("tagId is required")
+	}
+	if err := s.cards.DeleteTag(ctx, s.userID, in.TagID); err != nil {
+		return nil, DeleteTagOutput{}, fmt.Errorf("deleting tag: %w", err)
+	}
+	return nil, DeleteTagOutput{Deleted: true, TagID: in.TagID}, nil
+}
+
+// TagDeckInput is the argument schema for tag_deck.
+type TagDeckInput struct {
+	DeckID string `json:"deckId" jsonschema:"Deck ID to label. Required — use list_decks to find it."`
+	Tag    string `json:"tag" jsonschema:"Tag name to apply. Created if it doesn't exist yet. Required."`
+}
+
+// TagDeckOutput is the result schema for tag_deck and untag_deck.
+type TagDeckOutput struct {
+	DeckID string `json:"deckId"`
+	TagID  string `json:"tagId"`
+	Tag    string `json:"tag"`
+}
+
+func (s *Server) tagDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in TagDeckInput) (*mcpsdk.CallToolResult, TagDeckOutput, error) {
+	if strings.TrimSpace(in.DeckID) == "" {
+		return nil, TagDeckOutput{}, fmt.Errorf("deckId is required — use list_decks to find it")
+	}
+	tag, err := s.cards.TagDeck(ctx, s.userID, in.DeckID, in.Tag)
+	if err != nil {
+		return nil, TagDeckOutput{}, fmt.Errorf("tagging deck: %w", err)
+	}
+	return nil, TagDeckOutput{DeckID: in.DeckID, TagID: tag.ID, Tag: tag.Name}, nil
+}
+
+// UntagDeckInput is the argument schema for untag_deck.
+type UntagDeckInput struct {
+	DeckID string `json:"deckId" jsonschema:"Deck ID to remove the tag from. Required — use list_decks to find it."`
+	Tag    string `json:"tag" jsonschema:"Name of the tag to remove. Required."`
+}
+
+func (s *Server) untagDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in UntagDeckInput) (*mcpsdk.CallToolResult, TagDeckOutput, error) {
+	if strings.TrimSpace(in.DeckID) == "" {
+		return nil, TagDeckOutput{}, fmt.Errorf("deckId is required — use list_decks to find it")
+	}
+	tag, err := s.cards.TagByName(ctx, s.userID, in.Tag)
+	if err != nil {
+		return nil, TagDeckOutput{}, fmt.Errorf("looking up tag %q: %w", in.Tag, err)
+	}
+	if err := s.cards.UntagDeck(ctx, s.userID, in.DeckID, tag.ID); err != nil {
+		return nil, TagDeckOutput{}, fmt.Errorf("untagging deck: %w", err)
+	}
+	return nil, TagDeckOutput{DeckID: in.DeckID, TagID: tag.ID, Tag: tag.Name}, nil
 }
 
 // BulkCardItem is one card in a create_cards request.
