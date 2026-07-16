@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -120,13 +121,18 @@ func (h *Handler) statePush(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"applied": applied, "received": received})
 }
 
-// stateGet streams the deck's full scheduling state (reviewed cards only);
-// the download half of the batched exchange.
+// stateGet streams the deck's scheduling state (reviewed cards only); the
+// download half of the batched exchange. ?since=<epoch> narrows it to cards
+// graded at or after that time; absent or 0 streams everything.
 func (h *Handler) stateGet(c *fiber.Ctx) error {
 	c.Set(fiber.HeaderContentType, "application/x-ndjson")
 	devID, _ := device(c)
 	deckID := c.Params("id")
-	err := h.svc.WriteState(c.Context(), userID(c), deckID, c.Response().BodyWriter())
+	since, err := strconv.ParseInt(c.Query("since", "0"), 10, 64)
+	if err != nil || since < 0 {
+		since = 0
+	}
+	err = h.svc.WriteState(c.Context(), userID(c), deckID, since, c.Response().BodyWriter())
 	if errors.Is(err, srs.ErrNotFound) {
 		return fiber.ErrNotFound
 	}

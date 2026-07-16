@@ -5,9 +5,12 @@
 //
 //  1. GET  /hello                  — server time, used to fix the device RTC
 //  2. POST /reviews                — upload the review log (idempotent)
-//  3. POST /decks/{id}/state       — per-deck scheduling-state exchange (LWW)
-//  4. GET  /decks                  — deck manifest (etags decide re-downloads)
-//  5. GET  /decks/{id}/cards       — CSV export of changed decks
+//  3. GET  /decks                  — deck manifest (etags decide re-downloads,
+//     stateHashes decide which decks need a state exchange at all)
+//  4. GET  /decks/{id}/cards       — CSV export of changed decks
+//  5. POST /decks/{id}/state/push  — upload changed scheduling state (LWW)
+//     GET  /decks/{id}/state?since — download scheduling state changed since
+//     the device's last exchange (LWW)
 //
 // Decks and cards are addressed by their compact 8-hex sync IDs (the device
 // packs IDs into 12-byte fields), never by primary keys. Deck content, deck
@@ -23,8 +26,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/contre95/stella/src/srs"
@@ -49,9 +54,10 @@ func NewService(repo srs.Repository) *Service {
 
 // DeckManifest describes one deck in the sync manifest.
 type DeckManifest struct {
-	ID           string `json:"id"`   // deck sync ID
-	Name         string `json:"name"` // display name; the device uses it as the CSV filename
-	Etag         string `json:"etag"` // content hash of the export; changes iff the CSV would
+	ID           string `json:"id"`        // deck sync ID
+	Name         string `json:"name"`      // display name; the device uses it as the CSV filename
+	Etag         string `json:"etag"`      // content hash of the export; changes iff the CSV would
+	StateHash    string `json:"stateHash"` // hash of the reviewed cards' scheduling state; see stateHash
 	Cards        int    `json:"cards"`
 	Truncated    bool   `json:"truncated"` // deck exceeds ExportCap; export is cut off
 	StudyEnabled bool   `json:"studyEnabled"`
@@ -71,16 +77,58 @@ func (s *Service) Manifest(ctx context.Context, userID string) ([]DeckManifest, 
 		if err != nil {
 			return nil, err
 		}
+		cards, err := s.repo.CardsByDeck(ctx, userID, d.ID)
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, DeckManifest{
 			ID:           d.SyncID,
 			Name:         d.Name,
 			Etag:         etag(rows),
+			StateHash:    stateHash(cards, exportedSet(rows)),
 			Cards:        len(rows),
 			Truncated:    truncated,
 			StudyEnabled: d.StudyEnabled,
 		})
 	}
 	return out, nil
+}
+
+// exportedSet indexes the export rows' card sync IDs. State endpoints scope
+// themselves to this set so the device — which only ever sees the capped
+// export — can converge on the same state view the server hashes.
+func exportedSet(rows []srs.DeckExportRow) map[string]struct{} {
+	set := make(map[string]struct{}, len(rows))
+	for _, r := range rows {
+		set[r.SyncID] = struct{}{}
+	}
+	return set
+}
+
+// stateHash digests a deck's scheduling state as sorted "syncID:lastRep\n"
+// entries of its reviewed, exported cards (FNV-1a 64, 16 hex chars). The
+// firmware computes the identical hash over its local state file; equality
+// means neither side has anything to exchange, so the device skips the deck's
+// state requests entirely. LastRep alone identifies a state version: SM2
+// state is a pure function of the latest grading, and LWW only ever moves
+// lastRep forward.
+func stateHash(cards []*srs.Card, exported map[string]struct{}) string {
+	reviewed := make([]*srs.Card, 0, len(cards))
+	for _, c := range cards {
+		if c.LastRep < 0 {
+			continue
+		}
+		if _, ok := exported[c.SyncID]; !ok {
+			continue
+		}
+		reviewed = append(reviewed, c)
+	}
+	slices.SortFunc(reviewed, func(a, b *srs.Card) int { return strings.Compare(a.SyncID, b.SyncID) })
+	h := fnv.New64a()
+	for _, c := range reviewed {
+		fmt.Fprintf(h, "%s:%d\n", c.SyncID, c.LastRep)
+	}
+	return fmt.Sprintf("%016x", h.Sum64())
 }
 
 // exportRows fetches a deck's export rows, applying the device card cap.
@@ -282,16 +330,23 @@ func (s *Service) ApplyState(ctx context.Context, userID, deckSyncID string, in 
 	return applied, received, sc.Err()
 }
 
-// WriteState streams every reviewed card's state for a deck; the download
-// half of the batched exchange. The device merges with per-card
-// last-writer-wins, so records it just pushed come back as harmless no-ops.
-// Unseen cards carry no information — the deck CSV already delivers them as
-// unseen — so they are omitted.
-func (s *Service) WriteState(ctx context.Context, userID, deckSyncID string, out io.Writer) error {
+// WriteState streams reviewed cards' state for a deck; the download half of
+// the batched exchange. since narrows it to cards graded at or after that
+// epoch (0 = everything): devices track when they last exchanged and skip the
+// bulk that cannot have changed. The device merges with per-card
+// last-writer-wins, so overlap is a harmless no-op. Unseen cards carry no
+// information — the deck CSV already delivers them as unseen — and cards
+// beyond the export cap are invisible to the device, so both are omitted.
+func (s *Service) WriteState(ctx context.Context, userID, deckSyncID string, since int64, out io.Writer) error {
 	deck, err := s.repo.GetDeckBySyncID(ctx, userID, deckSyncID)
 	if err != nil {
 		return err
 	}
+	rows, _, err := s.exportRows(ctx, userID, deck.ID)
+	if err != nil {
+		return err
+	}
+	exported := exportedSet(rows)
 	cards, err := s.repo.CardsByDeck(ctx, userID, deck.ID)
 	if err != nil {
 		return err
@@ -299,7 +354,10 @@ func (s *Service) WriteState(ctx context.Context, userID, deckSyncID string, out
 	enc := json.NewEncoder(out)
 	sent := 0
 	for _, c := range cards {
-		if c.LastRep < 0 {
+		if c.LastRep < 0 || c.LastRep < since {
+			continue
+		}
+		if _, ok := exported[c.SyncID]; !ok {
 			continue
 		}
 		if err := enc.Encode(stateOf(c)); err != nil {
@@ -307,7 +365,7 @@ func (s *Service) WriteState(ctx context.Context, userID, deckSyncID string, out
 		}
 		sent++
 	}
-	slog.Info("state download", "deck", deck.Name, "server_cards", len(cards), "sent", sent)
+	slog.Info("state download", "deck", deck.Name, "server_cards", len(cards), "since", since, "sent", sent)
 	return nil
 }
 

@@ -88,7 +88,7 @@
             <img src="/images/{{$frontImg}}" alt="" class="max-h-full w-auto max-w-full rounded-lg object-contain pointer-events-none" />
           </div>
           {{end}}
-          <p class="text-center text-xl font-medium leading-relaxed text-gray-800 dark:text-gray-100 sm:text-2xl"
+          <p class="whitespace-pre-wrap text-center text-xl font-medium leading-relaxed text-gray-800 dark:text-gray-100 sm:text-2xl"
              _="on load if my textContent.trim().length <= 3 set my style.fontSize to '6rem' set my style.lineHeight to '1'">
             {{if eq .Card.View "forward"}}{{.Fact.Front}}{{else}}{{.Fact.Back}}{{end}}
           </p>
@@ -131,7 +131,7 @@
             <img src="/images/{{$backImg}}" alt="" class="max-h-full w-auto max-w-full rounded-lg object-contain pointer-events-none" />
           </div>
           {{end}}
-          <p class="text-center text-xl font-medium leading-relaxed text-gray-900 dark:text-white sm:text-2xl"
+          <p class="whitespace-pre-wrap text-left text-xl font-medium leading-relaxed text-gray-900 dark:text-white sm:text-2xl"
              _="on load if my textContent.trim().length <= 3 set my style.fontSize to '6rem' set my style.lineHeight to '1'">
             {{if eq .Card.View "forward"}}{{.Fact.Back}}{{else}}{{.Fact.Front}}{{end}}
           </p>
@@ -477,7 +477,7 @@
         box.appendChild(aud);
       }
       var text = document.createElement('p');
-      text.className = 'text-xl font-medium leading-relaxed ' + (isDark ? 'text-gray-100' : 'text-gray-800');
+      text.className = 'whitespace-pre-wrap text-xl font-medium leading-relaxed ' + (isDark ? 'text-gray-100' : 'text-gray-800');
       text.textContent = this.dataset.text;
       box.appendChild(text);
       swalGlass.fire({

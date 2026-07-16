@@ -228,8 +228,23 @@ func TestBatchedStatePushAndDownload(t *testing.T) {
 	}
 
 	// Download returns both reviewed cards, nothing for unseen ones.
+	seen := downloadState(t, svc, deck.SyncID, 0)
+	if len(seen) != 2 || seen[fwd.SyncID] != 2000 || seen[rev.SyncID] != 3000 {
+		t.Errorf("unexpected download: %+v", seen)
+	}
+
+	// A since filter keeps cards last graded before it out of the stream.
+	seen = downloadState(t, svc, deck.SyncID, 2500)
+	if len(seen) != 1 || seen[rev.SyncID] != 3000 {
+		t.Errorf("unexpected since-filtered download: %+v", seen)
+	}
+}
+
+// downloadState collects a WriteState stream as id -> lastRep.
+func downloadState(t *testing.T, svc *Service, deckSyncID string, since int64) map[string]int64 {
+	t.Helper()
 	var out bytes.Buffer
-	if err := svc.WriteState(ctx, testUser, deck.SyncID, &out); err != nil {
+	if err := svc.WriteState(context.Background(), testUser, deckSyncID, since, &out); err != nil {
 		t.Fatalf("download: %v", err)
 	}
 	seen := map[string]int64{}
@@ -241,8 +256,45 @@ func TestBatchedStatePushAndDownload(t *testing.T) {
 		}
 		seen[st.ID] = st.LastRep
 	}
-	if len(seen) != 2 || seen[fwd.SyncID] != 2000 || seen[rev.SyncID] != 3000 {
-		t.Errorf("unexpected download: %+v", seen)
+	return seen
+}
+
+func TestManifestStateHashTracksSchedulingState(t *testing.T) {
+	svc, db := newTestService(t)
+	_, fwd, _ := fixture(t, db)
+	ctx := context.Background()
+
+	// No reviews anywhere: the hash must equal the well-known empty-state
+	// value the device computes for a missing/empty state file.
+	m1, err := svc.Manifest(ctx, testUser)
+	if err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+	if m1[0].StateHash != "cbf29ce484222325" { // FNV-1a 64 offset basis
+		t.Errorf("empty-state hash = %s, want FNV-1a basis", m1[0].StateHash)
+	}
+
+	// Grading a card must change the hash; an identical re-read must not.
+	fwd.Grade = 3
+	fwd.LastRep = 2000
+	fwd.NextRep = 100000
+	if err := db.UpdateCard(ctx, fwd); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	m2, _ := svc.Manifest(ctx, testUser)
+	if m2[0].StateHash == m1[0].StateHash {
+		t.Error("state hash unchanged after grading")
+	}
+	m3, _ := svc.Manifest(ctx, testUser)
+	if m3[0].StateHash != m2[0].StateHash {
+		t.Errorf("state hash not stable: %s vs %s", m2[0].StateHash, m3[0].StateHash)
+	}
+
+	// The device computes hash(deck.SyncID entries): verify the exact digest
+	// so the firmware implementation can be checked against the same vector.
+	want := stateHash([]*srs.Card{fwd}, map[string]struct{}{fwd.SyncID: {}})
+	if m2[0].StateHash != want {
+		t.Errorf("manifest hash %s != direct hash %s", m2[0].StateHash, want)
 	}
 }
 
