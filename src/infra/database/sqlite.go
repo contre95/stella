@@ -156,21 +156,8 @@ CREATE INDEX IF NOT EXISTS idx_reviews_ts   ON reviews(user_id, timestamp);
 	if _, err := s.db.Exec(schema); err != nil {
 		return fmt.Errorf("creating schema: %w", err)
 	}
-	// Additive columns for existing databases — safe to ignore if they already exist.
-	s.db.Exec(`ALTER TABLE decks ADD COLUMN study_enabled INTEGER NOT NULL DEFAULT 1`)
-	s.db.Exec(`ALTER TABLE decks ADD COLUMN sync_id TEXT NOT NULL DEFAULT ''`)
-	s.db.Exec(`ALTER TABLE cards ADD COLUMN sync_id TEXT NOT NULL DEFAULT ''`)
-	s.db.Exec(`ALTER TABLE reviews ADD COLUMN source TEXT NOT NULL DEFAULT 'web'`)
-	// Backfill sync IDs for rows created before the columns existed, then
-	// enforce per-user uniqueness. randomblob(4) collisions are ~1e-5 even at
-	// 10k cards; if one ever trips the index, rerunning the backfill by hand
-	// (UPDATE ... WHERE sync_id='') resolves it.
-	if _, err := s.db.Exec(`UPDATE decks SET sync_id = lower(hex(randomblob(4))) WHERE sync_id = ''`); err != nil {
-		return fmt.Errorf("backfilling deck sync ids: %w", err)
-	}
-	if _, err := s.db.Exec(`UPDATE cards SET sync_id = lower(hex(randomblob(4))) WHERE sync_id = ''`); err != nil {
-		return fmt.Errorf("backfilling card sync ids: %w", err)
-	}
+	// Per-user uniqueness for the sync IDs assigned to every deck and card on
+	// insert (AddDeck/AddCard retry on the astronomically rare collision).
 	const indexes = `
 CREATE UNIQUE INDEX IF NOT EXISTS idx_decks_sync ON decks(user_id, sync_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_cards_sync ON cards(user_id, sync_id);
@@ -533,6 +520,28 @@ func (s *SqliteSRS) UnsetGroupForDecks(ctx context.Context, userID, groupID stri
 func (s *SqliteSRS) AddReview(ctx context.Context, r *srs.Review) error {
 	_, err := s.db.ExecContext(ctx, insertReviewSQL, reviewArgs(r)...)
 	return err
+}
+
+// ReviewsForCard returns a card's full review log ordered oldest first.
+func (s *SqliteSRS) ReviewsForCard(ctx context.Context, userID, cardID string) ([]*srs.Review, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, user_id, card_id, grade, ret_reps, scheduled_interval,
+			actual_interval, thinking_time, timestamp, source
+		 FROM reviews WHERE user_id=? AND card_id=? ORDER BY timestamp, rowid`, userID, cardID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*srs.Review
+	for rows.Next() {
+		var r srs.Review
+		if err := rows.Scan(&r.ID, &r.UserID, &r.CardID, &r.Grade, &r.RetReps,
+			&r.ScheduledInterval, &r.ActualInterval, &r.ThinkingTime, &r.Timestamp, &r.Source); err != nil {
+			return nil, err
+		}
+		out = append(out, &r)
+	}
+	return out, rows.Err()
 }
 
 // AddReviewIfNew inserts a review unless its ID already exists, reporting

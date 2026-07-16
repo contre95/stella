@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/contre95/stella/src/features/cards"
 	"github.com/contre95/stella/src/srs"
@@ -82,13 +83,43 @@ func (s *Service) ExportDeck(ctx context.Context, userID, deckID string) (*DeckE
 	for _, row := range rows {
 		f := row.Fact
 		hasReverse := false
+		cardStats := make([]CardStats, 0, len(row.Cards))
 		for _, c := range row.Cards {
-			if c.Card.View == srs.ViewReverse {
+			card := c.Card
+			if card.View == srs.ViewReverse {
 				hasReverse = true
-				break
 			}
+			cs := CardStats{
+				View:              card.View,
+				Grade:             card.Grade,
+				Easiness:          card.Easiness,
+				AcqReps:           card.AcqReps,
+				RetReps:           card.RetReps,
+				Lapses:            card.Lapses,
+				AcqRepsSinceLapse: card.AcqRepsSinceLapse,
+				RetRepsSinceLapse: card.RetRepsSinceLapse,
+				LastRep:           card.LastRep,
+				NextRep:           card.NextRep,
+				Active:            card.Active,
+			}
+			reviews, err := s.cards.CardReviews(ctx, userID, card.ID)
+			if err != nil {
+				return nil, err
+			}
+			for _, r := range reviews {
+				cs.Reviews = append(cs.Reviews, ReviewStats{
+					Grade:             r.Grade,
+					RetReps:           r.RetReps,
+					ScheduledInterval: r.ScheduledInterval,
+					ActualInterval:    r.ActualInterval,
+					ThinkingTime:      r.ThinkingTime,
+					Timestamp:         r.Timestamp,
+					Source:            r.Source,
+				})
+			}
+			cardStats = append(cardStats, cs)
 		}
-		fe := FactExport{Front: f.Front, Back: f.Back, ImageFront: f.ImageFront, ImageBack: f.ImageBack, AudioFront: f.AudioFront, AudioBack: f.AudioBack, Reverse: hasReverse}
+		fe := FactExport{Front: f.Front, Back: f.Back, ImageFront: f.ImageFront, ImageBack: f.ImageBack, AudioFront: f.AudioFront, AudioBack: f.AudioBack, Reverse: hasReverse, Created: f.Created, Modified: f.Modified, Cards: cardStats}
 		if f.ImageFront != "" {
 			if data, err := os.ReadFile(filepath.Join(mediaPath, f.ImageFront)); err == nil {
 				fe.ImageFrontData = data
@@ -209,12 +240,84 @@ func (s *Service) ImportDeck(ctx context.Context, userID string, exp *DeckExport
 			}
 			audBack = saved
 		}
-		if _, err := s.cards.AddFact(ctx, userID, fe.Front, fe.Back, deck.ID, -1, fe.Reverse, imgFront, imgBack, audFront, audBack); err != nil {
+		if len(fe.Cards) > 0 {
+			if err := s.importFactWithStats(ctx, userID, deck.ID, &fe, imgFront, imgBack, audFront, audBack); err != nil {
+				return deck, imported, err
+			}
+		} else if _, err := s.cards.AddFact(ctx, userID, fe.Front, fe.Back, deck.ID, -1, fe.Reverse, imgFront, imgBack, audFront, audBack); err != nil {
 			return deck, imported, err
 		}
 		imported++
 	}
 	return deck, imported, nil
+}
+
+// importFactWithStats restores a fact together with the scheduling state and
+// review history in fe.Cards. The media filenames are the already-saved ones
+// resolved by the caller.
+func (s *Service) importFactWithStats(ctx context.Context, userID, deckID string, fe *FactExport, imgFront, imgBack, audFront, audBack string) error {
+	now := time.Now().Unix()
+	created, modified := fe.Created, fe.Modified
+	if created == 0 {
+		created = now
+	}
+	if modified == 0 {
+		modified = now
+	}
+	fact := &srs.Fact{
+		ID:         uuid.NewString(),
+		UserID:     userID,
+		Front:      fe.Front,
+		Back:       fe.Back,
+		ImageFront: imgFront,
+		ImageBack:  imgBack,
+		AudioFront: audFront,
+		AudioBack:  audBack,
+		DeckID:     deckID,
+		Created:    created,
+		Modified:   modified,
+	}
+	importCards := make([]cards.ImportCard, 0, len(fe.Cards))
+	for _, cs := range fe.Cards {
+		view := cs.View
+		if view == "" {
+			view = srs.ViewForward
+		}
+		card := &srs.Card{
+			ID:                uuid.NewString(),
+			UserID:            userID,
+			FactID:            fact.ID,
+			DeckID:            deckID,
+			View:              view,
+			Grade:             cs.Grade,
+			Easiness:          cs.Easiness,
+			AcqReps:           cs.AcqReps,
+			RetReps:           cs.RetReps,
+			Lapses:            cs.Lapses,
+			AcqRepsSinceLapse: cs.AcqRepsSinceLapse,
+			RetRepsSinceLapse: cs.RetRepsSinceLapse,
+			LastRep:           cs.LastRep,
+			NextRep:           cs.NextRep,
+			Active:            cs.Active,
+		}
+		reviews := make([]*srs.Review, 0, len(cs.Reviews))
+		for _, rs := range cs.Reviews {
+			reviews = append(reviews, &srs.Review{
+				ID:                uuid.NewString(),
+				UserID:            userID,
+				CardID:            card.ID,
+				Grade:             rs.Grade,
+				RetReps:           rs.RetReps,
+				ScheduledInterval: rs.ScheduledInterval,
+				ActualInterval:    rs.ActualInterval,
+				ThinkingTime:      rs.ThinkingTime,
+				Timestamp:         rs.Timestamp,
+				Source:            rs.Source,
+			})
+		}
+		importCards = append(importCards, cards.ImportCard{Card: card, Reviews: reviews})
+	}
+	return s.cards.ImportFact(ctx, fact, importCards)
 }
 
 // ImportGroup creates a new group (or assigns decks to an existing group when

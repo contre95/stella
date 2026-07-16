@@ -3,6 +3,8 @@ package portability
 import (
 	"bytes"
 	"testing"
+
+	"github.com/contre95/stella/src/srs"
 )
 
 func TestDeckZipRoundTrip(t *testing.T) {
@@ -20,6 +22,16 @@ func TestDeckZipRoundTrip(t *testing.T) {
 				AudioBack:      "dog.mp3",
 				AudioBackData:  []byte("dog-audio"),
 				Reverse:        true,
+				Cards: []CardStats{
+					{
+						View: srs.ViewForward, Grade: 4, Easiness: 2.6, RetReps: 3, LastRep: 100, NextRep: 200, Active: true,
+						Reviews: []ReviewStats{
+							{Grade: 2, RetReps: 1, ScheduledInterval: 86400, Timestamp: 50, Source: "web"},
+							{Grade: 4, RetReps: 3, ScheduledInterval: 172800, Timestamp: 100, Source: "web"},
+						},
+					},
+					{View: srs.ViewReverse, Grade: -1, Easiness: 2.5, Active: true},
+				},
 			},
 			{Front: "猫", Back: "cat"},
 		},
@@ -53,6 +65,19 @@ func TestDeckZipRoundTrip(t *testing.T) {
 	}
 	if !bytes.Equal(f0.AudioBackData, []byte("dog-audio")) {
 		t.Errorf("fact 0 audio data = %q", f0.AudioBackData)
+	}
+	if len(f0.Cards) != 2 {
+		t.Fatalf("fact 0 cards = %d, want 2", len(f0.Cards))
+	}
+	fwd := f0.Cards[0]
+	if fwd.View != srs.ViewForward || fwd.Grade != 4 || fwd.Easiness != 2.6 || fwd.RetReps != 3 || fwd.NextRep != 200 {
+		t.Errorf("fact 0 forward card = %+v", fwd)
+	}
+	if len(fwd.Reviews) != 2 || fwd.Reviews[1].Grade != 4 || fwd.Reviews[1].ScheduledInterval != 172800 {
+		t.Errorf("fact 0 forward reviews = %+v", fwd.Reviews)
+	}
+	if f0.Cards[1].View != srs.ViewReverse || f0.Cards[1].Grade != -1 {
+		t.Errorf("fact 0 reverse card = %+v", f0.Cards[1])
 	}
 	f1 := got.Facts[1]
 	if f1.Front != "猫" || f1.Back != "cat" || f1.ImageFrontData != nil || f1.AudioBackData != nil {

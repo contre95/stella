@@ -103,6 +103,41 @@ func (s *Service) GetFact(ctx context.Context, userID, id string) (*srs.Fact, er
 	return s.repo.GetFact(ctx, userID, id)
 }
 
+// CardReviews returns a card's full review log, oldest first. Used by export
+// to carry a card's history alongside its scheduling state.
+func (s *Service) CardReviews(ctx context.Context, userID, cardID string) ([]*srs.Review, error) {
+	return s.repo.ReviewsForCard(ctx, userID, cardID)
+}
+
+// ImportCard pairs a pre-built card with its review log for ImportFact.
+type ImportCard struct {
+	Card    *srs.Card
+	Reviews []*srs.Review
+}
+
+// ImportFact persists a fact together with its sister cards and their review
+// logs exactly as supplied, preserving the scheduling state and history of an
+// imported deck. Unlike AddFact it neither generates cards nor resets learning
+// data. The repository assigns each card a fresh sync ID on insert, and every
+// review's CardID is bound to its owning card.
+func (s *Service) ImportFact(ctx context.Context, fact *srs.Fact, cards []ImportCard) error {
+	if err := s.repo.AddFact(ctx, fact); err != nil {
+		return err
+	}
+	for _, ic := range cards {
+		if err := s.repo.AddCard(ctx, ic.Card); err != nil {
+			return err
+		}
+		for _, r := range ic.Reviews {
+			r.CardID = ic.Card.ID
+			if err := s.repo.AddReview(ctx, r); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // HasReverse reports whether the fact has a reverse sister card.
 func (s *Service) HasReverse(ctx context.Context, userID, factID string) (bool, error) {
 	cards, err := s.repo.CardsForFact(ctx, userID, factID)

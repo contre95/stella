@@ -65,6 +65,9 @@ type Repository interface {
 
 	// Reviews (append-only log).
 	AddReview(ctx context.Context, r *Review) error
+	// ReviewsForCard returns a card's full review log, oldest first. Used by
+	// export to carry a card's history alongside its scheduling state.
+	ReviewsForCard(ctx context.Context, userID, cardID string) ([]*Review, error)
 	// ReviewTimestampsSince returns POSIX timestamps of reviews at or after
 	// `from`, ascending, for the study-activity heatmap.
 	ReviewTimestampsSince(ctx context.Context, userID string, from int64) ([]int64, error)
