@@ -146,8 +146,8 @@
           </div>
           <div class="mt-2 flex flex-wrap items-center gap-1.5">
             {{range .DeckTags}}
-              <span class="glass inline-flex items-center gap-1 rounded-full py-1 px-2.5 text-xs font-semibold text-gray-500 dark:text-gray-400">
-                <span>#{{.Name}}</span>
+              <span class="inline-flex items-center justify-center gap-1 rounded-full py-1 pl-2.5 pr-1.5 text-xs font-semibold glass text-gray-500 dark:text-gray-400">
+                <span class="py-1"># {{.Name}}</span>
                 <button
                   hx-delete="/decks/{{$.Deck.ID}}/tags/{{.ID}}"
                   hx-target="#contenido"
