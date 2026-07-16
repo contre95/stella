@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/contre95/stella/src/features/hosting"
 )
 
 // TestReviewTemplatesParse guards the template syntax of the review views,
@@ -23,7 +25,7 @@ func TestReviewTemplatesParse(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", rel, err)
 		}
-		if _, err := template.New(rel).Parse(string(b)); err != nil {
+		if _, err := template.New(rel).Funcs(template.FuncMap{"md": hosting.MarkdownHTML}).Parse(string(b)); err != nil {
 			t.Errorf("parse %s: %v", rel, err)
 		}
 	}

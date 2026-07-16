@@ -59,6 +59,52 @@
     }
     .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
 
+    /* ── Rendered fact markdown ─────────────────────────────────── */
+    /* Sizes in em so headings scale with the card's base text size.
+       Tailwind preflight zeroes heading sizes and list markers — restore them. */
+    .md-content { overflow-wrap: break-word; }
+    .md-content > * + * { margin-top: 0.5em; }
+    .md-content h1 { font-size: 1.5em; font-weight: 800; line-height: 1.2; letter-spacing: -0.01em; }
+    .md-content h2 { font-size: 1.25em; font-weight: 700; line-height: 1.25; }
+    .md-content h3 { font-size: 1.1em; font-weight: 700; }
+    .md-content h4, .md-content h5, .md-content h6 { font-weight: 700; }
+    .md-content ul { list-style: disc; }
+    .md-content ol { list-style: decimal; }
+    .md-content ul, .md-content ol {
+      display: inline-block; /* keeps the list block hugging its content when centered */
+      padding-left: 1.4em;
+      text-align: left;
+    }
+    .md-content li + li { margin-top: 0.2em; }
+    .md-content code {
+      font-size: 0.85em;
+      padding: 0.1em 0.35em;
+      border-radius: 0.35em;
+      background: rgba(236, 72, 153, 0.12);
+    }
+    .md-content pre {
+      text-align: left;
+      overflow-x: auto;
+      padding: 0.6em 0.8em;
+      border-radius: 0.6em;
+      font-size: 0.85em;
+      background: rgba(17, 24, 39, 0.06);
+    }
+    .dark .md-content pre { background: rgba(255, 255, 255, 0.08); }
+    .md-content pre code { padding: 0; background: none; }
+    .md-content blockquote {
+      display: inline-block;
+      border-left: 3px solid rgba(236, 72, 153, 0.45);
+      padding-left: 0.75em;
+      text-align: left;
+      opacity: 0.85;
+    }
+    .md-content a { text-decoration: underline; text-underline-offset: 2px; }
+    .md-content hr { border-top: 1px solid rgba(107, 114, 128, 0.35); }
+    .eink .md-content code { background: rgba(0, 0, 0, 0.08); }
+    .eink .md-content pre { background: rgba(0, 0, 0, 0.05); }
+    .eink .md-content blockquote { border-left-color: #1a1a1a; }
+
     /* ── Fixed gradient backdrop that the glass surfaces sample ── */
     .app-bg {
       position: fixed;

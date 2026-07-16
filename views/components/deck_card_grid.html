@@ -23,8 +23,8 @@
               {{if $fact.Fact.ImageFront}}
                 <img src="/images/{{$fact.Fact.ImageFront}}" alt="" class="max-h-[45%] w-full shrink-0 rounded-lg object-cover" />
               {{end}}
-              <p class="line-clamp-4 break-words text-sm font-semibold leading-snug text-gray-900 dark:text-gray-100"
-                 _="on load if my textContent.trim().length <= 3 set my style.fontSize to '3rem' set my style.lineHeight to '1'">{{$fact.Fact.Front}}</p>
+              <div class="md-content line-clamp-4 w-full break-words text-sm font-semibold leading-snug text-gray-900 dark:text-gray-100"
+                 _="on load if my textContent.trim().length <= 3 set my style.fontSize to '3rem' set my style.lineHeight to '1'">{{md $fact.Fact.Front}}</div>
               {{if $fact.Fact.AudioFront}}
                 <button type="button" class="audio-chip shrink-0" data-audio="/audio/{{$fact.Fact.AudioFront}}" aria-label="Play audio">
                   <svg class="ac-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
@@ -49,8 +49,8 @@
                 <img src="/images/{{$fact.Fact.ImageBack}}" alt="" class="max-h-[45%] w-full shrink-0 rounded-lg object-cover" />
               {{end}}
               {{if $fact.Fact.Back}}
-                <p class="line-clamp-4 break-words text-sm leading-snug text-gray-600 dark:text-gray-300"
-                   _="on load if my textContent.trim().length <= 3 set my style.fontSize to '3rem' set my style.lineHeight to '1'">{{$fact.Fact.Back}}</p>
+                <div class="md-content line-clamp-4 w-full break-words text-sm leading-snug text-gray-600 dark:text-gray-300"
+                   _="on load if my textContent.trim().length <= 3 set my style.fontSize to '3rem' set my style.lineHeight to '1'">{{md $fact.Fact.Back}}</div>
               {{end}}
               {{if $fact.Fact.AudioBack}}
                 <button type="button" class="audio-chip shrink-0" data-audio="/audio/{{$fact.Fact.AudioBack}}" aria-label="Play audio">

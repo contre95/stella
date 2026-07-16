@@ -18,21 +18,23 @@
     <div class="grid gap-4 sm:grid-cols-2">
       <label class="block">
         <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Front</span>
-        <input
+        <textarea
           name="front"
           required
-          placeholder="Question / prompt"
+          rows="2"
+          placeholder="Question / prompt — Markdown works: # Title, **bold**, - list"
           class="glass-input mt-1.5 w-full rounded-xl px-3 py-2 text-sm"
-        />
+        ></textarea>
       </label>
 
       <label class="block">
         <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Back</span>
-        <input
+        <textarea
           name="back"
+          rows="2"
           placeholder="Answer"
           class="glass-input mt-1.5 w-full rounded-xl px-3 py-2 text-sm"
-        />
+        ></textarea>
       </label>
 
       <label class="block">

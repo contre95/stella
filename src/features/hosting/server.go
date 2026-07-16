@@ -32,6 +32,7 @@ func NewServer(cm *config.Manager, authSvc *auth.Service, registrars ...RouteReg
 	engine := html.New("./views", ".html")
 	engine.AddFunc("add", func(a, b int) int { return a + b })
 	engine.AddFunc("dict", dict)
+	engine.AddFunc("md", MarkdownHTML)
 
 	app := fiber.New(fiber.Config{
 		Views:             engine,
