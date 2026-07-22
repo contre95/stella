@@ -277,15 +277,15 @@ func (s *Service) Grade(ctx context.Context, userID, cardID string, grade int) e
 // Stats returns aggregate counts for the dashboard (across all decks).
 func (s *Service) Stats(ctx context.Context, userID string) (*Stats, error) {
 	now := s.scheduler.AdjustedNow(s.scheduler.Now())
-	due, err := s.repo.ScheduledCount(ctx, userID, now, nil)
+	enabledIDs, err := s.repo.ListStudyEnabledDeckIDs(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	due, err := s.repo.ScheduledCount(ctx, userID, now, enabledIDs)
 	if err != nil {
 		return nil, err
 	}
 	total, err := s.repo.ActiveCount(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	enabledIDs, err := s.repo.ListStudyEnabledDeckIDs(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -326,15 +326,20 @@ func (s *Service) Forecast(ctx context.Context, userID string, days int) ([]Fore
 	}
 	now := s.scheduler.AdjustedNow(s.scheduler.Now())
 
+	enabledIDs, err := s.repo.ListStudyEnabledDeckIDs(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
 	counts := make([]int, days)
-	due, err := s.repo.ScheduledCount(ctx, userID, now, nil)
+	due, err := s.repo.ScheduledCount(ctx, userID, now, enabledIDs)
 	if err != nil {
 		return nil, err
 	}
 	counts[0] = due
 
 	// All retention cards scheduled in the future, bucketed by day offset.
-	future, err := s.repo.CardsLearnAhead(ctx, userID, now, "next_rep", -1, nil)
+	future, err := s.repo.CardsLearnAhead(ctx, userID, now, "next_rep", -1, enabledIDs)
 	if err != nil {
 		return nil, err
 	}
