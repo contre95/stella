@@ -13,6 +13,9 @@ func TestMarkdownHTMLRendersFormatting(t *testing.T) {
 		{"bold", "**very** important", "<strong>very</strong>"},
 		{"list", "- one\n- two", "<li>one</li>"},
 		{"plain text unchanged", "just a question", "<p>just a question</p>"},
+		{"color span", "{#ff6600}orange{/}", `<span style="color:#ff6600">orange</span>`},
+		{"color wrapping bold", "{#ff6600}**bold**{/}", `<span style="color:#ff6600"><strong>bold</strong></span>`},
+		{"unclosed color span degrades", "{#ff6600}orange", `<span style="color:#ff6600">orange`},
 	} {
 		got := string(MarkdownHTML(tc.in))
 		if !strings.Contains(got, tc.want) {

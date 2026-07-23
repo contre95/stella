@@ -158,7 +158,10 @@ func etag(rows []srs.DeckExportRow) string {
 
 // WriteDeckCSV streams the deck export as RFC 4180 CSV rows of
 // "sync_id,front,back" — the same format the device already parses, plus the
-// leading ID column.
+// leading ID column. Front/back are stripped to plain text: the device
+// renders literal characters with no markdown/HTML support, so any markup
+// (color spans, bold, headings, ...) is flattened here rather than leaking
+// onto the screen as stray symbols.
 func (s *Service) WriteDeckCSV(ctx context.Context, userID, deckSyncID string, w io.Writer) error {
 	deck, err := s.repo.GetDeckBySyncID(ctx, userID, deckSyncID)
 	if err != nil {
@@ -170,7 +173,7 @@ func (s *Service) WriteDeckCSV(ctx context.Context, userID, deckSyncID string, w
 	}
 	cw := csv.NewWriter(w)
 	for _, r := range rows {
-		if err := cw.Write([]string{r.SyncID, r.Front, r.Back}); err != nil {
+		if err := cw.Write([]string{r.SyncID, curateForDevice(r.Front), curateForDevice(r.Back)}); err != nil {
 			return err
 		}
 	}
