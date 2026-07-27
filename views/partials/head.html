@@ -101,6 +101,10 @@
     }
     .md-content a { text-decoration: underline; text-underline-offset: 2px; }
     .md-content hr { border-top: 1px solid rgba(107, 114, 128, 0.35); }
+    /* Furigana: the reading (<rt>) rides above the kanji. It inherits the
+       surrounding text colour by default; wrap it in {#hex}…{/} to colour a
+       specific reading. margin-bottom nudges it 2px clear of the kanji below. */
+    .md-content ruby rt { margin-bottom: 2px; }
     .eink .md-content code { background: rgba(0, 0, 0, 0.08); }
     .eink .md-content pre { background: rgba(0, 0, 0, 0.05); }
     .eink .md-content blockquote { border-left-color: #1a1a1a; }
