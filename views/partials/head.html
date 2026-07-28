@@ -264,6 +264,39 @@
     .audio-chip.playing .ac-play { display: none; }
     .audio-chip.playing .ac-pause { display: block; margin-left: 0; }
 
+    /* Read-aloud button: sits inline in running text at whatever font size
+       .md-content happens to render at, so it's sized in em rather than the
+       fixed rem sizes above. */
+    .tts-wrap { display: inline; }
+    .tts-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1em;
+      height: 1em;
+      margin: 0 0.15em;
+      vertical-align: -0.1em;
+      border: none;
+      border-radius: 9999px;
+      cursor: pointer;
+      padding: 0;
+      background: transparent;
+      color: #db2777;
+      transition: transform 0.15s ease;
+    }
+    .dark .tts-btn { color: #f472b6; }
+    .tts-btn:hover { transform: scale(1.15); }
+    .tts-btn svg { width: 0.85em; height: 0.85em; }
+    .tts-btn .tts-icon-stop { display: none; }
+    .tts-btn.speaking .tts-icon-speak { display: none; }
+    .tts-btn.speaking .tts-icon-stop { display: block; }
+    .tts-btn.speaking { color: #ec4899; animation: tts-pulse 1s ease-in-out infinite; }
+    .dark .tts-btn.speaking { color: #f9a8d4; }
+    @keyframes tts-pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: 0.5; }
+    }
+
     /* Inline pill for list rows: left-to-right tint fill doubles as progress */
     .audio-pill {
       --p: 0%;

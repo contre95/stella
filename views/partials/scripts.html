@@ -106,6 +106,49 @@
     });
   })();
 
+  // Read-aloud buttons — one active utterance at a time, via speechSynthesis
+  (function () {
+    if (!window.speechSynthesis) return;
+    var current = null; // the .tts-btn currently speaking, or null
+
+    // Ruby/furigana renders as <ruby>base<rt>reading</rt></ruby>; .textContent
+    // would concatenate base+reading, so swap each ruby for just its reading
+    // (the more reliable pronunciation) before reading off plain text.
+    function spokenText(textEl) {
+      var clone = textEl.cloneNode(true);
+      clone.querySelectorAll('ruby').forEach(function (ruby) {
+        var rt = ruby.querySelector('rt');
+        ruby.replaceWith(rt ? rt.textContent : ruby.textContent);
+      });
+      return clone.textContent;
+    }
+
+    function stop() {
+      speechSynthesis.cancel();
+      if (current) current.classList.remove('speaking');
+      current = null;
+    }
+
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('.tts-btn');
+      if (!btn) return;
+      var wasCurrent = btn === current;
+      stop();
+      if (wasCurrent) return; // clicking the active button just stops it
+
+      var wrap = btn.closest('.tts-wrap');
+      var utter = new SpeechSynthesisUtterance(spokenText(wrap.querySelector('.tts-text')));
+      utter.lang = wrap.dataset.ttsLang === 'ja' ? 'ja-JP' : 'en-US';
+      utter.onend = utter.onerror = function () { if (current === btn) stop(); };
+      current = btn;
+      btn.classList.add('speaking');
+      speechSynthesis.speak(utter);
+    });
+
+    // Stop speech when a swap re-renders the DOM under the active button
+    document.body.addEventListener('htmx:afterSwap', stop);
+  })();
+
   // Audio recorder widget — handles all .audio-rec-widget elements
   (function () {
     var MAX_SEC = 15;

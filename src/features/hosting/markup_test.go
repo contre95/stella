@@ -23,6 +23,11 @@ func TestMarkdownHTMLRendersFormatting(t *testing.T) {
 		{"color inside furigana reading", "{漢字|{#ff0000}かんじ{/}}", `<ruby>漢字<rt><span style="color:#ff0000">かんじ</span></rt></ruby>`},
 		{"color inside furigana base", "{{#ff0000}漢字{/}|かんじ}", `<ruby><span style="color:#ff0000">漢字</span><rt>かんじ</rt></ruby>`},
 		{"braces without a pipe stay literal", "{not furigana}", "{not furigana}"},
+		{"tts span", "{tts:en}hello{/tts}", `<span class="tts-wrap" data-tts-lang="en">`},
+		{"tts span wraps text", "{tts:ja}こんにちは{/tts}", `<span class="tts-text">こんにちは</span></span>`},
+		{"unclosed tts span degrades", "{tts:en}hello", `<span class="tts-text">hello`},
+		{"tts wrapping furigana", "{tts:ja}{漢字|かんじ}{/tts}", `<span class="tts-text"><ruby>漢字<rt>かんじ</rt></ruby></span></span>`},
+		{"tts wrapping color", "{tts:en}{#ff6600}orange{/}{/tts}", `<span class="tts-text"><span style="color:#ff6600">orange</span></span></span>`},
 	} {
 		got := string(MarkdownHTML(tc.in))
 		if !strings.Contains(got, tc.want) {
@@ -49,6 +54,7 @@ func TestMarkdownHTMLNeverEmitsRawHTML(t *testing.T) {
 		`<a href="https://evil.example">x</a>`,
 		`{<script>alert(1)</script>|x}`,
 		`{base|<img src=x onerror=alert(1)>}`,
+		`{tts:en}<script>alert(1)</script>{/tts}`,
 	} {
 		got := string(MarkdownHTML(in))
 		for _, banned := range []string{"<script", "onerror", "javascript:", "<a href=\"https://evil"} {
