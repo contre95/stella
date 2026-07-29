@@ -7,17 +7,63 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
+	"time"
 
 	"github.com/contre95/stella/src/features/cards"
 	"github.com/contre95/stella/src/srs"
 	"github.com/google/uuid"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// mediaHTTPClient fetches MCP-supplied image/audio URLs. Its dialer rejects
+// connections to loopback, link-local, and private IP ranges — the create_card
+// / edit_card tools are reachable over the network without auth checks beyond
+// the MCP bearer (or none, in single-user mode), so an unrestricted client
+// would let any caller make the server issue requests to internal services
+// (cloud metadata endpoints, LAN admin panels, etc.) and exfiltrate the
+// response as a "downloaded" card image. The check re-runs on every dial, so
+// it also covers redirects.
+var mediaHTTPClient = &http.Client{
+	Timeout: 15 * time.Second,
+	Transport: &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
+			ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+			if err != nil {
+				return nil, err
+			}
+			for _, ip := range ips {
+				if isDisallowedMediaIP(ip) {
+					return nil, fmt.Errorf("refusing to connect to non-public address %s", ip)
+				}
+			}
+			d := net.Dialer{Timeout: 10 * time.Second}
+			return d.DialContext(ctx, network, net.JoinHostPort(ips[0].String(), port))
+		},
+	},
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 5 {
+			return fmt.Errorf("too many redirects")
+		}
+		return nil
+	},
+}
+
+// isDisallowedMediaIP reports whether ip must not be reached by the media
+// fetcher: loopback, link-local (including the cloud metadata address range),
+// private, or otherwise non-global unicast.
+func isDisallowedMediaIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsPrivate() || ip.IsUnspecified() || !ip.IsGlobalUnicast()
+}
 
 // Server adapts the cards service onto MCP tool handlers. The MCP transport
 // has no login, so every tool call runs as the fixed userID it was built with
@@ -163,10 +209,10 @@ type CreateCardInput struct {
 	Reverse    bool   `json:"reverse,omitempty" jsonschema:"Also create a reverse card quizzing back -> front. Ignored when back is empty."`
 	Grade      *int   `json:"grade,omitempty" jsonschema:"Initial self-grade 0-5 (0 = blackout, 5 = perfect recall), counted as a first repetition. Omit to leave the card unseen so the review process grades it."`
 	DeckID     string `json:"deckId" jsonschema:"Deck id to file the card under. Required — use list_decks or create_deck first."`
-	ImageFront string `json:"imageFront,omitempty" jsonschema:"http(s) URL or local file path of an image to show on the front side. Copied into Stella's media store. Supports jpg, png, gif, webp."`
-	ImageBack  string `json:"imageBack,omitempty" jsonschema:"http(s) URL or local file path of an image to show on the back side. Copied into Stella's media store. Supports jpg, png, gif, webp."`
-	AudioFront string `json:"audioFront,omitempty" jsonschema:"http(s) URL or local file path of an audio file to play on the front side. Copied into Stella's media store. Supports mp3, ogg, wav, m4a, webm, aac, flac."`
-	AudioBack  string `json:"audioBack,omitempty" jsonschema:"http(s) URL or local file path of an audio file to play on the back side. Copied into Stella's media store. Supports mp3, ogg, wav, m4a, webm, aac, flac."`
+	ImageFront string `json:"imageFront,omitempty" jsonschema:"http(s) URL of an image to show on the front side. Copied into Stella's media store. Supports jpg, png, gif, webp."`
+	ImageBack  string `json:"imageBack,omitempty" jsonschema:"http(s) URL of an image to show on the back side. Copied into Stella's media store. Supports jpg, png, gif, webp."`
+	AudioFront string `json:"audioFront,omitempty" jsonschema:"http(s) URL of an audio file to play on the front side. Copied into Stella's media store. Supports mp3, ogg, wav, m4a, webm, aac, flac."`
+	AudioBack  string `json:"audioBack,omitempty" jsonschema:"http(s) URL of an audio file to play on the back side. Copied into Stella's media store. Supports mp3, ogg, wav, m4a, webm, aac, flac."`
 }
 
 // CreateCardOutput is the result schema for create_card.
@@ -235,10 +281,10 @@ type EditCardInput struct {
 	Back             *string `json:"back,omitempty" jsonschema:"New back text. Omit to keep the current back; pass an empty string to clear it (which also removes any reverse card)."`
 	AddReverse       bool    `json:"addReverse,omitempty" jsonschema:"Set to true to create the reverse (back -> front) card if it does not already exist."`
 	RemoveReverse    bool    `json:"removeReverse,omitempty" jsonschema:"Set to true to delete the reverse (back -> front) card (its learning history is lost). Ignored when addReverse is also true."`
-	ImageFront       string  `json:"imageFront,omitempty" jsonschema:"http(s) URL or local file path of a new front image; replaces the current one. Supports jpg, png, gif, webp."`
-	ImageBack        string  `json:"imageBack,omitempty" jsonschema:"http(s) URL or local file path of a new back image; replaces the current one. Supports jpg, png, gif, webp."`
-	AudioFront       string  `json:"audioFront,omitempty" jsonschema:"http(s) URL or local file path of a new front audio file; replaces the current one. Supports mp3, ogg, wav, m4a, webm, aac, flac."`
-	AudioBack        string  `json:"audioBack,omitempty" jsonschema:"http(s) URL or local file path of a new back audio file; replaces the current one. Supports mp3, ogg, wav, m4a, webm, aac, flac."`
+	ImageFront       string  `json:"imageFront,omitempty" jsonschema:"http(s) URL of a new front image; replaces the current one. Supports jpg, png, gif, webp."`
+	ImageBack        string  `json:"imageBack,omitempty" jsonschema:"http(s) URL of a new back image; replaces the current one. Supports jpg, png, gif, webp."`
+	AudioFront       string  `json:"audioFront,omitempty" jsonschema:"http(s) URL of a new front audio file; replaces the current one. Supports mp3, ogg, wav, m4a, webm, aac, flac."`
+	AudioBack        string  `json:"audioBack,omitempty" jsonschema:"http(s) URL of a new back audio file; replaces the current one. Supports mp3, ogg, wav, m4a, webm, aac, flac."`
 	RemoveImageFront bool    `json:"removeImageFront,omitempty" jsonschema:"Remove the front image."`
 	RemoveImageBack  bool    `json:"removeImageBack,omitempty" jsonschema:"Remove the back image."`
 	RemoveAudioFront bool    `json:"removeAudioFront,omitempty" jsonschema:"Remove the front audio."`
@@ -840,10 +886,10 @@ type BulkCardItem struct {
 	Back       string `json:"back,omitempty" jsonschema:"The back side / answer of the card."`
 	Reverse    bool   `json:"reverse,omitempty" jsonschema:"Also create a reverse card quizzing back -> front."`
 	Grade      *int   `json:"grade,omitempty" jsonschema:"Initial self-grade 0-5. Omit to leave the card unseen."`
-	ImageFront string `json:"imageFront,omitempty" jsonschema:"http(s) URL or local file path of an image for the front side."`
-	ImageBack  string `json:"imageBack,omitempty" jsonschema:"http(s) URL or local file path of an image for the back side."`
-	AudioFront string `json:"audioFront,omitempty" jsonschema:"http(s) URL or local file path of audio for the front side."`
-	AudioBack  string `json:"audioBack,omitempty" jsonschema:"http(s) URL or local file path of audio for the back side."`
+	ImageFront string `json:"imageFront,omitempty" jsonschema:"http(s) URL of an image for the front side."`
+	ImageBack  string `json:"imageBack,omitempty" jsonschema:"http(s) URL of an image for the back side."`
+	AudioFront string `json:"audioFront,omitempty" jsonschema:"http(s) URL of audio for the front side."`
+	AudioBack  string `json:"audioBack,omitempty" jsonschema:"http(s) URL of audio for the back side."`
 }
 
 // CreateCardsInput is the argument schema for create_cards.
@@ -953,52 +999,31 @@ func (s *Server) removeMedia(filenames ...string) {
 	}
 }
 
-// isURL reports whether the media source is an http(s) URL rather than a
-// local file path.
+// saveImageFromSource stores an image downloaded from an http(s) URL,
+// returning the stored filename. Empty source returns "". Only remote URLs
+// are accepted — this server is reachable over the network, so a "local
+// file path" would mean the server's own filesystem, not the MCP caller's,
+// which would turn this into an arbitrary-file-read primitive.
+func (s *Server) saveImageFromSource(src string) (string, error) {
+	if src != "" && !isURL(src) {
+		return "", fmt.Errorf("imageFront/imageBack must be an http(s) URL")
+	}
+	return s.saveImageFromURL(src)
+}
+
+// saveAudioFromSource stores an audio file downloaded from an http(s) URL,
+// returning the stored filename. Empty source returns "". See
+// saveImageFromSource for why local file paths are not accepted.
+func (s *Server) saveAudioFromSource(src string) (string, error) {
+	if src != "" && !isURL(src) {
+		return "", fmt.Errorf("audioFront/audioBack must be an http(s) URL")
+	}
+	return s.saveAudioFromURL(src)
+}
+
+// isURL reports whether the media source is an http(s) URL.
 func isURL(src string) bool {
 	return strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://")
-}
-
-// saveImageFromSource stores an image given an http(s) URL (downloaded) or a
-// local file path (copied), returning the stored filename. Empty source
-// returns "".
-func (s *Server) saveImageFromSource(src string) (string, error) {
-	if src == "" || isURL(src) {
-		return s.saveImageFromURL(src)
-	}
-	return s.copyLocalFile(src, cards.AllowedImageExts, "image")
-}
-
-// saveAudioFromSource stores an audio file given an http(s) URL (downloaded)
-// or a local file path (copied), returning the stored filename. Empty source
-// returns "".
-func (s *Server) saveAudioFromSource(src string) (string, error) {
-	if src == "" || isURL(src) {
-		return s.saveAudioFromURL(src)
-	}
-	return s.copyLocalFile(src, cards.AllowedAudioExts, "audio")
-}
-
-// copyLocalFile copies a local media file into the media directory under a
-// fresh name, validating its extension against the allowed list.
-func (s *Server) copyLocalFile(path string, allowedExts []string, kind string) (string, error) {
-	ext := strings.ToLower(filepath.Ext(path))
-	if !slices.Contains(allowedExts, ext) {
-		return "", fmt.Errorf("unsupported %s file extension %q (allowed: %s)", kind, ext, strings.Join(allowedExts, ", "))
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("reading local %s file: %w", kind, err)
-	}
-	mediaPath := s.cards.ImagePath()
-	if err := os.MkdirAll(mediaPath, 0o755); err != nil {
-		return "", err
-	}
-	filename := uuid.NewString() + ext
-	if err := os.WriteFile(filepath.Join(mediaPath, filename), data, 0o644); err != nil {
-		return "", err
-	}
-	return filename, nil
 }
 
 // saveAudioFromURL downloads a URL and saves it as a local audio file.
@@ -1007,7 +1032,7 @@ func (s *Server) saveAudioFromURL(url string) (string, error) {
 	if url == "" {
 		return "", nil
 	}
-	resp, err := http.Get(url)
+	resp, err := mediaHTTPClient.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("downloading audio: %w", err)
 	}
@@ -1058,7 +1083,7 @@ func (s *Server) saveImageFromURL(url string) (string, error) {
 	if url == "" {
 		return "", nil
 	}
-	resp, err := http.Get(url)
+	resp, err := mediaHTTPClient.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("downloading image: %w", err)
 	}

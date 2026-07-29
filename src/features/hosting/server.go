@@ -46,7 +46,14 @@ func NewServer(cm *config.Manager, authSvc *auth.Service, registrars ...RouteReg
 				code = fe.Code
 			}
 			slog.Error("request error", "err", err, "path", c.Path())
-			return c.Status(code).SendString(err.Error())
+			// fiber.Error messages (fiber.NewError(...)) are intentionally
+			// user-facing; anything else is an internal error (wrapped Go
+			// errors, DB failures, ...) and must not be echoed to the client.
+			msg := err.Error()
+			if code >= fiber.StatusInternalServerError {
+				msg = "Something went wrong. Please try again."
+			}
+			return c.Status(code).SendString(msg)
 		},
 	})
 

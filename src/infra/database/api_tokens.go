@@ -28,8 +28,8 @@ func (s *SqliteSRS) UserByAPIToken(ctx context.Context, tokenHash string) (*auth
 	return &u, err
 }
 
-func (s *SqliteSRS) DeleteAPIToken(ctx context.Context, tokenHash string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM api_tokens WHERE token_hash=?`, tokenHash)
+func (s *SqliteSRS) DeleteAPIToken(ctx context.Context, tokenHash, userID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM api_tokens WHERE token_hash=? AND user_id=?`, tokenHash, userID)
 	return err
 }
 

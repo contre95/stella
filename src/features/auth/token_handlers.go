@@ -66,7 +66,7 @@ func (h *TokenHandler) createToken(c *fiber.Ctx) error {
 }
 
 func (h *TokenHandler) revokeToken(c *fiber.Ctx) error {
-	if err := h.svc.RevokeAPIToken(c.Context(), c.Params("hash")); err != nil {
+	if err := h.svc.RevokeAPIToken(c.Context(), c.Params("hash"), UserID(c)); err != nil {
 		return err
 	}
 	tokens, err := h.svc.ListAPITokens(c.Context(), UserID(c))

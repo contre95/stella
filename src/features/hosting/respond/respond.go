@@ -2,7 +2,11 @@
 // stay thin: HTML partials for HTMX requests, JSON otherwise.
 package respond
 
-import "github.com/gofiber/fiber/v2"
+import (
+	"log/slog"
+
+	"github.com/gofiber/fiber/v2"
+)
 
 // IsHTMX reports whether the request came from HTMX.
 func IsHTMX(c *fiber.Ctx) bool {
@@ -40,8 +44,17 @@ func ToastOk(c *fiber.Ctx, msg string) error {
 }
 
 // ToastErr renders an error toast (HTMX) or a JSON error payload with status.
+// For 5xx statuses the underlying message is logged but never sent to the
+// client — those come from internal errors (DB failures, filesystem paths,
+// etc.) that back-end code passes through via err.Error(), and echoing them
+// back is an information leak. 4xx messages are validation text meant to be
+// user-facing, so they pass through unchanged.
 func ToastErr(c *fiber.Ctx, status int, msg string) error {
 	c.Status(status)
+	if status >= fiber.StatusInternalServerError {
+		slog.Error("request failed", "path", c.Path(), "status", status, "err", msg)
+		msg = "Something went wrong. Please try again."
+	}
 	if IsHTMX(c) {
 		return c.Render("toast/toastErr", fiber.Map{"Msg": msg})
 	}

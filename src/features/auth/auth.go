@@ -77,7 +77,9 @@ type Store interface {
 	// UserByAPIToken resolves a token hash to its owner; ErrInvalidAPIToken
 	// when the token is unknown.
 	UserByAPIToken(ctx context.Context, tokenHash string) (*User, error)
-	DeleteAPIToken(ctx context.Context, tokenHash string) error
+	// DeleteAPIToken deletes the token only if it belongs to userID, so one
+	// user can never revoke another's token even if they learn its hash.
+	DeleteAPIToken(ctx context.Context, tokenHash, userID string) error
 	ListAPITokens(ctx context.Context, userID string) ([]*APIToken, error)
 }
 
@@ -157,9 +159,10 @@ func (s *Service) ListAPITokens(ctx context.Context, userID string) ([]*APIToken
 	return s.store.ListAPITokens(ctx, userID)
 }
 
-// RevokeAPIToken deletes an API token by its hash.
-func (s *Service) RevokeAPIToken(ctx context.Context, tokenHash string) error {
-	return s.store.DeleteAPIToken(ctx, tokenHash)
+// RevokeAPIToken deletes an API token by its hash, scoped to its owner so a
+// user can never revoke another user's token.
+func (s *Service) RevokeAPIToken(ctx context.Context, tokenHash, userID string) error {
+	return s.store.DeleteAPIToken(ctx, tokenHash, userID)
 }
 
 // userByRawAPIToken resolves a raw bearer token to its owner by hashing first.

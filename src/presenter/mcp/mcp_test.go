@@ -306,61 +306,13 @@ func TestEditCardClearingBackDropsReverse(t *testing.T) {
 	}
 }
 
-func TestEditCardMediaFromLocalFiles(t *testing.T) {
-	cs, mediaDir := newTestSession(t)
-	deckID := createTestDeck(t, cs)
-	factID := createSimpleCard(t, cs, deckID, "q", "a")
-
-	srcDir := t.TempDir()
-	imgPath := filepath.Join(srcDir, "pic.png")
-	if err := os.WriteFile(imgPath, []byte("\x89PNG fake image"), 0o644); err != nil {
-		t.Fatalf("write source image: %v", err)
-	}
-	audPath := filepath.Join(srcDir, "sound.mp3")
-	if err := os.WriteFile(audPath, []byte("fake mp3 bytes"), 0o644); err != nil {
-		t.Fatalf("write source audio: %v", err)
-	}
-
-	// Attach an image and an audio file from local paths.
-	_, out := editCard(t, cs, map[string]any{
-		"factId": factID, "imageFront": imgPath, "audioBack": audPath,
-	})
-	if out.ImageFront == "" || out.AudioBack == "" {
-		t.Fatalf("expected stored media filenames, got %+v", out)
-	}
-	firstImage := out.ImageFront
-	if _, err := os.Stat(filepath.Join(mediaDir, firstImage)); err != nil {
-		t.Errorf("stored image missing from media dir: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(mediaDir, out.AudioBack)); err != nil {
-		t.Errorf("stored audio missing from media dir: %v", err)
-	}
-
-	// Replacing the image deletes the previous file.
-	_, out = editCard(t, cs, map[string]any{"factId": factID, "imageFront": imgPath})
-	if out.ImageFront == "" || out.ImageFront == firstImage {
-		t.Errorf("expected a fresh image filename, got %q (was %q)", out.ImageFront, firstImage)
-	}
-	if _, err := os.Stat(filepath.Join(mediaDir, firstImage)); !os.IsNotExist(err) {
-		t.Errorf("replaced image should be deleted, stat err = %v", err)
-	}
-
-	// Removing clears the field and deletes the file.
-	secondImage := out.ImageFront
-	_, out = editCard(t, cs, map[string]any{"factId": factID, "removeImageFront": true})
-	if out.ImageFront != "" {
-		t.Errorf("imageFront = %q after removal, want empty", out.ImageFront)
-	}
-	if _, err := os.Stat(filepath.Join(mediaDir, secondImage)); !os.IsNotExist(err) {
-		t.Errorf("removed image should be deleted, stat err = %v", err)
-	}
-	if out.AudioBack == "" {
-		t.Error("audioBack should be untouched by the image removal")
-	}
-}
-
-func TestCreateCardMediaFromLocalFile(t *testing.T) {
-	cs, mediaDir := newTestSession(t)
+// TestCreateCardRejectsLocalFilePaths ensures media sources must be http(s)
+// URLs. The MCP endpoint is reachable over the network without per-request
+// auth in single-user mode, so accepting local paths would let any caller
+// read arbitrary files off the server's disk (via the allowed image/audio
+// extensions) and exfiltrate them through the resulting card's media file.
+func TestCreateCardRejectsLocalFilePaths(t *testing.T) {
+	cs, _ := newTestSession(t)
 	deckID := createTestDeck(t, cs)
 
 	imgPath := filepath.Join(t.TempDir(), "pic.webp")
@@ -374,21 +326,31 @@ func TestCreateCardMediaFromLocalFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create_card: %v", err)
 	}
-	if res.IsError {
-		t.Fatalf("create_card with local image errored: %+v", res.Content)
+	if !res.IsError {
+		t.Fatalf("create_card with a local file path should have been rejected")
 	}
+}
 
-	list, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{Name: "list_recent_cards"})
+// TestEditCardRejectsLocalFilePaths mirrors TestCreateCardRejectsLocalFilePaths
+// for edit_card.
+func TestEditCardRejectsLocalFilePaths(t *testing.T) {
+	cs, _ := newTestSession(t)
+	deckID := createTestDeck(t, cs)
+	factID := createSimpleCard(t, cs, deckID, "q", "a")
+
+	imgPath := filepath.Join(t.TempDir(), "pic.png")
+	if err := os.WriteFile(imgPath, []byte("\x89PNG fake image"), 0o644); err != nil {
+		t.Fatalf("write source image: %v", err)
+	}
+	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
+		Name:      "edit_card",
+		Arguments: map[string]any{"factId": factID, "imageFront": imgPath},
+	})
 	if err != nil {
-		t.Fatalf("list_recent_cards: %v", err)
+		t.Fatalf("edit_card: %v", err)
 	}
-	var out ListRecentCardsOutput
-	decodeStructured(t, list, &out)
-	if len(out.Facts) != 1 || out.Facts[0].ImageBack == "" {
-		t.Fatalf("expected the fact to carry a back image, got %+v", out.Facts)
-	}
-	if _, err := os.Stat(filepath.Join(mediaDir, out.Facts[0].ImageBack)); err != nil {
-		t.Errorf("stored image missing from media dir: %v", err)
+	if !res.IsError {
+		t.Fatalf("edit_card with a local file path should have been rejected")
 	}
 }
 
