@@ -21,6 +21,10 @@ type Repository interface {
 	ListFacts(ctx context.Context, userID string) ([]*Fact, error)
 	UpdateFact(ctx context.Context, f *Fact) error
 	DeleteFact(ctx context.Context, userID, id string) error // cascades to its cards
+	// MoveFactToDeck reassigns a fact and all its cards to a different deck,
+	// atomically. Only the deck association changes — grade, easiness, reps,
+	// lapses and every other scheduling field are left exactly as they were.
+	MoveFactToDeck(ctx context.Context, userID, factID, deckID string) error
 
 	// Cards.
 	AddCard(ctx context.Context, c *Card) error

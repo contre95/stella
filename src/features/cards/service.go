@@ -275,6 +275,29 @@ func (s *Service) DeleteFact(ctx context.Context, userID, id string) error {
 	return s.repo.DeleteFact(ctx, userID, id)
 }
 
+// MoveFact reassigns a fact and all its sister cards to a different deck.
+// Only the deck association changes; each card's scheduling state (grade,
+// easiness, reps, lapses, etc.) is left exactly as it was.
+func (s *Service) MoveFact(ctx context.Context, userID, factID, deckID string) (*srs.Fact, error) {
+	deckID = strings.TrimSpace(deckID)
+	if deckID == "" {
+		return nil, fmt.Errorf("deckID is required")
+	}
+	if _, err := s.repo.GetDeck(ctx, userID, deckID); err != nil {
+		if errors.Is(err, srs.ErrNotFound) {
+			return nil, fmt.Errorf("deck %q not found", deckID)
+		}
+		return nil, fmt.Errorf("looking up deck: %w", err)
+	}
+	if err := s.repo.MoveFactToDeck(ctx, userID, factID, deckID); err != nil {
+		if errors.Is(err, srs.ErrNotFound) {
+			return nil, fmt.Errorf("fact %q not found", factID)
+		}
+		return nil, err
+	}
+	return s.repo.GetFact(ctx, userID, factID)
+}
+
 // ResetFact resets all sister cards of a fact back to unseen.
 func (s *Service) ResetFact(ctx context.Context, userID, factID string) error {
 	cards, err := s.repo.CardsForFact(ctx, userID, factID)
