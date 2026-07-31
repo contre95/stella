@@ -330,14 +330,13 @@
       gradeBtn.classList.remove('hidden');
     }
 
-    function toggleFace() {
-      if (showingBack) showFront(); else showBack();
-    }
-
     flipCard.addEventListener('click', function () {
       if (dragging) return;
-      if (!revealed) reveal();
-      else toggleFace();
+      if (!revealed) { reveal(); return; }
+      // Once revealed, clicking the card flips question -> answer, but
+      // only the "Show question" button (its own handler below) flips
+      // answer -> question.
+      if (!showingBack) showBack();
     });
     tapBtn.addEventListener('click', reveal);
 
@@ -357,9 +356,12 @@
     });
 
     /* ── Touch handling ────────────────────────────────────────── */
+    var touchStartTarget = null;
+
     cardOuter.addEventListener('touchstart', function (e) {
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
+      touchStartTarget = e.target;
       dragging = false;
       curDX = 0; curDY = 0;
     }, { passive: true });
@@ -399,9 +401,18 @@
 
       if (!dragging || (Math.abs(dx) < 10 && Math.abs(dy) < 10)) {
         dragging = false;
-        if (!revealed) reveal();
-        else toggleFace();
-        e.preventDefault();
+        if (!revealed) {
+          reveal();
+          e.preventDefault();
+        } else if (showQBtn.contains(touchStartTarget)) {
+          // Only the "Show question" button flips answer -> question.
+          showFront();
+          e.preventDefault();
+        } else if (!showingBack) {
+          // Tapping the card while showing the question flips back to the answer.
+          showBack();
+          e.preventDefault();
+        }
         return;
       }
       dragging = false;
