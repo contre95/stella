@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/contre95/stella/src/srs"
 	_ "modernc.org/sqlite"
@@ -268,6 +269,32 @@ func (s *SqliteSRS) UpdateFact(ctx context.Context, f *srs.Fact) error {
 func (s *SqliteSRS) DeleteFact(ctx context.Context, userID, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM facts WHERE id=? AND user_id=?`, id, userID)
 	return err
+}
+
+// MoveFactToDeck reassigns a fact and its cards to deckID in one transaction.
+// It only ever touches the deck_id columns, so scheduling state (grade,
+// easiness, reps, lapses, last/next rep) is untouched.
+func (s *SqliteSRS) MoveFactToDeck(ctx context.Context, userID, factID, deckID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `UPDATE facts SET deck_id=?, modified=? WHERE id=? AND user_id=?`,
+		deckID, time.Now().Unix(), factID, userID)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return srs.ErrNotFound
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE cards SET deck_id=? WHERE fact_id=? AND user_id=?`,
+		deckID, factID, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *SqliteSRS) ListFactsByDeck(ctx context.Context, userID, deckID string) ([]*srs.Fact, error) {

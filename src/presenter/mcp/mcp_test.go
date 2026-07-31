@@ -354,6 +354,103 @@ func TestEditCardRejectsLocalFilePaths(t *testing.T) {
 	}
 }
 
+// TestMoveCard checks that move_card reassigns a fact's deck while leaving
+// its scheduling status untouched, and rejects a bad deckId.
+func TestMoveCard(t *testing.T) {
+	cs, _ := newTestSession(t)
+	ctx := context.Background()
+	deckA := createTestDeck(t, cs)
+
+	res, err := cs.CallTool(ctx, &mcpsdk.CallToolParams{
+		Name:      "create_card",
+		Arguments: map[string]any{"front": "q", "back": "a", "deckId": deckA, "grade": 3},
+	})
+	if err != nil {
+		t.Fatalf("create_card: %v", err)
+	}
+	var created CreateCardOutput
+	decodeStructured(t, res, &created)
+	factID := created.FactID
+
+	statusBefore := factStatus(t, cs, factID)
+	if statusBefore == "" {
+		t.Fatal("seeded card has no status before move")
+	}
+
+	deckB, err := cs.CallTool(ctx, &mcpsdk.CallToolParams{
+		Name:      "create_deck",
+		Arguments: map[string]any{"name": "Deck B"},
+	})
+	if err != nil {
+		t.Fatalf("create_deck: %v", err)
+	}
+	var deckBOut CreateDeckOutput
+	decodeStructured(t, deckB, &deckBOut)
+
+	res, err = cs.CallTool(ctx, &mcpsdk.CallToolParams{
+		Name:      "move_card",
+		Arguments: map[string]any{"factId": factID, "deckId": deckBOut.DeckID},
+	})
+	if err != nil {
+		t.Fatalf("move_card: %v", err)
+	}
+	var moved MoveCardOutput
+	decodeStructured(t, res, &moved)
+	if moved.DeckID != deckBOut.DeckID {
+		t.Errorf("moved.DeckID = %q, want %q", moved.DeckID, deckBOut.DeckID)
+	}
+
+	fact := findFact(t, cs, factID)
+	if fact.DeckID != deckBOut.DeckID {
+		t.Errorf("fact still shows deckId %q, want %q", fact.DeckID, deckBOut.DeckID)
+	}
+	if got := factStatus(t, cs, factID); got != statusBefore {
+		t.Errorf("move_card changed the card's status: got %q, want unchanged %q", got, statusBefore)
+	}
+
+	res, err = cs.CallTool(ctx, &mcpsdk.CallToolParams{
+		Name:      "move_card",
+		Arguments: map[string]any{"factId": factID, "deckId": "no-such-deck"},
+	})
+	if err != nil {
+		t.Fatalf("move_card: %v", err)
+	}
+	if !res.IsError {
+		t.Error("move_card to a nonexistent deck should have been rejected")
+	}
+}
+
+// findFact returns the FactSummary for factID from list_recent_cards.
+func findFact(t *testing.T, cs *mcpsdk.ClientSession, factID string) FactSummary {
+	t.Helper()
+	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
+		Name:      "list_recent_cards",
+		Arguments: map[string]any{"limit": 100},
+	})
+	if err != nil {
+		t.Fatalf("list_recent_cards: %v", err)
+	}
+	var out ListRecentCardsOutput
+	decodeStructured(t, res, &out)
+	for _, f := range out.Facts {
+		if f.FactID == factID {
+			return f
+		}
+	}
+	t.Fatalf("fact %q not found in list_recent_cards", factID)
+	return FactSummary{}
+}
+
+// factStatus returns the forward card's status string for factID.
+func factStatus(t *testing.T, cs *mcpsdk.ClientSession, factID string) string {
+	t.Helper()
+	fact := findFact(t, cs, factID)
+	if len(fact.Cards) == 0 {
+		return ""
+	}
+	return fact.Cards[0].Status
+}
+
 // TestTagTools drives the whole tag lifecycle over MCP: create (idempotent),
 // tag/untag decks by name, list, rename, and delete.
 func TestTagTools(t *testing.T) {

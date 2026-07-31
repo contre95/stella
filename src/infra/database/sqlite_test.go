@@ -211,6 +211,63 @@ func TestSisterCardCountAndCascade(t *testing.T) {
 	}
 }
 
+// TestMoveFactToDeck asserts that moving a fact to another deck updates the
+// fact's and its cards' deck_id, leaves every scheduling field untouched, and
+// is scoped to the owning user.
+func TestMoveFactToDeck(t *testing.T) {
+	db := newTestDB(t)
+	ctx := context.Background()
+	addDeck(t, db, "d1")
+	addDeck(t, db, "d2")
+	addFact(t, db, "f1", "d1")
+	card := &srs.Card{ID: "c1", FactID: "f1", DeckID: "d1", View: srs.ViewForward,
+		Grade: 4, Easiness: 2.34, AcqReps: 2, RetReps: 5, Lapses: 1,
+		AcqRepsSinceLapse: 1, RetRepsSinceLapse: 3, LastRep: 100, NextRep: 1000, Active: true}
+	addCard(t, db, card)
+
+	if err := db.MoveFactToDeck(ctx, testUser, "f1", "d2"); err != nil {
+		t.Fatalf("move fact: %v", err)
+	}
+
+	fact, err := db.GetFact(ctx, testUser, "f1")
+	if err != nil {
+		t.Fatalf("get fact: %v", err)
+	}
+	if fact.DeckID != "d2" {
+		t.Errorf("fact deck_id = %q, want d2", fact.DeckID)
+	}
+
+	got, err := db.GetCard(ctx, testUser, "c1")
+	if err != nil {
+		t.Fatalf("get card: %v", err)
+	}
+	if got.DeckID != "d2" {
+		t.Errorf("card deck_id = %q, want d2", got.DeckID)
+	}
+	want := *card
+	want.DeckID = "d2"
+	if *got != want {
+		t.Errorf("scheduling state changed by move:\n got %+v\nwant %+v", *got, want)
+	}
+
+	if facts, _ := db.ListFactsByDeck(ctx, testUser, "d1"); len(facts) != 0 {
+		t.Errorf("fact still listed under old deck: %d", len(facts))
+	}
+	if facts, _ := db.ListFactsByDeck(ctx, testUser, "d2"); len(facts) != 1 {
+		t.Errorf("fact not listed under new deck: %d", len(facts))
+	}
+
+	// Cross-user: another user's ID must not be able to move it.
+	addUser(t, db, "u2")
+	if err := db.MoveFactToDeck(ctx, "u2", "f1", "d2"); !errors.Is(err, srs.ErrNotFound) {
+		t.Errorf("cross-user move: want ErrNotFound, got %v", err)
+	}
+
+	if err := db.MoveFactToDeck(ctx, testUser, "missing", "d2"); !errors.Is(err, srs.ErrNotFound) {
+		t.Errorf("moving missing fact: want ErrNotFound, got %v", err)
+	}
+}
+
 // TestTags covers the tag CRUD, deck linking, the per-user name uniqueness,
 // and the cascades that clean up deck_tags rows.
 func TestTags(t *testing.T) {

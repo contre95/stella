@@ -228,11 +228,34 @@ func (h *Handler) EditForm(c *fiber.Ctx) error {
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
+	decks, err := h.service.ListDecks(c.Context(), auth.UserID(c))
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
 	return respond.Partial(c, "components/card_edit", fiber.Map{
 		"Fact":       fact,
 		"HasReverse": hasReverse,
+		"Decks":      decks,
 		"DeckID":     c.Query("deck"),
 	})
+}
+
+// Move reassigns a fact to a different deck without touching its cards'
+// scheduling state, and returns the refreshed list. When called from a deck
+// page (?deck=<id>), it returns that deck's card grid instead — the fact
+// drops out of it once moved elsewhere.
+func (h *Handler) Move(c *fiber.Ctx) error {
+	deckID := strings.TrimSpace(c.FormValue("deckId"))
+	if deckID == "" {
+		return respond.ToastErr(c, fiber.StatusBadRequest, "Deck is required")
+	}
+	if _, err := h.service.MoveFact(c.Context(), auth.UserID(c), c.Params("id"), deckID); err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	if src := c.Query("deck"); src != "" {
+		return h.deckGrid(c, src)
+	}
+	return h.List(c)
 }
 
 // Edit updates a fact's content and returns the refreshed list. When called

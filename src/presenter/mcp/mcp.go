@@ -96,6 +96,14 @@ func NewServer(name, version string, cardsService *cards.Service, userID string)
 	}, s.editCard)
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name: "move_card",
+		Description: "Move a fact (and its sister cards) to a different deck by fact ID. " +
+			"Only the deck association changes — grade, easiness, repetitions, lapses and " +
+			"every other scheduling field are left exactly as they were. " +
+			"Use list_recent_cards to find the factId and list_decks to find the deckId.",
+	}, s.moveCard)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
 		Name: "list_recent_cards",
 		Description: "List the most recently created facts, newest first, with the " +
 			"scheduling status of each of their sister cards and any attached media filenames.",
@@ -382,6 +390,29 @@ func (s *Server) editCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in Edi
 		AudioFront: updated.AudioFront,
 		AudioBack:  updated.AudioBack,
 	}, nil
+}
+
+// MoveCardInput is the argument schema for move_card.
+type MoveCardInput struct {
+	FactID string `json:"factId" jsonschema:"Fact ID to move. Required — use list_recent_cards to find it."`
+	DeckID string `json:"deckId" jsonschema:"Deck ID to move the fact into. Required — use list_decks to find it."`
+}
+
+// MoveCardOutput is the result schema for move_card.
+type MoveCardOutput struct {
+	FactID string `json:"factId"`
+	DeckID string `json:"deckId"`
+}
+
+func (s *Server) moveCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in MoveCardInput) (*mcpsdk.CallToolResult, MoveCardOutput, error) {
+	if strings.TrimSpace(in.FactID) == "" {
+		return nil, MoveCardOutput{}, fmt.Errorf("factId is required")
+	}
+	fact, err := s.cards.MoveFact(ctx, s.userID, in.FactID, in.DeckID)
+	if err != nil {
+		return nil, MoveCardOutput{}, fmt.Errorf("moving card: %w", err)
+	}
+	return nil, MoveCardOutput{FactID: fact.ID, DeckID: fact.DeckID}, nil
 }
 
 // ListRecentCardsInput is the argument schema for list_recent_cards.
