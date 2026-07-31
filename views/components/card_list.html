@@ -94,6 +94,27 @@
       </div>
     {{end}}
   </div>
+  {{if gt .TotalPages 1}}
+    <div class="mt-4 flex items-center justify-center gap-3 text-sm">
+      <button
+        type="button"
+        {{if le .Page 1}}disabled{{end}}
+        class="rounded-lg px-3 py-1.5 font-medium text-gray-600 ring-1 ring-inset ring-gray-300/60 hover:bg-gray-100 disabled:opacity-40 disabled:pointer-events-none dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
+        hx-get="/cards/list?page={{sub .Page 1}}"
+        hx-include="#card-search"
+        hx-target="#card-list" hx-swap="innerHTML"
+      >Previous</button>
+      <span class="text-gray-500 dark:text-gray-400">Page {{.Page}} of {{.TotalPages}}</span>
+      <button
+        type="button"
+        {{if ge .Page .TotalPages}}disabled{{end}}
+        class="rounded-lg px-3 py-1.5 font-medium text-gray-600 ring-1 ring-inset ring-gray-300/60 hover:bg-gray-100 disabled:opacity-40 disabled:pointer-events-none dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/5"
+        hx-get="/cards/list?page={{add .Page 1}}"
+        hx-include="#card-search"
+        hx-target="#card-list" hx-swap="innerHTML"
+      >Next</button>
+    </div>
+  {{end}}
   <script>
   (function(){
     var SD = {};
@@ -165,6 +186,10 @@
   </style>
 {{else}}
   <div class="glass rounded-2xl border-dashed p-10 text-center">
-    <p class="text-sm text-gray-500 dark:text-gray-400">No cards yet. Add one above to get started.</p>
+    {{if .Query}}
+      <p class="text-sm text-gray-500 dark:text-gray-400">No cards match &ldquo;{{.Query}}&rdquo;.</p>
+    {{else}}
+      <p class="text-sm text-gray-500 dark:text-gray-400">No cards yet. Add one above to get started.</p>
+    {{end}}
   </div>
 {{end}}

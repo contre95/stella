@@ -110,7 +110,7 @@ func TestUserScoping(t *testing.T) {
 	if _, err := db.GetCard(ctx, "u2", "c1"); !errors.Is(err, srs.ErrNotFound) {
 		t.Errorf("GetCard across users: want ErrNotFound, got %v", err)
 	}
-	if facts, _ := db.ListFacts(ctx, "u2"); len(facts) != 0 {
+	if facts, _ := db.ListFacts(ctx, "u2", "", 0, 0); len(facts) != 0 {
 		t.Errorf("ListFacts across users: got %d facts, want 0", len(facts))
 	}
 	if n, _ := db.ActiveCount(ctx, "u2"); n != 0 {

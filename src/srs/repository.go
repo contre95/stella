@@ -18,7 +18,12 @@ type Repository interface {
 	// Facts.
 	AddFact(ctx context.Context, f *Fact) error
 	GetFact(ctx context.Context, userID, id string) (*Fact, error)
-	ListFacts(ctx context.Context, userID string) ([]*Fact, error)
+	// ListFacts returns a page of the user's facts, newest first, optionally
+	// filtered to those whose front or back contain search. A limit<=0 means
+	// no limit.
+	ListFacts(ctx context.Context, userID, search string, limit, offset int) ([]*Fact, error)
+	// CountFacts returns how many facts match ListFacts' same search filter.
+	CountFacts(ctx context.Context, userID, search string) (int, error)
 	UpdateFact(ctx context.Context, f *Fact) error
 	DeleteFact(ctx context.Context, userID, id string) error // cascades to its cards
 

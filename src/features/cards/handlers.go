@@ -38,28 +38,35 @@ func (h *Handler) RenderSection(c *fiber.Ctx) error {
 	return respond.Section(c, "cards", fiber.Map{"Title": "Cards", "Decks": decks})
 }
 
-// List returns the fact/card list partial, optionally filtered by ?q=.
+// cardsPageSize is how many facts the /cards list shows per page.
+const cardsPageSize = 25
+
+// List returns the fact/card list partial, optionally filtered by ?q= and
+// paged by ?page= (1-based, defaults to 1).
 func (h *Handler) List(c *fiber.Ctx) error {
-	rows, err := h.service.ListFacts(c.Context(), auth.UserID(c))
+	userID := auth.UserID(c)
+	q := strings.TrimSpace(c.Query("q"))
+	page := c.QueryInt("page", 1)
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * cardsPageSize
+
+	rows, err := h.service.ListFacts(c.Context(), userID, q, cardsPageSize, offset)
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
-	if q := strings.TrimSpace(c.Query("q")); q != "" {
-		rows = filterFacts(rows, q)
+	total, err := h.service.CountFacts(c.Context(), userID, q)
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
-	return respond.Partial(c, "components/card_list", fiber.Map{"Facts": rows})
-}
-
-func filterFacts(rows []*FactRow, q string) []*FactRow {
-	q = strings.ToLower(q)
-	out := make([]*FactRow, 0, len(rows))
-	for _, r := range rows {
-		if strings.Contains(strings.ToLower(r.Fact.Front), q) ||
-			strings.Contains(strings.ToLower(r.Fact.Back), q) {
-			out = append(out, r)
-		}
-	}
-	return out
+	totalPages := (total + cardsPageSize - 1) / cardsPageSize
+	return respond.Partial(c, "components/card_list", fiber.Map{
+		"Facts":      rows,
+		"Query":      q,
+		"Page":       page,
+		"TotalPages": totalPages,
+	})
 }
 
 // saveImage saves the uploaded image file from the given form field and returns

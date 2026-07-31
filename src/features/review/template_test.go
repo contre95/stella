@@ -23,12 +23,18 @@ func TestReviewTemplatesParse(t *testing.T) {
 		"views/sections/deck_page.html",
 		"views/components/deck_facts.html",
 		"views/components/deck_list.html",
+		"views/components/card_list.html",
 	} {
 		b, err := os.ReadFile(filepath.Join("../../..", rel))
 		if err != nil {
 			t.Fatalf("read %s: %v", rel, err)
 		}
-		if _, err := template.New(rel).Funcs(template.FuncMap{"md": hosting.MarkdownHTML}).Parse(string(b)); err != nil {
+		funcs := template.FuncMap{
+			"md":  hosting.MarkdownHTML,
+			"add": func(a, b int) int { return a + b },
+			"sub": func(a, b int) int { return a - b },
+		}
+		if _, err := template.New(rel).Funcs(funcs).Parse(string(b)); err != nil {
 			t.Errorf("parse %s: %v", rel, err)
 		}
 	}

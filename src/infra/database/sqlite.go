@@ -128,6 +128,8 @@ CREATE TABLE IF NOT EXISTS facts (
 	FOREIGN KEY (deck_id) REFERENCES decks(id) ON DELETE CASCADE
 );
 
+CREATE INDEX IF NOT EXISTS idx_facts_user_created ON facts(user_id, created);
+
 CREATE TABLE IF NOT EXISTS cards (
 	id                   TEXT PRIMARY KEY,
 	user_id              TEXT NOT NULL,
@@ -217,10 +219,42 @@ func (s *SqliteSRS) GetFact(ctx context.Context, userID, id string) (*srs.Fact, 
 	return &f, nil
 }
 
-func (s *SqliteSRS) ListFacts(ctx context.Context, userID string) ([]*srs.Fact, error) {
+// ListFacts returns a page of the user's facts, newest first, optionally
+// restricted to those whose front or back contain search (case-insensitive).
+// A limit<=0 means unlimited.
+func (s *SqliteSRS) ListFacts(ctx context.Context, userID, search string, limit, offset int) ([]*srs.Fact, error) {
+	where, args := factSearchClause(userID, search)
+	if limit <= 0 {
+		limit = -1 // SQLite: negative LIMIT means no limit.
+	}
+	args = append(args, limit, offset)
 	return s.queryFacts(ctx,
 		`SELECT id, user_id, front, back, image_front, image_back, audio_front, audio_back, deck_id, created, modified
-		 FROM facts WHERE user_id=? ORDER BY created DESC`, userID)
+		 FROM facts WHERE `+where+` ORDER BY created DESC LIMIT ? OFFSET ?`, args...)
+}
+
+// CountFacts returns how many of the user's facts match ListFacts' same
+// search filter, for computing page counts.
+func (s *SqliteSRS) CountFacts(ctx context.Context, userID, search string) (int, error) {
+	where, args := factSearchClause(userID, search)
+	return s.count(ctx, `SELECT count(*) FROM facts WHERE `+where, args...)
+}
+
+// factSearchClause builds the WHERE clause and bound args shared by ListFacts
+// and CountFacts: user scoping plus an optional case-insensitive front/back
+// substring match. LIKE metacharacters in search are escaped so a literal
+// "%" or "_" typed by the user is matched literally.
+func factSearchClause(userID, search string) (string, []any) {
+	if search == "" {
+		return "user_id=?", []any{userID}
+	}
+	pattern := "%" + escapeLike(search) + "%"
+	return `user_id=? AND (front LIKE ? ESCAPE '\' OR back LIKE ? ESCAPE '\')`, []any{userID, pattern, pattern}
+}
+
+func escapeLike(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return r.Replace(s)
 }
 
 func (s *SqliteSRS) UpdateFact(ctx context.Context, f *srs.Fact) error {

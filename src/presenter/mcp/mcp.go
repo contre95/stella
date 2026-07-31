@@ -418,12 +418,9 @@ func (s *Server) listRecentCards(ctx context.Context, _ *mcpsdk.CallToolRequest,
 	if limit <= 0 {
 		limit = 20
 	}
-	rows, err := s.cards.ListFacts(ctx, s.userID)
+	rows, err := s.cards.ListFacts(ctx, s.userID, "", limit, 0)
 	if err != nil {
 		return nil, ListRecentCardsOutput{}, fmt.Errorf("listing cards: %w", err)
-	}
-	if len(rows) > limit {
-		rows = rows[:limit]
 	}
 	out := ListRecentCardsOutput{Facts: make([]FactSummary, 0, len(rows))}
 	for _, r := range rows {

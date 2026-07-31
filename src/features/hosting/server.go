@@ -31,6 +31,7 @@ type Server struct {
 func NewServer(cm *config.Manager, authSvc *auth.Service, registrars ...RouteRegistrar) *Server {
 	engine := html.New("./views", ".html")
 	engine.AddFunc("add", func(a, b int) int { return a + b })
+	engine.AddFunc("sub", func(a, b int) int { return a - b })
 	engine.AddFunc("dict", dict)
 	engine.AddFunc("md", MarkdownHTML)
 

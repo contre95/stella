@@ -228,10 +228,10 @@ func (s *Service) UpdateFact(ctx context.Context, userID, factID, front, back st
 	return fact, nil
 }
 
-// ListFacts returns every fact with its sister cards and their statuses,
-// newest first.
-func (s *Service) ListFacts(ctx context.Context, userID string) ([]*FactRow, error) {
-	facts, err := s.repo.ListFacts(ctx, userID)
+// ListFacts returns a page of facts with their sister cards and statuses,
+// newest first, optionally filtered by search. A limit<=0 means no limit.
+func (s *Service) ListFacts(ctx context.Context, userID, search string, limit, offset int) ([]*FactRow, error) {
+	facts, err := s.repo.ListFacts(ctx, userID, search, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -268,6 +268,12 @@ func (s *Service) ListFacts(ctx context.Context, userID string) ([]*FactRow, err
 		rows = append(rows, &FactRow{Fact: f, DeckName: dn, DeckColor: dc, Cards: cardRows, HasReverse: hasReverse, HasImage: hasImage, HasAudio: hasAudio})
 	}
 	return rows, nil
+}
+
+// CountFacts returns how many of the user's facts match ListFacts' same
+// search filter, for computing page counts.
+func (s *Service) CountFacts(ctx context.Context, userID, search string) (int, error) {
+	return s.repo.CountFacts(ctx, userID, search)
 }
 
 // DeleteFact removes a fact and (via cascade) its cards.
