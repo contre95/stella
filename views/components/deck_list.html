@@ -62,7 +62,10 @@
           </div>
         </div>
         {{if .Decks}}
-          <div class="deck-row flex gap-5 overflow-x-auto px-2 pt-1 pb-5">
+          <div
+            class="deck-row flex gap-5 overflow-x-auto px-2 pt-1 pb-5"
+            _="on wheel(deltaY) halt the event then set my scrollLeft to my scrollLeft + deltaY"
+          >
             {{range .Decks}}{{template "deck-card" .}}{{end}}
           </div>
         {{else}}
@@ -79,7 +82,10 @@
               <div class="h-px flex-1 bg-gray-200 dark:bg-white/10"></div>
             </div>
           {{end}}
-          <div class="deck-row flex gap-5 overflow-x-auto px-2 pt-1 pb-5">
+          <div
+            class="deck-row flex gap-5 overflow-x-auto px-2 pt-1 pb-5"
+            _="on wheel(deltaY) halt the event then set my scrollLeft to my scrollLeft + deltaY"
+          >
             {{range .Decks}}{{template "deck-card" .}}{{end}}
           </div>
         </div>

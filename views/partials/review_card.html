@@ -159,10 +159,6 @@
         {{end}}
         <button
           id="show-question-btn"
-          data-label="{{if eq .Card.View "forward"}}Question{{else}}Reverse{{end}}"
-          data-image="{{if eq .Card.View "forward"}}{{.Fact.ImageFront}}{{else}}{{.Fact.ImageBack}}{{end}}"
-          data-audio="{{if eq .Card.View "forward"}}{{.Fact.AudioFront}}{{else}}{{.Fact.AudioBack}}{{end}}"
-          data-text="{{if eq .Card.View "forward"}}{{.Fact.Front}}{{else}}{{.Fact.Back}}{{end}}"
           class="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 text-base font-medium text-gray-400 hover:text-pink-500 transition-colors dark:text-gray-500 dark:hover:text-pink-400 whitespace-nowrap"
         >Show question</button>
       </div>
@@ -293,11 +289,14 @@
     var autoplayAudio = {{.AutoplayAudio}};
     if (autoplayAudio && audioFront) audioFront.play().catch(function(){});
 
-    /* ── Reveal (fade) ─────────────────────────────────────────── */
-    function reveal() {
-      if (revealed) return;
-      revealed = true;
+    /* ── Reveal / flip (fade) ──────────────────────────────────── */
+    var showingBack = false;
+
+    function showBack() {
+      if (showingBack) return;
+      showingBack = true;
       if (audioFront) { audioFront.pause(); audioFront.currentTime = 0; }
+      cardFront.style.transition    = 'opacity 0.32s ease';
       cardFront.style.opacity       = '0';
       cardFront.style.pointerEvents = 'none';
       cardBack.style.display        = 'flex';
@@ -305,15 +304,40 @@
       cardBack.style.transition     = 'opacity 0.32s ease';
       cardBack.style.opacity        = '1';
       cardBack.style.pointerEvents  = 'auto';
+      if (autoplayAudio && audioBack) audioBack.play().catch(function(){});
+    }
+
+    function showFront() {
+      if (!showingBack) return;
+      showingBack = false;
+      if (audioBack) { audioBack.pause(); audioBack.currentTime = 0; }
+      cardBack.style.transition     = 'opacity 0.32s ease';
+      cardBack.style.opacity        = '0';
+      cardBack.style.pointerEvents  = 'none';
+      cardFront.style.transition    = 'opacity 0.32s ease';
+      cardFront.style.opacity       = '1';
+      cardFront.style.pointerEvents = 'auto';
+      if (autoplayAudio && audioFront) audioFront.play().catch(function(){});
+    }
+
+    function reveal() {
+      if (revealed) return;
+      revealed = true;
+      showBack();
       flipCard.style.cursor = 'default';
       tapBtn.classList.add('hidden');
       gradeHelp.classList.remove('hidden');
       gradeBtn.classList.remove('hidden');
-      if (autoplayAudio && audioBack) audioBack.play().catch(function(){});
+    }
+
+    function toggleFace() {
+      if (showingBack) showFront(); else showBack();
     }
 
     flipCard.addEventListener('click', function () {
-      if (!dragging) reveal();
+      if (dragging) return;
+      if (!revealed) reveal();
+      else toggleFace();
     });
     tapBtn.addEventListener('click', reveal);
 
@@ -376,6 +400,8 @@
       if (!dragging || (Math.abs(dx) < 10 && Math.abs(dy) < 10)) {
         dragging = false;
         if (!revealed) reveal();
+        else toggleFace();
+        e.preventDefault();
         return;
       }
       dragging = false;
@@ -468,45 +494,10 @@
       }
     };
 
-    /* ── Show question modal ──────────────────────────────────── */
-    showQBtn.addEventListener('click', function () {
-      // Card content is user/import data — build the modal with DOM nodes and
-      // textContent so it can never be parsed as HTML.
-      var isDark = document.documentElement.classList.contains('dark');
-      var box = document.createElement('div');
-      box.className = 'text-center';
-      var label = document.createElement('span');
-      label.className = 'mb-4 inline-block text-xs font-semibold uppercase tracking-widest text-pink-500';
-      label.textContent = this.dataset.label;
-      box.appendChild(label);
-      if (this.dataset.image) {
-        var img = document.createElement('img');
-        img.src = '/images/' + encodeURIComponent(this.dataset.image);
-        img.className = 'mx-auto mb-4 max-h-48 w-auto rounded-lg object-contain';
-        box.appendChild(img);
-      }
-      if (this.dataset.audio) {
-        var aud = document.createElement('button');
-        aud.type = 'button';
-        aud.className = 'audio-pill mb-4';
-        aud.dataset.audio = '/audio/' + encodeURIComponent(this.dataset.audio);
-        aud.setAttribute('aria-label', 'Play audio');
-        // Static icon markup only — the user-supplied filename stays in dataset above
-        aud.innerHTML = '<svg class="ac-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>'
-          + '<svg class="ac-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>'
-          + '<span class="ap-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>';
-        box.appendChild(aud);
-      }
-      var text = document.createElement('p');
-      text.className = 'whitespace-pre-wrap text-xl font-medium leading-relaxed ' + (isDark ? 'text-gray-100' : 'text-gray-800');
-      text.textContent = this.dataset.text;
-      box.appendChild(text);
-      swalGlass.fire({
-        html: box,
-        showConfirmButton: true,
-        confirmButtonText: 'Close',
-        width: '32rem',
-      });
+    /* ── Show question: flip the card back to its front face ───── */
+    showQBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      showFront();
     });
   })();
   </script>
