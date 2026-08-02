@@ -1,0 +1,10 @@
+{{if .Decks}}
+  <div class="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+    {{range .Decks}}{{template "deck-card" (dict "Deck" . "Group" $.Group "GroupPage" true)}}{{end}}
+  </div>
+{{else}}
+  <div class="glass rounded-2xl border-dashed p-10 text-center">
+    <p class="text-sm text-gray-500 dark:text-gray-400">No decks in this group yet.</p>
+  </div>
+{{end}}
+{{template "deck-card-styles"}}

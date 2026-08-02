@@ -34,6 +34,7 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	app.Post("/groups", h.AddGroup)
 	app.Put("/groups/:id", h.UpdateGroup)
 	app.Delete("/groups/:id", h.DeleteGroup)
+	app.Get("/groups/:id", h.RenderGroupPage)
 
 	app.Delete("/tags/:id", h.DeleteTag)
 }

@@ -30,16 +30,23 @@
   </div>
 {{end}}
 {{if .GroupViews}}
-  {{range .GroupViews}}
-    {{if .Group}}
+  {{range $gv := .GroupViews}}
+    {{if $gv.Group}}
       {{/* Named group section */}}
       <div class="mb-8">
         <div class="mb-3 flex items-center gap-3">
-          <h2 class="text-base font-semibold text-gray-700 dark:text-gray-300">{{.Group.Name}}</h2>
+          <a
+            href="/groups/{{$gv.Group.ID}}"
+            hx-get="/groups/{{$gv.Group.ID}}"
+            hx-target="#contenido"
+            hx-swap="outerHTML"
+            hx-push-url="true"
+            class="text-base font-semibold text-gray-700 hover:text-pink-600 transition-colors dark:text-gray-300 dark:hover:text-pink-400"
+          >{{$gv.Group.Name}}</a>
           <div class="h-px flex-1 bg-gray-200 dark:bg-white/10"></div>
           <div class="flex items-center gap-1">
             <a
-              href="/groups/{{.Group.ID}}/export"
+              href="/groups/{{$gv.Group.ID}}/export"
               class="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-white/60 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-200"
               title="Export group as zip"
             >
@@ -48,10 +55,10 @@
               </svg>
             </a>
             <button
-              hx-delete="/groups/{{.Group.ID}}"
+              hx-delete="/groups/{{$gv.Group.ID}}"
               hx-target="#deck-list"
               hx-swap="innerHTML"
-              hx-confirm="Delete group '{{.Group.Name}}'? Decks will become ungrouped."
+              hx-confirm="Delete group '{{$gv.Group.Name}}'? Decks will become ungrouped."
               class="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
               title="Delete group"
             >
@@ -61,12 +68,12 @@
             </button>
           </div>
         </div>
-        {{if .Decks}}
+        {{if $gv.Decks}}
           <div
             class="deck-row flex gap-5 overflow-x-auto px-2 pt-1 pb-5"
             _="on wheel(deltaY) halt the event then set my scrollLeft to my scrollLeft + deltaY"
           >
-            {{range .Decks}}{{template "deck-card" .}}{{end}}
+            {{range $gv.Decks}}{{template "deck-card" (dict "Deck" . "Group" $gv.Group)}}{{end}}
           </div>
         {{else}}
           <p class="text-sm text-gray-400 dark:text-gray-500 italic">No decks in this group yet.</p>
@@ -74,7 +81,7 @@
       </div>
     {{else}}
       {{/* Ungrouped decks */}}
-      {{if .Decks}}
+      {{if $gv.Decks}}
         <div class="mb-8">
           {{if $hasGroups}}
             <div class="mb-3 flex items-center gap-3">
@@ -86,7 +93,7 @@
             class="deck-row flex gap-5 overflow-x-auto px-2 pt-1 pb-5"
             _="on wheel(deltaY) halt the event then set my scrollLeft to my scrollLeft + deltaY"
           >
-            {{range .Decks}}{{template "deck-card" .}}{{end}}
+            {{range $gv.Decks}}{{template "deck-card" (dict "Deck" .)}}{{end}}
           </div>
         </div>
       {{end}}
@@ -99,50 +106,53 @@
 {{end}}
 
 {{define "deck-card"}}
-<div class="deck-stack w-40 shrink-0 sm:w-44">
-  <span class="deck-layer deck-layer-b" style="background-color:{{.Color}}2b; border-color:{{.Color}}45;"></span>
-  <span class="deck-layer deck-layer-a" style="background-color:{{.Color}}40; border-color:{{.Color}}59;"></span>
+{{$deck := .Deck}}
+{{$group := .Group}}
+{{$groupPage := .GroupPage}}
+<div class="deck-stack {{if $groupPage}}w-full{{else}}w-40 shrink-0 sm:w-44{{end}}">
+  <span class="deck-layer deck-layer-b" style="background-color:{{$deck.Color}}2b; border-color:{{$deck.Color}}45;"></span>
+  <span class="deck-layer deck-layer-a" style="background-color:{{$deck.Color}}40; border-color:{{$deck.Color}}59;"></span>
   <div class="deck-face glass relative flex aspect-[5/7] flex-col rounded-2xl p-3">
-    {{if .Image}}
-      <img src="/images/{{.Image}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full rounded-2xl object-cover" />
+    {{if $deck.Image}}
+      <img src="/images/{{$deck.Image}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full rounded-2xl object-cover" />
       <span class="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-t from-black/80 via-black/55 to-black/30"></span>
     {{end}}
     <a
-      href="/decks/{{.ID}}"
-      hx-get="/decks/{{.ID}}"
+      href="/decks/{{$deck.ID}}"
+      hx-get="/decks/{{$deck.ID}}"
       hx-target="#contenido"
       hx-swap="outerHTML"
       hx-push-url="true"
       class="absolute inset-0 z-0 rounded-2xl"
-      aria-label="Open deck {{.Name}}"
+      aria-label="Open deck {{$deck.Name}}"
     ></a>
     <div class="pointer-events-none relative flex flex-1 flex-col items-center justify-center gap-1 px-2 text-center">
-      <p class="deck-title font-semibold break-words leading-snug {{if .Image}}text-white{{else}}text-gray-900 dark:text-gray-100{{end}}">{{.Name}}</p>
-      {{if .Description}}
-        <p class="text-[11px] leading-snug line-clamp-2 {{if .Image}}text-white/75{{else}}text-gray-400 dark:text-gray-500{{end}}">{{.Description}}</p>
+      <p class="deck-title font-semibold break-words leading-snug {{if $deck.Image}}text-white{{else}}text-gray-900 dark:text-gray-100{{end}}">{{$deck.Name}}</p>
+      {{if $deck.Description}}
+        <p class="text-[11px] leading-snug line-clamp-2 {{if $deck.Image}}text-white/75{{else}}text-gray-400 dark:text-gray-500{{end}}">{{$deck.Description}}</p>
       {{end}}
     </div>
     <div class="relative z-10 mt-1 flex items-center justify-center gap-1">
       <a
-        href="/review?decks={{.ID}}"
-        hx-get="/review?decks={{.ID}}"
+        href="/review?decks={{$deck.ID}}"
+        hx-get="/review?decks={{$deck.ID}}"
         hx-target="#contenido"
         hx-swap="outerHTML"
         hx-push-url="true"
         class="btn-primary rounded-lg px-3 py-1.5 text-xs font-semibold"
       >Study</a>
       <button
-        hx-post="/decks/{{.ID}}/toggle-study"
+        hx-post="/decks/{{$deck.ID}}/toggle-study{{if $groupPage}}?source=group_page&amp;group={{$group.ID}}{{end}}"
         hx-target="#deck-list"
         hx-swap="innerHTML"
-        title="{{if .StudyEnabled}}Exclude from global study{{else}}Include in global study{{end}}"
-        class="rounded-lg p-1.5 transition-colors {{if .Image}}{{if .StudyEnabled}}text-white/70 hover:bg-white/20 hover:text-white{{else}}text-white/30 hover:bg-white/20 hover:text-white/70{{end}}{{else}}{{if .StudyEnabled}}text-gray-400 hover:bg-white/60 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-200{{else}}text-gray-300 dark:text-gray-600 hover:bg-white/60 hover:text-gray-500 dark:hover:bg-white/10 dark:hover:text-gray-400{{end}}{{end}}"
+        title="{{if $deck.StudyEnabled}}Exclude from global study{{else}}Include in global study{{end}}"
+        class="rounded-lg p-1.5 transition-colors {{if $deck.Image}}{{if $deck.StudyEnabled}}text-white/70 hover:bg-white/20 hover:text-white{{else}}text-white/30 hover:bg-white/20 hover:text-white/70{{end}}{{else}}{{if $deck.StudyEnabled}}text-gray-400 hover:bg-white/60 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-200{{else}}text-gray-300 dark:text-gray-600 hover:bg-white/60 hover:text-gray-500 dark:hover:bg-white/10 dark:hover:text-gray-400{{end}}{{end}}"
       >
-        <svg class="h-4 w-4" fill="{{if .StudyEnabled}}#F09C9D{{else}}currentColor{{end}}" viewBox="0 -32 576 576" xmlns="http://www.w3.org/2000/svg"><path d="M208 0c-29.9 0-54.7 20.5-61.8 48.2-.8 0-1.4-.2-2.2-.2-35.3 0-64 28.7-64 64 0 4.8.6 9.5 1.7 14C52.5 138 32 166.6 32 200c0 12.6 3.2 24.3 8.3 34.9C16.3 248.7 0 274.3 0 304c0 33.3 20.4 61.9 49.4 73.9-.9 4.6-1.4 9.3-1.4 14.1 0 39.8 32.2 72 72 72 4.1 0 8.1-.5 12-1.2 9.6 28.5 36.2 49.2 68 49.2 39.8 0 72-32.2 72-72V64c0-35.3-28.7-64-64-64zm368 304c0-29.7-16.3-55.3-40.3-69.1 5.2-10.6 8.3-22.3 8.3-34.9 0-33.4-20.5-62-49.7-74 1-4.5 1.7-9.2 1.7-14 0-35.3-28.7-64-64-64-.8 0-1.5.2-2.2.2C422.7 20.5 397.9 0 368 0c-35.3 0-64 28.6-64 64v376c0 39.8 32.2 72 72 72 31.8 0 58.4-20.7 68-49.2 3.9.7 7.9 1.2 12 1.2 39.8 0 72-32.2 72-72 0-4.8-.5-9.5-1.4-14.1 29-12 49.4-40.6 49.4-73.9z"/></svg>
+        <svg class="h-4 w-4" fill="{{if $deck.StudyEnabled}}#F09C9D{{else}}currentColor{{end}}" viewBox="0 -32 576 576" xmlns="http://www.w3.org/2000/svg"><path d="M208 0c-29.9 0-54.7 20.5-61.8 48.2-.8 0-1.4-.2-2.2-.2-35.3 0-64 28.7-64 64 0 4.8.6 9.5 1.7 14C52.5 138 32 166.6 32 200c0 12.6 3.2 24.3 8.3 34.9C16.3 248.7 0 274.3 0 304c0 33.3 20.4 61.9 49.4 73.9-.9 4.6-1.4 9.3-1.4 14.1 0 39.8 32.2 72 72 72 4.1 0 8.1-.5 12-1.2 9.6 28.5 36.2 49.2 68 49.2 39.8 0 72-32.2 72-72V64c0-35.3-28.7-64-64-64zm368 304c0-29.7-16.3-55.3-40.3-69.1 5.2-10.6 8.3-22.3 8.3-34.9 0-33.4-20.5-62-49.7-74 1-4.5 1.7-9.2 1.7-14 0-35.3-28.7-64-64-64-.8 0-1.5.2-2.2.2C422.7 20.5 397.9 0 368 0c-35.3 0-64 28.6-64 64v376c0 39.8 32.2 72 72 72 31.8 0 58.4-20.7 68-49.2 3.9.7 7.9 1.2 12 1.2 39.8 0 72-32.2 72-72 0-4.8-.5-9.5-1.4-14.1 29-12 49.4-40.6 49.4-73.9z"/></svg>
       </button>
       <a
-        href="/decks/{{.ID}}/export"
-        class="rounded-lg p-1.5 transition-colors {{if .Image}}text-white/70 hover:bg-white/20 hover:text-white{{else}}text-gray-400 hover:bg-white/60 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-200{{end}}"
+        href="/decks/{{$deck.ID}}/export"
+        class="rounded-lg p-1.5 transition-colors {{if $deck.Image}}text-white/70 hover:bg-white/20 hover:text-white{{else}}text-gray-400 hover:bg-white/60 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-200{{end}}"
         title="Export deck"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -150,11 +160,11 @@
         </svg>
       </a>
       <button
-        hx-delete="/decks/{{.ID}}"
+        hx-delete="/decks/{{$deck.ID}}{{if $groupPage}}?source=group_page&amp;group={{$group.ID}}{{end}}"
         hx-target="#deck-list"
         hx-swap="innerHTML"
         hx-confirm="This will permanently delete the deck and all its cards."
-        class="rounded-lg p-1.5 transition-colors {{if .Image}}text-white/70 hover:bg-red-500/30 hover:text-red-200{{else}}text-gray-400 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400{{end}}"
+        class="rounded-lg p-1.5 transition-colors {{if $deck.Image}}text-white/70 hover:bg-red-500/30 hover:text-red-200{{else}}text-gray-400 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400{{end}}"
         title="Delete deck"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -166,6 +176,7 @@
 </div>
 {{end}}
 
+{{define "deck-card-styles"}}
 <style>
   .deck-row { scrollbar-width: thin; scrollbar-color: rgba(120, 120, 120, 0.35) transparent; }
   .deck-row::-webkit-scrollbar { height: 6px; }
@@ -190,3 +201,5 @@
   .deck-face { background: rgba(255,255,255,0.65); }
   .dark .deck-face { background: rgba(255,255,255,0.065); }
 </style>
+{{end}}
+{{template "deck-card-styles"}}

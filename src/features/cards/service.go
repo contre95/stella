@@ -470,6 +470,21 @@ func (s *Service) GetGroup(ctx context.Context, userID, id string) (*srs.Group, 
 	return s.repo.GetGroup(ctx, userID, id)
 }
 
+// ListDecksByGroup returns the decks belonging to a single group.
+func (s *Service) ListDecksByGroup(ctx context.Context, userID, groupID string) ([]*srs.Deck, error) {
+	all, err := s.repo.ListDecks(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	decks := make([]*srs.Deck, 0, len(all))
+	for _, d := range all {
+		if d.GroupID == groupID {
+			decks = append(decks, d)
+		}
+	}
+	return decks, nil
+}
+
 // ListGroups returns all groups ordered by name.
 func (s *Service) ListGroups(ctx context.Context, userID string) ([]*srs.Group, error) {
 	return s.repo.ListGroups(ctx, userID)

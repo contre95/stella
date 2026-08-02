@@ -401,7 +401,8 @@ func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
 	return h.DeckList(c)
 }
 
-// UpdateGroup renames a group and returns the refreshed list.
+// UpdateGroup renames a group and returns the refreshed list, or the group
+// page when called from there.
 func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 	name := strings.TrimSpace(c.FormValue("name"))
 	if name == "" {
@@ -410,17 +411,23 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 	if _, err := h.service.UpdateGroup(c.Context(), auth.UserID(c), c.Params("id"), name); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
+	if c.Query("source") == "group_page" {
+		return h.RenderGroupPage(c)
+	}
 	return h.DeckList(c)
 }
 
 // ToggleDeckStudy flips a deck's study-enabled flag and returns the refreshed
-// deck list, or the deck page when called from there.
+// deck list, or the deck/group page when called from there.
 func (h *Handler) ToggleDeckStudy(c *fiber.Ctx) error {
 	if _, err := h.service.ToggleDeckStudy(c.Context(), auth.UserID(c), c.Params("id")); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	if c.Query("source") == "deck_page" {
 		return h.RenderDeckPage(c)
+	}
+	if c.Query("source") == "group_page" {
+		return h.groupGrid(c, c.Query("group"))
 	}
 	return h.DeckList(c)
 }
@@ -438,10 +445,14 @@ func (h *Handler) SetDeckGroup(c *fiber.Ctx) error {
 	return h.DeckList(c)
 }
 
-// DeleteDeck removes a deck and all its facts/cards, then returns the refreshed list.
+// DeleteDeck removes a deck and all its facts/cards, then returns the refreshed
+// deck list, or the group grid when called from the group page.
 func (h *Handler) DeleteDeck(c *fiber.Ctx) error {
 	if err := h.service.DeleteDeck(c.Context(), auth.UserID(c), c.Params("id")); err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	if c.Query("source") == "group_page" {
+		return h.groupGrid(c, c.Query("group"))
 	}
 	return h.DeckList(c)
 }
@@ -563,6 +574,38 @@ func (h *Handler) RenderDeckPage(c *fiber.Ctx) error {
 		"DeckTags":  deckTags,
 		"AllTags":   allTags,
 	})
+}
+
+// RenderGroupPage renders the full page for a single group, showing its
+// decks in a grid that adapts to screen width.
+func (h *Handler) RenderGroupPage(c *fiber.Ctx) error {
+	id := c.Params("id")
+	group, err := h.service.GetGroup(c.Context(), auth.UserID(c), id)
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusNotFound, "Group not found")
+	}
+	decks, err := h.service.ListDecksByGroup(c.Context(), auth.UserID(c), id)
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return respond.Section(c, "group_page", fiber.Map{
+		"Title": group.Name,
+		"Group": group,
+		"Decks": decks,
+	})
+}
+
+// groupGrid returns the deck grid partial for a single group.
+func (h *Handler) groupGrid(c *fiber.Ctx, groupID string) error {
+	group, err := h.service.GetGroup(c.Context(), auth.UserID(c), groupID)
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusNotFound, "Group not found")
+	}
+	decks, err := h.service.ListDecksByGroup(c.Context(), auth.UserID(c), groupID)
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return respond.Partial(c, "components/group_deck_grid", fiber.Map{"Group": group, "Decks": decks})
 }
 
 // AddCardToDeck creates a card assigned to a specific deck and returns the
