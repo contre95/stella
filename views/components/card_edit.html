@@ -16,10 +16,19 @@
       {{if .Decks}}
         <form
           hx-post="/cards/{{.Fact.ID}}/move{{if .DeckID}}?deck={{.DeckID}}{{end}}"
+          {{if .ReviewCardID}}
+          hx-target="this"
+          hx-swap="none"
+          _="on htmx:afterRequest(detail) if detail.successful
+               remove #card-edit-modal
+               js htmx.ajax('GET', '/review/{{.ReviewCardID}}/reload?decks={{.ReviewDecks}}{{if .ReviewLearnAhead}}&learnahead=1{{end}}', {target:'#review-card-wrap', swap:'outerHTML'}) end
+             end"
+          {{else}}
           hx-target="{{if .DeckID}}#deck-card-grid{{else}}#card-list{{end}}"
           hx-swap="innerHTML"
-          hx-params="deckId"
           _="on htmx:afterRequest(detail) if detail.successful remove #card-edit-modal"
+          {{end}}
+          hx-params="deckId"
           class="shrink-0 text-right"
         >
           <label class="block">
@@ -41,10 +50,20 @@
 
     <form
       hx-put="/cards/{{.Fact.ID}}{{if .DeckID}}?deck={{.DeckID}}{{end}}"
+      {{if .ReviewCardID}}
+      hx-target="this"
+      hx-swap="none"
+      hx-encoding="multipart/form-data"
+      _="on htmx:afterRequest(detail) if detail.successful
+           remove #card-edit-modal
+           js htmx.ajax('GET', '/review/{{.ReviewCardID}}/reload?decks={{.ReviewDecks}}{{if .ReviewLearnAhead}}&learnahead=1{{end}}', {target:'#review-card-wrap', swap:'outerHTML'}) end
+         end"
+      {{else}}
       hx-target="{{if .DeckID}}#deck-card-grid{{else}}#card-list{{end}}"
       hx-swap="innerHTML"
       hx-encoding="multipart/form-data"
       _="on htmx:afterRequest(detail) if detail.successful remove #card-edit-modal"
+      {{end}}
     >
       <div class="grid gap-4 sm:grid-cols-2">
       <label class="block">

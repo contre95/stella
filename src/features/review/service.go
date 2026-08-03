@@ -131,6 +131,12 @@ func (s *Service) NextCard(ctx context.Context, userID string, deckIDs []string,
 		}
 	}
 
+	return s.buildCardInSession(ctx, userID, card, now, deckIDs)
+}
+
+// buildCardInSession assembles the fact, deck, due-badge, and grade-preview
+// metadata that goes alongside a queue card. Shared by NextCard and CardByID.
+func (s *Service) buildCardInSession(ctx context.Context, userID string, card *srs.Card, now int64, deckIDs []string) (*CardInSession, error) {
 	fact, err := s.repo.GetFact(ctx, userID, card.FactID)
 	if err != nil {
 		return nil, err
@@ -152,6 +158,18 @@ func (s *Service) NextCard(ctx context.Context, userID string, deckIDs []string,
 		ci.Previews[g] = intervalLabel(s.scheduler.GradeAnswer(card, g, true))
 	}
 	return ci, nil
+}
+
+// CardByID re-fetches a specific card's current session view without
+// touching the review queue — used to refresh the on-screen card after its
+// fact is edited mid-review, so editing doesn't consume a turn.
+func (s *Service) CardByID(ctx context.Context, userID, cardID string, deckIDs []string) (*CardInSession, error) {
+	now := s.scheduler.AdjustedNow(s.scheduler.Now())
+	card, err := s.repo.GetCard(ctx, userID, cardID)
+	if err != nil {
+		return nil, err
+	}
+	return s.buildCardInSession(ctx, userID, card, now, deckIDs)
 }
 
 // dueBadge describes when a card is due, as a short label plus a tone used for

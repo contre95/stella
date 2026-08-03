@@ -219,6 +219,9 @@ func (h *Handler) Reset(c *fiber.Ctx) error {
 
 // EditForm returns the edit-card modal for a fact. A ?deck=<id> query keeps
 // the eventual save targeting that deck's card grid instead of the full list.
+// When opened from the review screen, ?cardId=&decks=&learnahead= carry the
+// session context so the modal can refresh that same card after saving
+// instead of targeting the (absent, on that screen) card list/grid.
 func (h *Handler) EditForm(c *fiber.Ctx) error {
 	fact, err := h.service.GetFact(c.Context(), auth.UserID(c), c.Params("id"))
 	if err != nil {
@@ -233,10 +236,13 @@ func (h *Handler) EditForm(c *fiber.Ctx) error {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return respond.Partial(c, "components/card_edit", fiber.Map{
-		"Fact":       fact,
-		"HasReverse": hasReverse,
-		"Decks":      decks,
-		"DeckID":     c.Query("deck"),
+		"Fact":             fact,
+		"HasReverse":       hasReverse,
+		"Decks":            decks,
+		"DeckID":           c.Query("deck"),
+		"ReviewCardID":     c.Query("cardId"),
+		"ReviewDecks":      c.Query("decks"),
+		"ReviewLearnAhead": c.Query("learnahead") == "1",
 	})
 }
 

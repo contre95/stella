@@ -166,6 +166,38 @@ func (h *Handler) GradeCard(c *fiber.Ctx) error {
 	})
 }
 
+// Reload re-renders a specific card without advancing the queue — used to
+// refresh the on-screen card after editing it mid-review (see the cards edit
+// modal), so the edit doesn't consume a turn.
+func (h *Handler) Reload(c *fiber.Ctx) error {
+	deckFilter := c.Query("decks")
+	deckIDs, err := h.resolveDeckIDs(c, deckFilter)
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	learnAhead := c.Query("learnahead") == "1"
+
+	ci, err := h.service.CardByID(c.Context(), auth.UserID(c), c.Params("cardId"), deckIDs)
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return c.Render("partials/review_card", fiber.Map{
+		"Card":          ci.Card,
+		"Fact":          ci.Fact,
+		"Remaining":     ci.Remaining,
+		"DeckName":      ci.DeckName,
+		"DeckColor":     ci.DeckColor,
+		"DeckImage":     ci.DeckImage,
+		"DueLabel":      ci.DueLabel,
+		"DueTone":       ci.DueTone,
+		"DeckFilter":    deckFilter,
+		"LearnAhead":    learnAhead,
+		"Previews":      ci.Previews,
+		"AutoplayAudio": h.cfg.Get().Cards.AutoplayAudio,
+		"StartRevealed": true,
+	})
+}
+
 // Done serves GET /review/done — session complete page.
 func (h *Handler) Done(c *fiber.Ctx) error {
 	deckFilter := c.Query("decks")

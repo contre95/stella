@@ -7,5 +7,6 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	app.Get("/review", h.RenderSession)
 	app.Get("/review/pick", h.Pick)
 	app.Post("/review/:cardId/grade", h.GradeCard)
+	app.Get("/review/:cardId/reload", h.Reload)
 	app.Get("/review/done", h.Done)
 }
