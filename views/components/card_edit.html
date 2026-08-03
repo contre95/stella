@@ -71,9 +71,9 @@
         <textarea
           name="front"
           required
-          rows="2"
           placeholder="Question / prompt — Markdown works: # Title, **bold**, - list"
-          class="glass-input mt-1.5 w-full rounded-xl px-3 py-2 text-sm"
+          class="glass-input mt-1.5 min-h-[4.5rem] max-h-56 w-full resize-none overflow-y-auto rounded-xl px-3 py-2 text-sm"
+          _="on load or input set my.style.height to 'auto' then set my.style.height to my.scrollHeight + 'px'"
         >{{.Fact.Front}}</textarea>
       </label>
 
@@ -81,9 +81,9 @@
         <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Back</span>
         <textarea
           name="back"
-          rows="2"
           placeholder="Answer"
-          class="glass-input mt-1.5 w-full rounded-xl px-3 py-2 text-sm"
+          class="glass-input mt-1.5 min-h-[4.5rem] max-h-56 w-full resize-none overflow-y-auto rounded-xl px-3 py-2 text-sm"
+          _="on load or input set my.style.height to 'auto' then set my.style.height to my.scrollHeight + 'px'"
         >{{.Fact.Back}}</textarea>
       </label>
 
