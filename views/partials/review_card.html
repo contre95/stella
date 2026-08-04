@@ -90,7 +90,7 @@
               <img src="/images/{{$frontImg}}" alt="" class="max-h-[55vh] w-auto max-w-full rounded-lg object-contain pointer-events-none" />
             </div>
             {{end}}
-            <div class="md-content w-full text-center text-xl font-medium leading-relaxed text-gray-800 dark:text-gray-100 sm:text-2xl"
+            <div id="face-content-front" class="md-content w-full text-center text-xl font-medium leading-relaxed text-gray-800 dark:text-gray-100 sm:text-2xl"
                _="on load if my textContent.trim().length <= 3 set my style.fontSize to '6rem' set my style.lineHeight to '1'">
               {{if eq .Card.View "forward"}}{{md .Fact.Front}}{{else}}{{md .Fact.Back}}{{end}}
             </div>
@@ -111,6 +111,33 @@
           </div>
         </div>
         {{end}}
+        <button
+          type="button"
+          id="copy-front-btn"
+          title="Copy text"
+          class="absolute bottom-4 right-4 z-20 rounded-lg p-1.5 text-gray-400 hover:bg-pink-500/10 hover:text-pink-500 transition-colors dark:text-gray-500 dark:hover:text-pink-400"
+          _="on click
+               halt the event
+               set clone to #face-content-front.cloneNode(true)
+               repeat for r in clone.querySelectorAll('rt, rp') remove r end
+               set text to clone.textContent.trim()
+               if text is not ''
+                 call navigator.clipboard.writeText(text)
+                 add .hidden to <.copy-icon/> in me
+                 remove .hidden from <.check-icon/> in me
+                 wait 1.2s
+                 remove .hidden from <.copy-icon/> in me
+                 add .hidden to <.check-icon/> in me
+               end
+             end"
+        >
+          <svg class="copy-icon h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          <svg class="check-icon hidden h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+        </button>
       </div>
 
       <!-- Back face (answer) -->
@@ -136,7 +163,7 @@
               <img src="/images/{{$backImg}}" alt="" class="max-h-[55vh] w-auto max-w-full rounded-lg object-contain pointer-events-none" />
             </div>
             {{end}}
-            <div class="md-content w-full text-center text-xl font-medium leading-relaxed text-gray-900 dark:text-white sm:text-2xl"
+            <div id="face-content-back" class="md-content w-full text-center text-xl font-medium leading-relaxed text-gray-900 dark:text-white sm:text-2xl"
                _="on load if my textContent.trim().length <= 3 set my style.fontSize to '6rem' set my style.lineHeight to '1'">
               {{if eq .Card.View "forward"}}{{md .Fact.Back}}{{else}}{{md .Fact.Front}}{{end}}
             </div>
@@ -170,6 +197,33 @@
         >
           <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.862 4.487z" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          id="copy-back-btn"
+          title="Copy text"
+          class="absolute bottom-4 right-4 z-20 rounded-lg p-1.5 text-gray-400 hover:bg-pink-500/10 hover:text-pink-500 transition-colors dark:text-gray-500 dark:hover:text-pink-400"
+          _="on click
+               halt the event
+               set clone to #face-content-back.cloneNode(true)
+               repeat for r in clone.querySelectorAll('rt, rp') remove r end
+               set text to clone.textContent.trim()
+               if text is not ''
+                 call navigator.clipboard.writeText(text)
+                 add .hidden to <.copy-icon/> in me
+                 remove .hidden from <.check-icon/> in me
+                 wait 1.2s
+                 remove .hidden from <.copy-icon/> in me
+                 add .hidden to <.check-icon/> in me
+               end
+             end"
+        >
+          <svg class="copy-icon h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          <svg class="check-icon hidden h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
           </svg>
         </button>
         <button
@@ -243,6 +297,8 @@
     var gradeHelp   = document.getElementById('grade-help');
     var tapBtn      = document.getElementById('tap-to-reveal-btn');
     var showQBtn    = document.getElementById('show-question-btn'); // inside card-back
+    var copyFrontBtn = document.getElementById('copy-front-btn');
+    var copyBackBtn  = document.getElementById('copy-back-btn');
     var lblAgain    = document.getElementById('drag-label-again');
     var lblGood     = document.getElementById('drag-label-good');
     var lblUp       = document.getElementById('drag-label-up');
@@ -416,6 +472,11 @@
 
       if (!dragging || (Math.abs(dx) < 10 && Math.abs(dy) < 10)) {
         dragging = false;
+        if ((copyFrontBtn && copyFrontBtn.contains(touchStartTarget)) ||
+            (copyBackBtn && copyBackBtn.contains(touchStartTarget))) {
+          // Let the button's own click handler fire instead of flipping/revealing.
+          return;
+        }
         if (!revealed) {
           reveal();
           e.preventDefault();
