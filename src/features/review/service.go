@@ -346,12 +346,16 @@ type GroupPieChart struct {
 	Gradient template.CSS
 }
 
-// GroupBreakdown holds the three per-group pie charts shown on the
-// dashboard: due-today, studying, and not-memorised, each split by group.
+// GroupBreakdown holds the per-group pie charts shown on the dashboard:
+// due-today, studying, and not-memorised, each split by group. Studying also
+// has a StudyingWithRest variant that adds a grey slice for every other
+// active card, so the "Studying" chart can be toggled between "share of
+// what's studying" and "share of your whole collection".
 type GroupBreakdown struct {
-	DueToday     GroupPieChart
-	Studying     GroupPieChart
-	NotMemorized GroupPieChart
+	DueToday         GroupPieChart
+	Studying         GroupPieChart
+	StudyingWithRest GroupPieChart
+	NotMemorized     GroupPieChart
 }
 
 // groupPalette assigns a stable, distinguishable color to each group by
@@ -366,6 +370,11 @@ var groupPalette = []string{
 // real group, regardless of palette cycling.
 const ungroupedColor = "#9ca3af"
 
+// notStudyingColor marks the "rest of your cards" slice added to
+// StudyingWithRest — cards outside the study-enabled breakdown entirely, so
+// it stays visually distinct from ungroupedColor (a real, studying bucket).
+const notStudyingColor = "#d1d5db"
+
 // GroupBreakdown computes the due-today, studying, and not-memorized totals
 // scoped to each group's study-enabled decks, for the dashboard pie charts.
 func (s *Service) GroupBreakdown(ctx context.Context, userID string) (*GroupBreakdown, error) {
@@ -375,6 +384,10 @@ func (s *Service) GroupBreakdown(ctx context.Context, userID string) (*GroupBrea
 		return nil, err
 	}
 	decks, err := s.repo.ListDecks(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	totalActive, err := s.repo.ActiveCount(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -430,10 +443,20 @@ func (s *Service) GroupBreakdown(ctx context.Context, userID string) (*GroupBrea
 		}
 	}
 
+	studyingTotal := 0
+	for _, sl := range studying {
+		studyingTotal += sl.Count
+	}
+	studyingWithRest := append([]GroupSlice(nil), studying...)
+	if rest := totalActive - studyingTotal; rest > 0 {
+		studyingWithRest = append(studyingWithRest, GroupSlice{Label: "Not studying", Count: rest, Color: notStudyingColor})
+	}
+
 	return &GroupBreakdown{
-		DueToday:     buildPieChart(due),
-		Studying:     buildPieChart(studying),
-		NotMemorized: buildPieChart(notMemorized),
+		DueToday:         buildPieChart(due),
+		Studying:         buildPieChart(studying),
+		StudyingWithRest: buildPieChart(studyingWithRest),
+		NotMemorized:     buildPieChart(notMemorized),
 	}, nil
 }
 

@@ -205,7 +205,7 @@
         <h2 class="mb-3 text-sm font-semibold text-gray-700 dark:text-gray-200">By group</h2>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
           {{template "pie_chart" (dict "Title" "Due today" "Chart" .GroupCharts.DueToday)}}
-          {{template "pie_chart" (dict "Title" "Studying" "Chart" .GroupCharts.Studying)}}
+          {{template "studying_pie_chart" .GroupCharts}}
           {{template "pie_chart" (dict "Title" "Not memorized" "Chart" .GroupCharts.NotMemorized)}}
         </div>
       </div>
@@ -216,21 +216,50 @@
 {{define "pie_chart"}}
   <div class="glass rounded-2xl p-5">
     <h3 class="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{.Title}}</h3>
-    {{if .Chart.Total}}
-      <div class="flex items-center gap-4">
-        <div class="h-28 w-28 shrink-0 rounded-full" style="background: {{.Chart.Gradient}};"></div>
-        <ul class="min-w-0 flex-1 space-y-1.5">
-          {{range .Chart.Slices}}
-            <li class="flex items-center gap-2 text-xs" title="{{.Label}}: {{.Count}} ({{printf "%.0f" .Percent}}%)">
-              <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background: {{.Color}};"></span>
-              <span class="min-w-0 flex-1 truncate text-gray-600 dark:text-gray-300">{{.Label}}</span>
-              <span class="shrink-0 font-semibold text-gray-800 dark:text-gray-100">{{.Count}}</span>
-            </li>
-          {{end}}
-        </ul>
-      </div>
-    {{else}}
-      <p class="text-sm text-gray-400 dark:text-gray-500">Nothing here</p>
-    {{end}}
+    {{template "pie_chart_body" .Chart}}
   </div>
+{{end}}
+
+{{/* The Studying chart can be toggled between "share of what's studying"
+     (grouped only) and "share of your whole collection" (grouped + a grey
+     "Not studying" slice for the rest) — both pre-rendered server-side so
+     the toggle is a plain hyperscript visibility swap, no JS math. */}}
+{{define "studying_pie_chart"}}
+  <div class="glass rounded-2xl p-5">
+    <div class="mb-3 flex items-center justify-between gap-2">
+      <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Studying</h3>
+      {{if .StudyingWithRest.Total}}
+        <button type="button"
+                class="pie-toggle-btn shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold text-pink-600 transition-colors hover:bg-pink-500/10 dark:text-pink-400"
+                _="on click toggle .hidden on #studying-groups-only then toggle .hidden on #studying-with-rest">
+          Show total
+        </button>
+      {{end}}
+    </div>
+    <div id="studying-groups-only">
+      {{template "pie_chart_body" .Studying}}
+    </div>
+    <div id="studying-with-rest" class="hidden">
+      {{template "pie_chart_body" .StudyingWithRest}}
+    </div>
+  </div>
+{{end}}
+
+{{define "pie_chart_body"}}
+  {{if .Total}}
+    <div class="group-pie flex items-center gap-4">
+      <div class="pie-donut h-28 w-28 shrink-0 rounded-full" style="background: {{.Gradient}};"></div>
+      <ul class="min-w-0 flex-1 space-y-1.5">
+        {{range .Slices}}
+          <li class="flex items-center gap-2 text-xs" title="{{.Label}}: {{.Count}} ({{printf "%.0f" .Percent}}%)">
+            <span class="pie-dot h-2.5 w-2.5 shrink-0 rounded-full" style="background: {{.Color}};"></span>
+            <span class="min-w-0 flex-1 truncate text-gray-600 dark:text-gray-300">{{.Label}}</span>
+            <span class="shrink-0 font-semibold text-gray-800 dark:text-gray-100">{{.Count}}</span>
+          </li>
+        {{end}}
+      </ul>
+    </div>
+  {{else}}
+    <p class="text-sm text-gray-400 dark:text-gray-500">Nothing here</p>
+  {{end}}
 {{end}}

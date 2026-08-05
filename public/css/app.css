@@ -737,6 +737,20 @@ html.dark .swal2-cancel.swal2-styled:hover { background: rgba(255,255,255,0.13) 
   background-image: linear-gradient(to top, #555555, #888888) !important;
 }
 
+/* ── E-ink: dashboard group pie charts ───────────────────────── */
+/* The conic-gradient/dot colors are baked into inline styles server-side,
+   so (like .nav-icon) desaturate them with a filter rather than trying to
+   override every possible color. A thin ring keeps wedges/dots legible
+   against the flat white .eink card once box-shadow/blur are stripped. */
+.eink .group-pie { filter: grayscale(1) contrast(1.4); }
+.eink .pie-donut { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35); }
+.eink .pie-dot { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45); }
+.eink .pie-toggle-btn {
+  color: #1a1a1a !important;
+  border: 1px solid #1a1a1a;
+}
+.eink .pie-toggle-btn:hover { background: rgba(0, 0, 0, 0.05) !important; }
+
 /* ── E-ink: deck cards ──────────────────────────────────────── */
 .eink .deck-face {
   background: transparent !important;
