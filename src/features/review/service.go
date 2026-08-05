@@ -424,23 +424,19 @@ func (s *Service) GroupBreakdown(ctx context.Context, userID string) (*GroupBrea
 		if err != nil {
 			return nil, err
 		}
-		if dueCount > 0 {
-			due = append(due, GroupSlice{Label: b.label, Count: dueCount, Color: b.color})
-		}
+		due = append(due, GroupSlice{Label: b.label, Count: dueCount, Color: b.color})
+
 		studyCount, err := s.repo.FactCountForDecks(ctx, userID, b.ids)
 		if err != nil {
 			return nil, err
 		}
-		if studyCount > 0 {
-			studying = append(studying, GroupSlice{Label: b.label, Count: studyCount, Color: b.color})
-		}
+		studying = append(studying, GroupSlice{Label: b.label, Count: studyCount, Color: b.color})
+
 		newCount, err := s.repo.NonMemorisedCount(ctx, userID, b.ids)
 		if err != nil {
 			return nil, err
 		}
-		if newCount > 0 {
-			notMemorized = append(notMemorized, GroupSlice{Label: b.label, Count: newCount, Color: b.color})
-		}
+		notMemorized = append(notMemorized, GroupSlice{Label: b.label, Count: newCount, Color: b.color})
 	}
 
 	studyingTotal := 0

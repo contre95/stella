@@ -5,8 +5,8 @@
   </div>
 
   <!-- Stats grid -->
-  <dl class="grid grid-cols-3 gap-2 sm:gap-4 sm:grid-cols-3">
-    <div class="glass lift rounded-2xl p-3 sm:p-5">
+  <dl class="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-3">
+    <div class="glass lift col-span-2 flex flex-col rounded-2xl p-3 sm:col-span-1 sm:p-5">
       <dt class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
         Due today
         <span title="Retention cards overdue or scheduled for today." class="cursor-help text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-500 transition-colors">
@@ -20,8 +20,16 @@
         </svg>
         {{.DueToday}}
       </dd>
+      {{if and .GroupCharts .GroupCharts.DueToday.Total}}{{template "mini_pie" .GroupCharts.DueToday}}{{end}}
     </div>
-    <div class="glass lift rounded-2xl p-3 sm:p-5">
+    <div class="glass lift relative flex flex-col rounded-2xl p-3 sm:p-5">
+      {{if and .GroupCharts .GroupCharts.Studying.Total .GroupCharts.StudyingWithRest.Total}}
+        <button type="button"
+                class="pie-toggle-btn hidden shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold text-pink-600 transition-colors hover:bg-pink-500/10 dark:text-pink-400 sm:absolute sm:right-4 sm:top-4 sm:block"
+                _="on click toggle .hidden on #studying-groups-only then toggle .hidden on #studying-with-rest">
+          Show total
+        </button>
+      {{end}}
       <dt class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
         Studying
         <span title="Active cards across all your decks. The brain shows cards in study-enabled decks only." class="cursor-help text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-500 transition-colors">
@@ -29,12 +37,13 @@
         </span>
       </dt>
       <dd class="mt-2 flex items-center gap-1.5 text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-        <svg fill="#F09C9D" viewBox="0 -32 576 576" class="h-5 w-5 shrink-0" xmlns="http://www.w3.org/2000/svg"><path d="M208 0c-29.9 0-54.7 20.5-61.8 48.2-.8 0-1.4-.2-2.2-.2-35.3 0-64 28.7-64 64 0 4.8.6 9.5 1.7 14C52.5 138 32 166.6 32 200c0 12.6 3.2 24.3 8.3 34.9C16.3 248.7 0 274.3 0 304c0 33.3 20.4 61.9 49.4 73.9-.9 4.6-1.4 9.3-1.4 14.1 0 39.8 32.2 72 72 72 4.1 0 8.1-.5 12-1.2 9.6 28.5 36.2 49.2 68 49.2 39.8 0 72-32.2 72-72V64c0-35.3-28.7-64-64-64zm368 304c0-29.7-16.3-55.3-40.3-69.1 5.2-10.6 8.3-22.3 8.3-34.9 0-33.4-20.5-62-49.7-74 1-4.5 1.7-9.2 1.7-14 0-35.3-28.7-64-64-64-.8 0-1.5.2-2.2.2C422.7 20.5 397.9 0 368 0c-35.3 0-64 28.6-64 64v376c0 39.8 32.2 72 72 72 31.8 0 58.4-20.7 68-49.2 3.9.7 7.9 1.2 12 1.2 39.8 0 72-32.2 72-72 0-4.8-.5-9.5-1.4-14.1 29-12 49.4-40.6 49.4-73.9z"/></svg>
+        <svg fill="#F09C9D" viewBox="0 -32 576 576" class="h-6 w-6 shrink-0" xmlns="http://www.w3.org/2000/svg"><path d="M208 0c-29.9 0-54.7 20.5-61.8 48.2-.8 0-1.4-.2-2.2-.2-35.3 0-64 28.7-64 64 0 4.8.6 9.5 1.7 14C52.5 138 32 166.6 32 200c0 12.6 3.2 24.3 8.3 34.9C16.3 248.7 0 274.3 0 304c0 33.3 20.4 61.9 49.4 73.9-.9 4.6-1.4 9.3-1.4 14.1 0 39.8 32.2 72 72 72 4.1 0 8.1-.5 12-1.2 9.6 28.5 36.2 49.2 68 49.2 39.8 0 72-32.2 72-72V64c0-35.3-28.7-64-64-64zm368 304c0-29.7-16.3-55.3-40.3-69.1 5.2-10.6 8.3-22.3 8.3-34.9 0-33.4-20.5-62-49.7-74 1-4.5 1.7-9.2 1.7-14 0-35.3-28.7-64-64-64-.8 0-1.5.2-2.2.2C422.7 20.5 397.9 0 368 0c-35.3 0-64 28.6-64 64v376c0 39.8 32.2 72 72 72 31.8 0 58.4-20.7 68-49.2 3.9.7 7.9 1.2 12 1.2 39.8 0 72-32.2 72-72 0-4.8-.5-9.5-1.4-14.1 29-12 49.4-40.6 49.4-73.9z"/></svg>
         {{.StudyCards}}
       </dd>
       <dd class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{.TotalCards}} total</dd>
+      {{if and .GroupCharts .GroupCharts.Studying.Total}}<div class="hidden sm:mt-auto sm:block">{{template "mini_pie_toggle" .GroupCharts}}</div>{{end}}
     </div>
-    <div class="glass lift rounded-2xl p-3 sm:p-5">
+    <div class="glass lift flex flex-col rounded-2xl p-3 sm:p-5">
       <dt class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
         Not memorized
         <span title="Cards in study-enabled decks not yet committed to long-term memory (grade &lt; 2)." class="cursor-help text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-500 transition-colors">
@@ -50,6 +59,7 @@
       {{if gt .UnseenCards 0}}
       <dd class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{.UnseenCards}} unseen</dd>
       {{end}}
+      {{if and .GroupCharts .GroupCharts.NotMemorized.Total}}<div class="hidden sm:mt-auto sm:block">{{template "mini_pie" .GroupCharts.NotMemorized}}</div>{{end}}
     </div>
   </dl>
 
@@ -198,68 +208,46 @@
     </style>
   {{end}}
   </div>
-
-  {{if .GroupCharts}}
-    {{if or .GroupCharts.DueToday.Total .GroupCharts.Studying.Total .GroupCharts.NotMemorized.Total}}
-      <div class="mt-5">
-        <h2 class="mb-3 text-sm font-semibold text-gray-700 dark:text-gray-200">By group</h2>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
-          {{template "pie_chart" (dict "Title" "Due today" "Chart" .GroupCharts.DueToday)}}
-          {{template "studying_pie_chart" .GroupCharts}}
-          {{template "pie_chart" (dict "Title" "Not memorized" "Chart" .GroupCharts.NotMemorized)}}
-        </div>
-      </div>
-    {{end}}
-  {{end}}
 </div>
 
-{{define "pie_chart"}}
-  <div class="glass rounded-2xl p-5">
-    <h3 class="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{.Title}}</h3>
-    {{template "pie_chart_body" .Chart}}
+{{/* mini_pie is the compact by-group breakdown embedded directly under a
+     stat card's headline number, separated by a hairline divider. */}}
+{{define "mini_pie"}}
+  <div class="mt-auto border-t border-gray-200 pt-3 dark:border-white/10">
+    {{template "mini_pie_body" .}}
   </div>
 {{end}}
 
-{{/* The Studying chart can be toggled between "share of what's studying"
-     (grouped only) and "share of your whole collection" (grouped + a grey
-     "Not studying" slice for the rest) — both pre-rendered server-side so
-     the toggle is a plain hyperscript visibility swap, no JS math. */}}
-{{define "studying_pie_chart"}}
-  <div class="glass rounded-2xl p-5">
-    <div class="mb-3 flex items-center justify-between gap-2">
-      <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Studying</h3>
-      {{if .StudyingWithRest.Total}}
-        <button type="button"
-                class="pie-toggle-btn shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold text-pink-600 transition-colors hover:bg-pink-500/10 dark:text-pink-400"
-                _="on click toggle .hidden on #studying-groups-only then toggle .hidden on #studying-with-rest">
-          Show total
-        </button>
-      {{end}}
-    </div>
+{{/* mini_pie_toggle is mini_pie for the Studying card: it can be toggled
+     between "share of what's studying" (grouped only) and "share of your
+     whole collection" (grouped + a grey "Not studying" slice for the rest)
+     — both pre-rendered server-side so the toggle (the "Show total" button
+     in the card's top-right corner) is a plain hyperscript visibility swap,
+     no JS math. */}}
+{{define "mini_pie_toggle"}}
+  <div class="mt-auto border-t border-gray-200 pt-3 dark:border-white/10">
     <div id="studying-groups-only">
-      {{template "pie_chart_body" .Studying}}
+      {{template "mini_pie_body" .Studying}}
     </div>
     <div id="studying-with-rest" class="hidden">
-      {{template "pie_chart_body" .StudyingWithRest}}
+      {{template "mini_pie_body" .StudyingWithRest}}
     </div>
   </div>
 {{end}}
 
-{{define "pie_chart_body"}}
+{{define "mini_pie_body"}}
   {{if .Total}}
-    <div class="group-pie flex items-center gap-4">
-      <div class="pie-donut h-28 w-28 shrink-0 rounded-full" style="background: {{.Gradient}};"></div>
-      <ul class="min-w-0 flex-1 space-y-1.5">
+    <div class="group-pie flex items-center gap-2.5">
+      <div class="pie-donut h-12 w-12 sm:h-14 sm:w-14 shrink-0 rounded-full" style="background: {{.Gradient}};"></div>
+      <ul class="min-w-0 flex-1 max-h-[56px] space-y-1 overflow-y-auto pr-1">
         {{range .Slices}}
-          <li class="flex items-center gap-2 text-xs" title="{{.Label}}: {{.Count}} ({{printf "%.0f" .Percent}}%)">
-            <span class="pie-dot h-2.5 w-2.5 shrink-0 rounded-full" style="background: {{.Color}};"></span>
+          <li class="flex items-center gap-1.5 text-[11px]" title="{{.Label}}: {{.Count}} ({{printf "%.0f" .Percent}}%)">
+            <span class="pie-dot h-1.5 w-1.5 shrink-0 rounded-full" style="background: {{.Color}};"></span>
             <span class="min-w-0 flex-1 truncate text-gray-600 dark:text-gray-300">{{.Label}}</span>
-            <span class="shrink-0 font-semibold text-gray-800 dark:text-gray-100">{{.Count}}</span>
+            <span class="shrink-0 font-semibold text-gray-700 dark:text-gray-200">{{.Count}}</span>
           </li>
         {{end}}
       </ul>
     </div>
-  {{else}}
-    <p class="text-sm text-gray-400 dark:text-gray-500">Nothing here</p>
   {{end}}
 {{end}}
