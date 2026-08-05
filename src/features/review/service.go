@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"html/template"
+	"math"
 	"math/rand"
 	"sort"
 	"strings"
@@ -329,21 +329,24 @@ func (s *Service) Stats(ctx context.Context, userID string) (*Stats, error) {
 }
 
 // GroupSlice is one wedge of a per-group pie chart: a group's share of a
-// dashboard metric, plus the color it's drawn in.
+// dashboard metric, its color, and Path — a precomputed SVG <path> "d"
+// attribute drawing that wedge as a filled slice from the shared center, so
+// each slice is its own DOM node with a large hoverable fill area (unlike a
+// stroked ring, where only the thin stroke itself is hit-testable) —
+// independently styleable and carrying a native <title> tooltip, no JS.
 type GroupSlice struct {
 	Label   string
 	Count   int
 	Percent float64
 	Color   string
+	Path    string
 }
 
-// GroupPieChart is a metric broken down by group, pre-rendered as a CSS
-// conic-gradient string so the template needs no JS to draw it. Zero value
-// (Total == 0) means there's nothing to chart.
+// GroupPieChart is a metric broken down by group. Zero value (Total == 0)
+// means there's nothing to chart.
 type GroupPieChart struct {
-	Total    int
-	Slices   []GroupSlice
-	Gradient template.CSS
+	Total  int
+	Slices []GroupSlice
 }
 
 // GroupBreakdown holds the per-group pie charts shown on the dashboard:
@@ -456,8 +459,12 @@ func (s *Service) GroupBreakdown(ctx context.Context, userID string) (*GroupBrea
 	}, nil
 }
 
-// buildPieChart sorts slices largest-first, fills in each Percent, and
-// renders the whole set as a single conic-gradient() CSS value.
+// pieCX, pieCY, pieR define the shared coordinate space every wedge Path is
+// computed in; the template's <svg viewBox="0 0 36 36"> must match.
+const pieCX, pieCY, pieR = 18.0, 18.0, 16.0
+
+// buildPieChart sorts slices largest-first and fills in each one's Percent
+// and Path (an SVG wedge from the shared center, see pieSlicePath).
 func buildPieChart(slices []GroupSlice) GroupPieChart {
 	total := 0
 	for _, sl := range slices {
@@ -468,20 +475,41 @@ func buildPieChart(slices []GroupSlice) GroupPieChart {
 	}
 	sort.Slice(slices, func(i, j int) bool { return slices[i].Count > slices[j].Count })
 
-	parts := make([]string, 0, len(slices))
 	cum := 0
 	for i := range slices {
 		slices[i].Percent = float64(slices[i].Count) / float64(total) * 100
 		start := float64(cum) / float64(total) * 100
 		cum += slices[i].Count
 		end := float64(cum) / float64(total) * 100
-		parts = append(parts, fmt.Sprintf("%s %.3f%% %.3f%%", slices[i].Color, start, end))
+		slices[i].Path = pieSlicePath(pieCX, pieCY, pieR, start, end)
 	}
-	return GroupPieChart{
-		Total:    total,
-		Slices:   slices,
-		Gradient: template.CSS("conic-gradient(" + strings.Join(parts, ", ") + ")"),
+	return GroupPieChart{Total: total, Slices: slices}
+}
+
+// pieSlicePath returns the "d" attribute for a filled SVG wedge spanning
+// [startPct, endPct) of a circle centered at (cx, cy) with radius r, drawn
+// clockwise starting at 12 o'clock (matching the old conic-gradient's
+// default direction). A slice covering the whole circle can't be expressed
+// as one arc (its start and end points coincide), so that case draws a
+// plain full circle instead.
+func pieSlicePath(cx, cy, r, startPct, endPct float64) string {
+	if endPct-startPct >= 99.999 {
+		return fmt.Sprintf(
+			"M %.3f,%.3f A %.3f,%.3f 0 1,1 %.3f,%.3f A %.3f,%.3f 0 1,1 %.3f,%.3f Z",
+			cx, cy-r, r, r, cx, cy+r, r, r, cx, cy-r,
+		)
 	}
+	toPoint := func(pct float64) (float64, float64) {
+		angle := (pct*3.6 - 90) * math.Pi / 180
+		return cx + r*math.Cos(angle), cy + r*math.Sin(angle)
+	}
+	x1, y1 := toPoint(startPct)
+	x2, y2 := toPoint(endPct)
+	largeArc := 0
+	if endPct-startPct > 50 {
+		largeArc = 1
+	}
+	return fmt.Sprintf("M %.3f,%.3f L %.3f,%.3f A %.3f,%.3f 0 %d,1 %.3f,%.3f Z", cx, cy, x1, y1, r, r, largeArc, x2, y2)
 }
 
 // ForecastDay is one bar in the upcoming-reviews chart: how many cards fall

@@ -213,6 +213,24 @@ textarea.glass-input:focus {
 .audio-chip.playing .ac-play { display: none; }
 .audio-chip.playing .ac-pause { display: block; margin-left: 0; }
 
+/* ── Dashboard group pie charts ───────────────────────────────── */
+/* Each wedge is its own SVG <circle> stroke segment (see mini_pie_body in
+   dashboard.html), so it can pop outward from the shared center on hover —
+   a real per-slice highlight, no JS. transform-origin uses the donut's own
+   18,18 user-space coordinate (the viewBox center), not a CSS percentage. */
+.pie-slice {
+  transform-origin: 18px 18px;
+  transition: transform 0.15s ease, filter 0.15s ease, stroke-width 0.15s ease;
+}
+.pie-slice:hover {
+  transform: scale(1.08);
+  filter: brightness(1.12);
+  stroke-width: 5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pie-slice { transition: none; }
+}
+
 /* Read-aloud button: sits inline in running text at whatever font size
    .md-content happens to render at, so it's sized in em rather than the
    fixed rem sizes above. */
@@ -738,12 +756,13 @@ html.dark .swal2-cancel.swal2-styled:hover { background: rgba(255,255,255,0.13) 
 }
 
 /* ── E-ink: dashboard group pie charts ───────────────────────── */
-/* The conic-gradient/dot colors are baked into inline styles server-side,
-   so (like .nav-icon) desaturate them with a filter rather than trying to
-   override every possible color. A thin ring keeps wedges/dots legible
-   against the flat white .eink card once box-shadow/blur are stripped. */
+/* Slice/dot colors are set server-side (SVG stroke attrs, inline dot
+   backgrounds), so (like .nav-icon) desaturate them with a filter rather
+   than trying to override every possible color. A thin ring keeps the
+   donut legible against the flat white .eink card once box-shadow/blur
+   are stripped. */
 .eink .group-pie { filter: grayscale(1) contrast(1.4); }
-.eink .pie-donut { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35); }
+.eink .pie-chart { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35); }
 .eink .pie-dot { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45); }
 .eink .pie-toggle-btn {
   color: #1a1a1a !important;

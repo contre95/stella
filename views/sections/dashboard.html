@@ -235,14 +235,25 @@
   </div>
 {{end}}
 
+{{/* Each slice is its own filled SVG <path> wedge (precomputed server-side
+     by pieSlicePath, see service.go) — not a single conic-gradient div — so
+     it's independently hoverable over its whole fill area (not just a thin
+     stroke) and carries a native <title> tooltip. CSS pops the hovered
+     wedge outward from the shared center. No JS. */}}
 {{define "mini_pie_body"}}
   {{if .Total}}
-    <div class="group-pie flex items-center gap-2.5">
-      <div class="pie-donut h-12 w-12 sm:h-14 sm:w-14 shrink-0 rounded-full" style="background: {{.Gradient}};"></div>
-      <ul class="min-w-0 flex-1 max-h-[56px] space-y-1 overflow-y-auto pr-1">
+    <div class="group-pie flex items-center gap-3">
+      <svg viewBox="0 0 36 36" class="pie-chart h-16 w-16 sm:h-20 sm:w-20 shrink-0 rounded-full">
         {{range .Slices}}
-          <li class="flex items-center gap-1.5 text-[11px]" title="{{.Label}}: {{.Count}} ({{printf "%.0f" .Percent}}%)">
-            <span class="pie-dot h-1.5 w-1.5 shrink-0 rounded-full" style="background: {{.Color}};"></span>
+          {{if gt .Percent 0.0}}
+            <path class="pie-slice" d="{{.Path}}" fill="{{.Color}}"><title>{{.Label}}: {{.Count}} ({{printf "%.0f" .Percent}}%)</title></path>
+          {{end}}
+        {{end}}
+      </svg>
+      <ul class="min-w-0 flex-1 max-h-[76px] space-y-1.5 overflow-y-auto pr-1">
+        {{range .Slices}}
+          <li class="flex items-center gap-2 text-xs" title="{{.Label}}: {{.Count}} ({{printf "%.0f" .Percent}}%)">
+            <span class="pie-dot h-2 w-2 shrink-0 rounded-full" style="background: {{.Color}};"></span>
             <span class="min-w-0 flex-1 truncate text-gray-600 dark:text-gray-300">{{.Label}}</span>
             <span class="shrink-0 font-semibold text-gray-700 dark:text-gray-200">{{.Count}}</span>
           </li>
