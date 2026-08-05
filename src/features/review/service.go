@@ -962,12 +962,27 @@ func (s *Service) EnabledDeckIDs(ctx context.Context, userID string) ([]string, 
 	return s.repo.ListStudyEnabledDeckIDs(ctx, userID)
 }
 
+// DeckSummary is a minimal per-deck view used to break down a group/tag's
+// decks by study status in the study picker.
+type DeckSummary struct {
+	Name         string
+	StudyEnabled bool
+}
+
+// sortStudyFirst stable-sorts decks so study-enabled ones come first,
+// keeping their relative order otherwise — the picker lists "in study"
+// decks before greyed-out ones.
+func sortStudyFirst(decks []DeckSummary) {
+	sort.SliceStable(decks, func(i, j int) bool { return decks[i].StudyEnabled && !decks[j].StudyEnabled })
+}
+
 // GroupForPicker is one entry in the pre-session group selector.
 type GroupForPicker struct {
 	Group      *srs.Group // nil for the "ungrouped" synthetic entry
 	DeckIDs    string     // comma-joined IDs of study-enabled decks, used as the ?decks= param
 	TotalCount int        // total decks in the group
 	StudyCount int        // decks in the group with StudyEnabled=true
+	Decks      []DeckSummary
 }
 
 // GroupsForPicker returns named groups and an optional ungrouped entry, each
@@ -985,8 +1000,10 @@ func (s *Service) GroupsForPicker(ctx context.Context, userID string) (named []G
 
 	byGroupTotal := make(map[string]int)
 	byGroupStudy := make(map[string][]string)
+	byGroupDecks := make(map[string][]DeckSummary)
 	for _, d := range decks {
 		byGroupTotal[d.GroupID]++
+		byGroupDecks[d.GroupID] = append(byGroupDecks[d.GroupID], DeckSummary{Name: d.Name, StudyEnabled: d.StudyEnabled})
 		if d.StudyEnabled {
 			byGroupStudy[d.GroupID] = append(byGroupStudy[d.GroupID], d.ID)
 		}
@@ -995,20 +1012,26 @@ func (s *Service) GroupsForPicker(ctx context.Context, userID string) (named []G
 	named = make([]GroupForPicker, 0, len(groups))
 	for _, g := range groups {
 		studyIDs := byGroupStudy[g.ID]
+		groupDecks := byGroupDecks[g.ID]
+		sortStudyFirst(groupDecks)
 		named = append(named, GroupForPicker{
 			Group:      g,
 			DeckIDs:    strings.Join(studyIDs, ","),
 			TotalCount: byGroupTotal[g.ID],
 			StudyCount: len(studyIDs),
+			Decks:      groupDecks,
 		})
 	}
 
 	if total := byGroupTotal[""]; total > 0 {
 		studyIDs := byGroupStudy[""]
+		unDecks := byGroupDecks[""]
+		sortStudyFirst(unDecks)
 		ungrouped = &GroupForPicker{
 			DeckIDs:    strings.Join(studyIDs, ","),
 			TotalCount: total,
 			StudyCount: len(studyIDs),
+			Decks:      unDecks,
 		}
 	}
 
@@ -1021,6 +1044,7 @@ type TagForPicker struct {
 	DeckIDs    string // comma-joined IDs of study-enabled decks, used as the ?decks= param
 	TotalCount int    // total decks carrying the tag
 	StudyCount int    // decks carrying the tag with StudyEnabled=true
+	Decks      []DeckSummary
 }
 
 // TagsForPicker returns every tag paired with the IDs of its study-enabled
@@ -1035,9 +1059,9 @@ func (s *Service) TagsForPicker(ctx context.Context, userID string) ([]TagForPic
 	if err != nil {
 		return nil, err
 	}
-	studyEnabled := make(map[string]bool, len(decks))
+	deckByID := make(map[string]*srs.Deck, len(decks))
 	for _, d := range decks {
-		studyEnabled[d.ID] = d.StudyEnabled
+		deckByID[d.ID] = d
 	}
 
 	out := make([]TagForPicker, 0, len(tags))
@@ -1047,16 +1071,24 @@ func (s *Service) TagsForPicker(ctx context.Context, userID string) ([]TagForPic
 			return nil, err
 		}
 		studyIDs := make([]string, 0, len(ids))
+		summaries := make([]DeckSummary, 0, len(ids))
 		for _, id := range ids {
-			if studyEnabled[id] {
+			d := deckByID[id]
+			if d == nil {
+				continue
+			}
+			summaries = append(summaries, DeckSummary{Name: d.Name, StudyEnabled: d.StudyEnabled})
+			if d.StudyEnabled {
 				studyIDs = append(studyIDs, id)
 			}
 		}
+		sortStudyFirst(summaries)
 		out = append(out, TagForPicker{
 			Tag:        t,
 			DeckIDs:    strings.Join(studyIDs, ","),
 			TotalCount: len(ids),
 			StudyCount: len(studyIDs),
+			Decks:      summaries,
 		})
 	}
 	return out, nil
