@@ -243,7 +243,7 @@
 {{define "mini_pie_body"}}
   {{if .Total}}
     <div class="group-pie flex items-center gap-3">
-      <svg viewBox="0 0 36 36" class="pie-chart h-16 w-16 sm:h-20 sm:w-20 shrink-0 rounded-full">
+      <svg viewBox="0 0 36 36" class="pie-chart h-[4.5rem] w-[4.5rem] sm:h-24 sm:w-24 shrink-0 rounded-full">
         {{range .Slices}}
           {{if gt .Percent 0.0}}
             <path class="pie-slice" d="{{.Path}}" fill="{{.Color}}"><title>{{.Label}}: {{.Count}} ({{printf "%.0f" .Percent}}%)</title></path>
