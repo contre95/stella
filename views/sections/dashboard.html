@@ -20,7 +20,13 @@
         </svg>
         {{.DueToday}}
       </dd>
-      {{if and .GroupCharts .GroupCharts.DueToday.Total}}{{template "mini_pie" .GroupCharts.DueToday}}{{end}}
+      {{if and .GroupCharts .GroupCharts.DueToday.Total}}
+        {{template "mini_pie" .GroupCharts.DueToday}}
+      {{else if not .DueToday}}
+        <div class="mt-auto border-t border-gray-200 pt-3 dark:border-white/10">
+          <p class="text-xs text-gray-500 dark:text-gray-400">All caught up <span class="text-gradient font-semibold">✦</span> nothing due right now.</p>
+        </div>
+      {{end}}
     </div>
     <div class="glass lift relative flex flex-col rounded-2xl p-3 sm:p-5">
       {{if and .GroupCharts .GroupCharts.Studying.Total .GroupCharts.StudyingWithRest.Total}}

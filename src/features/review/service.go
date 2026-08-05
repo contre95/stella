@@ -364,9 +364,8 @@ type GroupBreakdown struct {
 // groupPalette assigns a stable, distinguishable color to each group by
 // list order; it cycles if there are more groups than colors.
 var groupPalette = []string{
-	"#ec4899", "#f97316", "#eab308", "#22c55e",
-	"#06b6d4", "#6366f1", "#a855f7", "#f43f5e",
-	"#84cc16", "#0ea5e9",
+	"#4EB3D5", "#6280B5", "#6D5189", "#9FD186",
+	"#C75353", "#F4C2D2", "#F18451",
 }
 
 // ungroupedColor marks the synthetic "Ungrouped" bucket distinctly from any
