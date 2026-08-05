@@ -221,6 +221,7 @@
         card.classList.toggle("is-flipped");
         card.setAttribute("aria-pressed", card.classList.contains("is-flipped"));
       }
+      window.stellaToggleFlip = toggleFlip;
       document.addEventListener("click", function (e) {
         var card = e.target.closest && e.target.closest(".fact-card");
         if (!card) return;

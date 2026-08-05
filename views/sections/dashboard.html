@@ -65,35 +65,9 @@
 
   <!-- CTA -->
   {{if gt .DueToday 0}}
-    <a
-      href="/review"
-      hx-get="/review"
-      hx-target="#contenido"
-      hx-swap="outerHTML"
-      hx-push-url="true"
-      class="btn-primary mt-5 flex items-center justify-center gap-2 rounded-2xl px-6 py-3.5 text-sm font-semibold"
-    >
-      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-        <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-      Start review · {{.DueToday}} card{{if gt .DueToday 1}}s{{end}} due
-    </a>
+    {{template "study_cta" (dict "Label" (printf "Start review · %d card%s due" .DueToday (pluralS .DueToday)) "StudyGroups" .StudyGroups)}}
   {{else if gt .NewCards 0}}
-    <a
-      href="/review"
-      hx-get="/review"
-      hx-target="#contenido"
-      hx-swap="outerHTML"
-      hx-push-url="true"
-      class="btn-primary mt-5 flex items-center justify-center gap-2 rounded-2xl px-6 py-3.5 text-sm font-semibold"
-    >
-      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-        <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-      Start review · {{.NewCards}} new card{{if gt .NewCards 1}}s{{end}} to learn
-    </a>
+    {{template "study_cta" (dict "Label" (printf "Start review · %d new card%s to learn" .NewCards (pluralS .NewCards)) "StudyGroups" .StudyGroups)}}
   {{else if gt .TotalCards 0}}
     <div class="glass mt-5 rounded-2xl p-8 text-center">
       <p class="text-sm text-gray-500 dark:text-gray-400">All caught up — nothing due right now. <span class="text-gradient font-semibold">✦</span></p>
@@ -209,6 +183,54 @@
   {{end}}
   </div>
 </div>
+
+{{/* study_cta renders the dashboard's main "Start review" button. When there
+     are groups with study-enabled decks, a chevron toggle next to it opens a
+     dropdown to start a review scoped to just one group instead of every
+     enabled deck. */}}
+{{define "study_cta"}}
+  <div class="relative mt-5 flex gap-2">
+    <a
+      href="/review"
+      hx-get="/review"
+      hx-target="#contenido"
+      hx-swap="outerHTML"
+      hx-push-url="true"
+      class="btn-primary flex flex-1 items-center justify-center gap-2 rounded-2xl px-6 py-3.5 text-sm font-semibold"
+    >
+      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+        <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      {{.Label}}
+    </a>
+    {{if .StudyGroups}}
+      <div class="relative shrink-0">
+        <button type="button"
+                aria-label="Study a specific group"
+                class="btn-primary flex h-full items-center justify-center rounded-2xl px-3.5"
+                _="on click toggle .hidden on #dashboard-group-menu then toggle .rotate-180 on the first <svg/> in me">
+          <svg class="h-4 w-4 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        <div id="dashboard-group-menu" class="hidden absolute right-0 z-10 mt-2 w-64 space-y-1 rounded-2xl glass p-2 shadow-lg">
+          {{range .StudyGroups}}
+            <a href="/review?decks={{.DeckIDs}}"
+               hx-get="/review?decks={{.DeckIDs}}"
+               hx-target="#contenido"
+               hx-swap="outerHTML"
+               hx-push-url="true"
+               class="flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm transition-colors hover:bg-white/80 dark:hover:bg-white/10">
+              <span class="truncate font-medium text-gray-900 dark:text-white">{{.Group.Name}}</span>
+              <span class="shrink-0 text-xs text-gray-400">{{.StudyCount}} deck{{if ne .StudyCount 1}}s{{end}}</span>
+            </a>
+          {{end}}
+        </div>
+      </div>
+    {{end}}
+  </div>
+{{end}}
 
 {{/* mini_pie is the compact by-group breakdown embedded directly under a
      stat card's headline number, separated by a hairline divider. */}}

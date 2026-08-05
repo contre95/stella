@@ -33,6 +33,12 @@ func NewServer(cm *config.Manager, authSvc *auth.Service, registrars ...RouteReg
 	engine.AddFunc("add", func(a, b int) int { return a + b })
 	engine.AddFunc("sub", func(a, b int) int { return a - b })
 	engine.AddFunc("dict", dict)
+	engine.AddFunc("pluralS", func(n int) string {
+		if n == 1 {
+			return ""
+		}
+		return "s"
+	})
 	engine.AddFunc("md", MarkdownHTML)
 
 	app := fiber.New(fiber.Config{

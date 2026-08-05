@@ -41,6 +41,17 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 		slog.Error("dashboard group breakdown", "err", err)
 		groupBreakdown = &review.GroupBreakdown{}
 	}
+	groups, _, err := h.reviewSvc.GroupsForPicker(c.Context(), auth.UserID(c))
+	if err != nil {
+		slog.Error("dashboard groups for picker", "err", err)
+		groups = nil
+	}
+	studyGroups := make([]review.GroupForPicker, 0, len(groups))
+	for _, g := range groups {
+		if g.StudyCount > 0 {
+			studyGroups = append(studyGroups, g)
+		}
+	}
 	return respond.Section(c, "dashboard", fiber.Map{
 		"DueToday":    stats.DueToday,
 		"TotalCards":  stats.TotalCards,
@@ -50,6 +61,7 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 		"Forecast":    forecast,
 		"Heatmap":     heatmap,
 		"GroupCharts": groupBreakdown,
+		"StudyGroups": studyGroups,
 	})
 }
 
