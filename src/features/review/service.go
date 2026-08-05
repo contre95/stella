@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html/template"
 	"math/rand"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -324,6 +326,143 @@ func (s *Service) Stats(ctx context.Context, userID string) (*Stats, error) {
 		return nil, err
 	}
 	return &Stats{DueToday: due, TotalCards: total, StudyCards: studyCards, NewCards: newCards, UnseenCards: unseenCards, DeckCount: len(decks)}, nil
+}
+
+// GroupSlice is one wedge of a per-group pie chart: a group's share of a
+// dashboard metric, plus the color it's drawn in.
+type GroupSlice struct {
+	Label   string
+	Count   int
+	Percent float64
+	Color   string
+}
+
+// GroupPieChart is a metric broken down by group, pre-rendered as a CSS
+// conic-gradient string so the template needs no JS to draw it. Zero value
+// (Total == 0) means there's nothing to chart.
+type GroupPieChart struct {
+	Total    int
+	Slices   []GroupSlice
+	Gradient template.CSS
+}
+
+// GroupBreakdown holds the three per-group pie charts shown on the
+// dashboard: due-today, studying, and not-memorised, each split by group.
+type GroupBreakdown struct {
+	DueToday     GroupPieChart
+	Studying     GroupPieChart
+	NotMemorized GroupPieChart
+}
+
+// groupPalette assigns a stable, distinguishable color to each group by
+// list order; it cycles if there are more groups than colors.
+var groupPalette = []string{
+	"#ec4899", "#f97316", "#eab308", "#22c55e",
+	"#06b6d4", "#6366f1", "#a855f7", "#f43f5e",
+	"#84cc16", "#0ea5e9",
+}
+
+// ungroupedColor marks the synthetic "Ungrouped" bucket distinctly from any
+// real group, regardless of palette cycling.
+const ungroupedColor = "#9ca3af"
+
+// GroupBreakdown computes the due-today, studying, and not-memorized totals
+// scoped to each group's study-enabled decks, for the dashboard pie charts.
+func (s *Service) GroupBreakdown(ctx context.Context, userID string) (*GroupBreakdown, error) {
+	now := s.scheduler.AdjustedNow(s.scheduler.Now())
+	groups, err := s.repo.ListGroups(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	decks, err := s.repo.ListDecks(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	byGroup := make(map[string][]string)
+	for _, d := range decks {
+		if d.StudyEnabled {
+			byGroup[d.GroupID] = append(byGroup[d.GroupID], d.ID)
+		}
+	}
+
+	type bucket struct {
+		label string
+		color string
+		ids   []string
+	}
+	buckets := make([]bucket, 0, len(groups)+1)
+	for i, g := range groups {
+		buckets = append(buckets, bucket{label: g.Name, color: groupPalette[i%len(groupPalette)], ids: byGroup[g.ID]})
+	}
+	if ids := byGroup[""]; len(ids) > 0 {
+		buckets = append(buckets, bucket{label: "Ungrouped", color: ungroupedColor, ids: ids})
+	}
+
+	due := make([]GroupSlice, 0, len(buckets))
+	studying := make([]GroupSlice, 0, len(buckets))
+	notMemorized := make([]GroupSlice, 0, len(buckets))
+
+	for _, b := range buckets {
+		if len(b.ids) == 0 {
+			continue
+		}
+		dueCount, err := s.repo.ScheduledCount(ctx, userID, now, b.ids)
+		if err != nil {
+			return nil, err
+		}
+		if dueCount > 0 {
+			due = append(due, GroupSlice{Label: b.label, Count: dueCount, Color: b.color})
+		}
+		studyCount, err := s.repo.FactCountForDecks(ctx, userID, b.ids)
+		if err != nil {
+			return nil, err
+		}
+		if studyCount > 0 {
+			studying = append(studying, GroupSlice{Label: b.label, Count: studyCount, Color: b.color})
+		}
+		newCount, err := s.repo.NonMemorisedCount(ctx, userID, b.ids)
+		if err != nil {
+			return nil, err
+		}
+		if newCount > 0 {
+			notMemorized = append(notMemorized, GroupSlice{Label: b.label, Count: newCount, Color: b.color})
+		}
+	}
+
+	return &GroupBreakdown{
+		DueToday:     buildPieChart(due),
+		Studying:     buildPieChart(studying),
+		NotMemorized: buildPieChart(notMemorized),
+	}, nil
+}
+
+// buildPieChart sorts slices largest-first, fills in each Percent, and
+// renders the whole set as a single conic-gradient() CSS value.
+func buildPieChart(slices []GroupSlice) GroupPieChart {
+	total := 0
+	for _, sl := range slices {
+		total += sl.Count
+	}
+	if total == 0 {
+		return GroupPieChart{}
+	}
+	sort.Slice(slices, func(i, j int) bool { return slices[i].Count > slices[j].Count })
+
+	parts := make([]string, 0, len(slices))
+	cum := 0
+	for i := range slices {
+		slices[i].Percent = float64(slices[i].Count) / float64(total) * 100
+		start := float64(cum) / float64(total) * 100
+		cum += slices[i].Count
+		end := float64(cum) / float64(total) * 100
+		parts = append(parts, fmt.Sprintf("%s %.3f%% %.3f%%", slices[i].Color, start, end))
+	}
+	return GroupPieChart{
+		Total:    total,
+		Slices:   slices,
+		Gradient: template.CSS("conic-gradient(" + strings.Join(parts, ", ") + ")"),
+	}
 }
 
 // ForecastDay is one bar in the upcoming-reviews chart: how many cards fall
@@ -825,13 +964,15 @@ func (s *Service) EnabledDeckIDs(ctx context.Context, userID string) ([]string, 
 
 // GroupForPicker is one entry in the pre-session group selector.
 type GroupForPicker struct {
-	Group     *srs.Group // nil for the "ungrouped" synthetic entry
-	DeckIDs   string     // comma-joined deck IDs, used as the ?decks= param
-	DeckCount int
+	Group      *srs.Group // nil for the "ungrouped" synthetic entry
+	DeckIDs    string     // comma-joined IDs of study-enabled decks, used as the ?decks= param
+	TotalCount int        // total decks in the group
+	StudyCount int        // decks in the group with StudyEnabled=true
 }
 
 // GroupsForPicker returns named groups and an optional ungrouped entry, each
-// paired with their deck IDs. Used by the study-picker screen.
+// paired with the IDs of their study-enabled decks. Used by the study-picker
+// screen, which studies only "in study" decks when a group is picked.
 func (s *Service) GroupsForPicker(ctx context.Context, userID string) (named []GroupForPicker, ungrouped *GroupForPicker, err error) {
 	groups, err := s.repo.ListGroups(ctx, userID)
 	if err != nil {
@@ -842,25 +983,32 @@ func (s *Service) GroupsForPicker(ctx context.Context, userID string) (named []G
 		return nil, nil, err
 	}
 
-	byGroup := make(map[string][]string)
+	byGroupTotal := make(map[string]int)
+	byGroupStudy := make(map[string][]string)
 	for _, d := range decks {
-		byGroup[d.GroupID] = append(byGroup[d.GroupID], d.ID)
+		byGroupTotal[d.GroupID]++
+		if d.StudyEnabled {
+			byGroupStudy[d.GroupID] = append(byGroupStudy[d.GroupID], d.ID)
+		}
 	}
 
 	named = make([]GroupForPicker, 0, len(groups))
 	for _, g := range groups {
-		ids := byGroup[g.ID]
+		studyIDs := byGroupStudy[g.ID]
 		named = append(named, GroupForPicker{
-			Group:     g,
-			DeckIDs:   strings.Join(ids, ","),
-			DeckCount: len(ids),
+			Group:      g,
+			DeckIDs:    strings.Join(studyIDs, ","),
+			TotalCount: byGroupTotal[g.ID],
+			StudyCount: len(studyIDs),
 		})
 	}
 
-	if unids := byGroup[""]; len(unids) > 0 {
+	if total := byGroupTotal[""]; total > 0 {
+		studyIDs := byGroupStudy[""]
 		ungrouped = &GroupForPicker{
-			DeckIDs:   strings.Join(unids, ","),
-			DeckCount: len(unids),
+			DeckIDs:    strings.Join(studyIDs, ","),
+			TotalCount: total,
+			StudyCount: len(studyIDs),
 		}
 	}
 
@@ -869,28 +1017,46 @@ func (s *Service) GroupsForPicker(ctx context.Context, userID string) (named []G
 
 // TagForPicker is one entry in the pre-session tag selector.
 type TagForPicker struct {
-	Tag       *srs.Tag
-	DeckIDs   string // comma-joined deck IDs, used as the ?decks= param
-	DeckCount int
+	Tag        *srs.Tag
+	DeckIDs    string // comma-joined IDs of study-enabled decks, used as the ?decks= param
+	TotalCount int    // total decks carrying the tag
+	StudyCount int    // decks carrying the tag with StudyEnabled=true
 }
 
-// TagsForPicker returns every tag paired with the IDs of the decks carrying
-// it. Used by the study-picker screen.
+// TagsForPicker returns every tag paired with the IDs of its study-enabled
+// decks. Used by the study-picker screen, which studies only "in study"
+// decks when a tag is picked.
 func (s *Service) TagsForPicker(ctx context.Context, userID string) ([]TagForPicker, error) {
 	tags, err := s.repo.ListTags(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
+	decks, err := s.repo.ListDecks(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	studyEnabled := make(map[string]bool, len(decks))
+	for _, d := range decks {
+		studyEnabled[d.ID] = d.StudyEnabled
+	}
+
 	out := make([]TagForPicker, 0, len(tags))
 	for _, t := range tags {
 		ids, err := s.repo.DeckIDsByTag(ctx, userID, t.ID)
 		if err != nil {
 			return nil, err
 		}
+		studyIDs := make([]string, 0, len(ids))
+		for _, id := range ids {
+			if studyEnabled[id] {
+				studyIDs = append(studyIDs, id)
+			}
+		}
 		out = append(out, TagForPicker{
-			Tag:       t,
-			DeckIDs:   strings.Join(ids, ","),
-			DeckCount: len(ids),
+			Tag:        t,
+			DeckIDs:    strings.Join(studyIDs, ","),
+			TotalCount: len(ids),
+			StudyCount: len(studyIDs),
 		})
 	}
 	return out, nil

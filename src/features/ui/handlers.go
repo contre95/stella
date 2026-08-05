@@ -36,6 +36,11 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 		slog.Error("dashboard heatmap", "err", err)
 		heatmap = nil
 	}
+	groupBreakdown, err := h.reviewSvc.GroupBreakdown(c.Context(), auth.UserID(c))
+	if err != nil {
+		slog.Error("dashboard group breakdown", "err", err)
+		groupBreakdown = &review.GroupBreakdown{}
+	}
 	return respond.Section(c, "dashboard", fiber.Map{
 		"DueToday":    stats.DueToday,
 		"TotalCards":  stats.TotalCards,
@@ -44,6 +49,7 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 		"UnseenCards": stats.UnseenCards,
 		"Forecast":    forecast,
 		"Heatmap":     heatmap,
+		"GroupCharts": groupBreakdown,
 	})
 }
 

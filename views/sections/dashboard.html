@@ -198,4 +198,39 @@
     </style>
   {{end}}
   </div>
+
+  {{if .GroupCharts}}
+    {{if or .GroupCharts.DueToday.Total .GroupCharts.Studying.Total .GroupCharts.NotMemorized.Total}}
+      <div class="mt-5">
+        <h2 class="mb-3 text-sm font-semibold text-gray-700 dark:text-gray-200">By group</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
+          {{template "pie_chart" (dict "Title" "Due today" "Chart" .GroupCharts.DueToday)}}
+          {{template "pie_chart" (dict "Title" "Studying" "Chart" .GroupCharts.Studying)}}
+          {{template "pie_chart" (dict "Title" "Not memorized" "Chart" .GroupCharts.NotMemorized)}}
+        </div>
+      </div>
+    {{end}}
+  {{end}}
 </div>
+
+{{define "pie_chart"}}
+  <div class="glass rounded-2xl p-5">
+    <h3 class="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{.Title}}</h3>
+    {{if .Chart.Total}}
+      <div class="flex items-center gap-4">
+        <div class="h-28 w-28 shrink-0 rounded-full" style="background: {{.Chart.Gradient}};"></div>
+        <ul class="min-w-0 flex-1 space-y-1.5">
+          {{range .Chart.Slices}}
+            <li class="flex items-center gap-2 text-xs" title="{{.Label}}: {{.Count}} ({{printf "%.0f" .Percent}}%)">
+              <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background: {{.Color}};"></span>
+              <span class="min-w-0 flex-1 truncate text-gray-600 dark:text-gray-300">{{.Label}}</span>
+              <span class="shrink-0 font-semibold text-gray-800 dark:text-gray-100">{{.Count}}</span>
+            </li>
+          {{end}}
+        </ul>
+      </div>
+    {{else}}
+      <p class="text-sm text-gray-400 dark:text-gray-500">Nothing here</p>
+    {{end}}
+  </div>
+{{end}}
