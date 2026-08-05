@@ -6,6 +6,7 @@
 
   <!-- Stats grid -->
   <dl class="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-3">
+    {{if gt .DueToday 0}}
     <div class="glass lift col-span-2 flex flex-col rounded-2xl p-3 sm:col-span-1 sm:p-5">
       <dt class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
         Due today
@@ -20,14 +21,15 @@
         </svg>
         {{.DueToday}}
       </dd>
-      {{if and .GroupCharts .GroupCharts.DueToday.Total}}
-        {{template "mini_pie" .GroupCharts.DueToday}}
-      {{else if not .DueToday}}
-        <div class="mt-auto border-t border-gray-200 pt-3 dark:border-white/10">
-          <p class="text-xs text-gray-500 dark:text-gray-400">All caught up <span class="text-gradient font-semibold">✦</span> nothing due right now.</p>
-        </div>
-      {{end}}
+      {{if and .GroupCharts .GroupCharts.DueToday.Total}}{{template "mini_pie" .GroupCharts.DueToday}}{{end}}
     </div>
+    {{else}}
+    <div class="glass lift col-span-2 flex flex-col items-center justify-center gap-1.5 rounded-2xl p-4 text-center sm:col-span-1 sm:p-5">
+      <span class="text-5xl leading-none" role="img" aria-label="Brain">🧠</span>
+      <p class="text-sm font-bold text-gray-800 dark:text-white">All caught up!</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400">Nothing due today <span class="text-gradient font-semibold">✦</span></p>
+    </div>
+    {{end}}
     <div class="glass lift relative flex flex-col rounded-2xl p-3 sm:p-5">
       {{if and .GroupCharts .GroupCharts.Studying.Total .GroupCharts.StudyingWithRest.Total}}
         <button type="button"
