@@ -103,10 +103,16 @@
           <div class="flex flex-col items-center gap-1.5">
             <div class="flex h-24 w-full items-end">
               <div
-                class="w-full rounded-t-md bg-gradient-to-t from-pink-500 to-pink-300"
+                class="flex w-full flex-col-reverse overflow-hidden rounded-t-md bg-gray-200 dark:bg-white/10"
                 style="height: {{.Percent}}%; min-height: 3px;"
                 title="{{.Count}} due"
-              ></div>
+              >
+                {{range .Segments}}
+                  {{if gt .Percent 0.0}}
+                    <div style="height: {{.Percent}}%; background: {{.Color}};" title="{{.Label}}: {{.Count}}"></div>
+                  {{end}}
+                {{end}}
+              </div>
             </div>
             <span class="text-xs font-bold text-gray-800 dark:text-gray-100">{{.Count}}</span>
             <span class="text-[10px] uppercase tracking-wide text-gray-400">{{.Label}}</span>

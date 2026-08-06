@@ -377,19 +377,24 @@ const ungroupedColor = "#9ca3af"
 // it stays visually distinct from ungroupedColor (a real, studying bucket).
 const notStudyingColor = "#d1d5db"
 
-// GroupBreakdown computes the due-today, studying, and not-memorized totals
-// scoped to each group's study-enabled decks, for the dashboard pie charts.
-func (s *Service) GroupBreakdown(ctx context.Context, userID string) (*GroupBreakdown, error) {
-	now := s.scheduler.AdjustedNow(s.scheduler.Now())
+// groupBucket is a group's study-enabled deck IDs paired with its display
+// label and palette color, shared by GroupBreakdown and Forecast so both
+// attribute per-group counts using the same buckets and colors.
+type groupBucket struct {
+	label string
+	color string
+	ids   []string
+}
+
+// groupBuckets lists each real group (color from groupPalette, cycled by
+// list order) plus a synthetic "Ungrouped" bucket for study-enabled decks
+// outside any group, in that order.
+func (s *Service) groupBuckets(ctx context.Context, userID string) ([]groupBucket, error) {
 	groups, err := s.repo.ListGroups(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	decks, err := s.repo.ListDecks(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	totalActive, err := s.repo.ActiveCount(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -401,17 +406,27 @@ func (s *Service) GroupBreakdown(ctx context.Context, userID string) (*GroupBrea
 		}
 	}
 
-	type bucket struct {
-		label string
-		color string
-		ids   []string
-	}
-	buckets := make([]bucket, 0, len(groups)+1)
+	buckets := make([]groupBucket, 0, len(groups)+1)
 	for i, g := range groups {
-		buckets = append(buckets, bucket{label: g.Name, color: groupPalette[i%len(groupPalette)], ids: byGroup[g.ID]})
+		buckets = append(buckets, groupBucket{label: g.Name, color: groupPalette[i%len(groupPalette)], ids: byGroup[g.ID]})
 	}
 	if ids := byGroup[""]; len(ids) > 0 {
-		buckets = append(buckets, bucket{label: "Ungrouped", color: ungroupedColor, ids: ids})
+		buckets = append(buckets, groupBucket{label: "Ungrouped", color: ungroupedColor, ids: ids})
+	}
+	return buckets, nil
+}
+
+// GroupBreakdown computes the due-today, studying, and not-memorized totals
+// scoped to each group's study-enabled decks, for the dashboard pie charts.
+func (s *Service) GroupBreakdown(ctx context.Context, userID string) (*GroupBreakdown, error) {
+	now := s.scheduler.AdjustedNow(s.scheduler.Now())
+	buckets, err := s.groupBuckets(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	totalActive, err := s.repo.ActiveCount(ctx, userID)
+	if err != nil {
+		return nil, err
 	}
 
 	due := make([]GroupSlice, 0, len(buckets))
@@ -511,62 +526,103 @@ func pieSlicePath(cx, cy, r, startPct, endPct float64) string {
 	return fmt.Sprintf("M %.3f,%.3f L %.3f,%.3f A %.3f,%.3f 0 %d,1 %.3f,%.3f Z", cx, cy, x1, y1, r, r, largeArc, x2, y2)
 }
 
-// ForecastDay is one bar in the upcoming-reviews chart: how many cards fall
-// due on that day, plus a 0–100 height relative to the busiest day.
-type ForecastDay struct {
+// ForecastSegment is one group's contribution to a day's forecast bar —
+// mirrors GroupSlice, but Percent is the segment's share of that day's own
+// total (for stacking within the bar), not a share of a grand total.
+type ForecastSegment struct {
 	Label   string
 	Count   int
-	Percent int
+	Percent float64
+	Color   string
+}
+
+// ForecastDay is one bar in the upcoming-reviews chart: how many cards fall
+// due on that day, a 0–100 height relative to the busiest day, and that
+// count's breakdown by group (Segments) for a stacked, color-coded bar —
+// same groups and colors as the dashboard's pie charts (see groupBuckets).
+type ForecastDay struct {
+	Label    string
+	Count    int
+	Percent  int
+	Segments []ForecastSegment
 }
 
 // Forecast returns the number of cards due today and on each of the following
-// days (across all decks), for the dashboard's upcoming-reviews chart. Today's
-// bucket includes anything already due or overdue; later buckets group retention
-// cards by their scheduled day. days must be >= 1.
+// days, broken down by group, for the dashboard's upcoming-reviews chart.
+// Today's bucket includes anything already due or overdue; later buckets
+// group retention cards by their scheduled day. days must be >= 1.
 func (s *Service) Forecast(ctx context.Context, userID string, days int) ([]ForecastDay, error) {
 	if days < 1 {
 		days = 1
 	}
 	now := s.scheduler.AdjustedNow(s.scheduler.Now())
 
-	enabledIDs, err := s.repo.ListStudyEnabledDeckIDs(ctx, userID)
+	buckets, err := s.groupBuckets(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	counts := make([]int, days)
-	due, err := s.repo.ScheduledCount(ctx, userID, now, enabledIDs)
-	if err != nil {
-		return nil, err
+	// counts[day][bucket] is that bucket's card count on that day.
+	counts := make([][]int, days)
+	for i := range counts {
+		counts[i] = make([]int, len(buckets))
 	}
-	counts[0] = due
 
-	// All retention cards scheduled in the future, bucketed by day offset.
-	future, err := s.repo.CardsLearnAhead(ctx, userID, now, "next_rep", -1, enabledIDs)
-	if err != nil {
-		return nil, err
-	}
-	for _, c := range future {
-		day := int((c.NextRep-now)/srs.DAY) + 1
-		if day >= 1 && day < days {
-			counts[day]++
+	for j, b := range buckets {
+		if len(b.ids) == 0 {
+			continue
+		}
+		due, err := s.repo.ScheduledCount(ctx, userID, now, b.ids)
+		if err != nil {
+			return nil, err
+		}
+		counts[0][j] = due
+
+		// All retention cards scheduled in the future, bucketed by day offset.
+		future, err := s.repo.CardsLearnAhead(ctx, userID, now, "next_rep", -1, b.ids)
+		if err != nil {
+			return nil, err
+		}
+		for _, c := range future {
+			day := int((c.NextRep-now)/srs.DAY) + 1
+			if day >= 1 && day < days {
+				counts[day][j]++
+			}
 		}
 	}
 
+	dayTotals := make([]int, days)
 	max := 1
-	for _, n := range counts {
-		if n > max {
-			max = n
+	for i, dayCounts := range counts {
+		for _, n := range dayCounts {
+			dayTotals[i] += n
+		}
+		if dayTotals[i] > max {
+			max = dayTotals[i]
 		}
 	}
 
 	wall := s.scheduler.Now()
 	out := make([]ForecastDay, days)
-	for i := range counts {
+	for i, dayCounts := range counts {
+		segments := make([]ForecastSegment, 0, len(buckets))
+		for j, b := range buckets {
+			if dayCounts[j] == 0 {
+				continue
+			}
+			segments = append(segments, ForecastSegment{
+				Label:   b.label,
+				Count:   dayCounts[j],
+				Percent: float64(dayCounts[j]) / float64(dayTotals[i]) * 100,
+				Color:   b.color,
+			})
+		}
+		sort.Slice(segments, func(a, b int) bool { return segments[a].Count > segments[b].Count })
 		out[i] = ForecastDay{
-			Label:   forecastLabel(i, wall),
-			Count:   counts[i],
-			Percent: counts[i] * 100 / max,
+			Label:    forecastLabel(i, wall),
+			Count:    dayTotals[i],
+			Percent:  dayTotals[i] * 100 / max,
+			Segments: segments,
 		}
 	}
 	return out, nil
