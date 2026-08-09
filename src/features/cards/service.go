@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -470,7 +471,16 @@ func (s *Service) GetGroup(ctx context.Context, userID, id string) (*srs.Group, 
 	return s.repo.GetGroup(ctx, userID, id)
 }
 
-// ListDecksByGroup returns the decks belonging to a single group.
+// sortDecksStudyFirst stable-sorts decks so study-enabled ones come first,
+// preserving their existing relative order (alphabetical) within each group.
+func sortDecksStudyFirst(decks []*srs.Deck) {
+	sort.SliceStable(decks, func(i, j int) bool {
+		return decks[i].StudyEnabled && !decks[j].StudyEnabled
+	})
+}
+
+// ListDecksByGroup returns the decks belonging to a single group, decks
+// included in study before decks excluded from it (alphabetical within each).
 func (s *Service) ListDecksByGroup(ctx context.Context, userID, groupID string) ([]*srs.Deck, error) {
 	all, err := s.repo.ListDecks(ctx, userID)
 	if err != nil {
@@ -482,6 +492,7 @@ func (s *Service) ListDecksByGroup(ctx context.Context, userID, groupID string) 
 			decks = append(decks, d)
 		}
 	}
+	sortDecksStudyFirst(decks)
 	return decks, nil
 }
 
@@ -658,9 +669,11 @@ func (s *Service) ListGroupViews(ctx context.Context, userID, tagID string) ([]G
 		if tagID != "" && len(byGroup[g.ID]) == 0 {
 			continue
 		}
+		sortDecksStudyFirst(byGroup[g.ID])
 		views = append(views, GroupView{Group: g, Decks: byGroup[g.ID]})
 	}
 	if len(ungrouped) > 0 {
+		sortDecksStudyFirst(ungrouped)
 		views = append(views, GroupView{Group: nil, Decks: ungrouped})
 	}
 	return views, nil

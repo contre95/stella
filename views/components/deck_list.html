@@ -105,7 +105,8 @@
 {{$deck := .Deck}}
 {{$group := .Group}}
 {{$groupPage := .GroupPage}}
-<div class="deck-stack {{if $groupPage}}w-full{{else}}w-40 shrink-0 sm:w-44{{end}}">
+{{$excluded := not $deck.StudyEnabled}}
+<div class="deck-stack {{if $groupPage}}w-full{{else}}w-40 shrink-0 sm:w-44{{end}}{{if $excluded}} deck-excluded{{end}}">
   <span class="deck-layer deck-layer-b" style="background-color:{{$deck.Color}}2b; border-color:{{$deck.Color}}45;"></span>
   <span class="deck-layer deck-layer-a" style="background-color:{{$deck.Color}}40; border-color:{{$deck.Color}}59;"></span>
   <div class="deck-face glass relative flex aspect-[5/7] flex-col rounded-2xl p-3">
@@ -194,6 +195,13 @@
   .deck-title.text-white { text-shadow: 0 2px 12px rgba(0,0,0,0.7), 0 1px 4px rgba(0,0,0,0.5); }
   .deck-face { background: rgba(255,255,255,0.65); }
   .dark .deck-face { background: rgba(255,255,255,0.065); }
+  /* Excluded-from-study decks: mute the cover image and the color-accent
+     layers behind the card, leaving text/controls at full contrast so the
+     deck is still readable and usable. */
+  .deck-excluded .deck-layer,
+  .deck-excluded .deck-face > img {
+    filter: grayscale(0.9) opacity(0.55);
+  }
 </style>
 {{end}}
 {{template "deck-card-styles"}}

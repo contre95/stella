@@ -1,6 +1,7 @@
 package review
 
 import (
+	"fmt"
 	"html/template"
 	"os"
 	"path/filepath"
@@ -24,6 +25,9 @@ func TestReviewTemplatesParse(t *testing.T) {
 		"views/components/deck_facts.html",
 		"views/components/deck_list.html",
 		"views/components/card_list.html",
+		"views/components/card_preview.html",
+		"views/components/deck_card_grid.html",
+		"views/partials/icons.html",
 	} {
 		b, err := os.ReadFile(filepath.Join("../../..", rel))
 		if err != nil {
@@ -33,6 +37,26 @@ func TestReviewTemplatesParse(t *testing.T) {
 			"md":  hosting.MarkdownHTML,
 			"add": func(a, b int) int { return a + b },
 			"sub": func(a, b int) int { return a - b },
+			"dict": func(values ...any) (map[string]any, error) {
+				if len(values)%2 != 0 {
+					return nil, fmt.Errorf("dict requires an even number of arguments")
+				}
+				m := make(map[string]any, len(values)/2)
+				for i := 0; i < len(values); i += 2 {
+					key, ok := values[i].(string)
+					if !ok {
+						return nil, fmt.Errorf("dict keys must be strings")
+					}
+					m[key] = values[i+1]
+				}
+				return m, nil
+			},
+			"pluralS": func(n int) string {
+				if n == 1 {
+					return ""
+				}
+				return "s"
+			},
 		}
 		if _, err := template.New(rel).Funcs(funcs).Parse(string(b)); err != nil {
 			t.Errorf("parse %s: %v", rel, err)
