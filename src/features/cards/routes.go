@@ -11,6 +11,7 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	app.Delete("/cards/:id", h.Delete)
 	app.Put("/cards/:id", h.Edit)
 	app.Get("/cards/:id/edit", h.EditForm)
+	app.Get("/cards/:id/preview", h.Preview)
 	app.Post("/cards/:id/reset", h.Reset)
 	app.Post("/cards/:id/move", h.Move)
 

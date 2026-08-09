@@ -246,6 +246,20 @@ func (h *Handler) EditForm(c *fiber.Ctx) error {
 	})
 }
 
+// Preview serves GET /cards/:id/preview — a read-only modal showing the fact
+// rendered the way it looks during review (full-size, images, audio,
+// markdown). It has no grade buttons and never touches scheduling; it's
+// purely a "what does this card look like" view from the deck grid.
+func (h *Handler) Preview(c *fiber.Ctx) error {
+	fact, err := h.service.GetFact(c.Context(), auth.UserID(c), c.Params("id"))
+	if err != nil {
+		return respond.ToastErr(c, fiber.StatusNotFound, "Card not found")
+	}
+	return respond.Partial(c, "components/card_preview", fiber.Map{
+		"Fact": fact,
+	})
+}
+
 // Move reassigns a fact to a different deck without touching its cards'
 // scheduling state, and returns the refreshed list. When called from a deck
 // page (?deck=<id>), it returns that deck's card grid instead — the fact

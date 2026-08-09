@@ -1,0 +1,177 @@
+<div
+  id="card-preview-modal"
+  class="fixed inset-0 z-50 flex items-center justify-center p-4"
+  _="on keyup[key=='Escape'] from window remove me"
+>
+  <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" _="on click remove #card-preview-modal"></div>
+
+  <div class="glass-strong relative flex w-full max-w-md flex-col rounded-2xl p-4" style="height: min(640px, 85vh);">
+    <button
+      type="button"
+      title="Close preview"
+      class="absolute right-3 top-3 z-30 rounded-lg p-1.5 text-gray-400 hover:bg-pink-500/10 hover:text-pink-500 transition-colors dark:hover:text-pink-400"
+      _="on click remove #card-preview-modal"
+    >
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+
+    <div id="pv-card-outer" class="relative flex-1 min-h-0">
+      <div id="pv-flip-card" class="absolute inset-0 cursor-pointer">
+
+        <!-- Front face (question) -->
+        <div id="pv-card-front" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-8 overflow-hidden rounded-2xl glass-strong" style="transition: opacity 0.32s ease;">
+          {{if .Fact.ImageFront}}
+          <img src="/images/{{.Fact.ImageFront}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
+          <div class="pointer-events-none absolute inset-0 bg-white/60 dark:bg-[#17161e]/70"></div>
+          {{end}}
+          <span class="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-xs font-semibold uppercase tracking-widest text-pink-500/80 dark:text-pink-300/70">Question</span>
+          <div class="relative z-10 flex w-full flex-1 min-h-0 flex-col overflow-y-auto overscroll-contain">
+            <div class="m-auto flex w-full flex-col items-center gap-3 py-4">
+              {{if .Fact.ImageFront}}
+              <div class="flex w-full shrink-0 items-center justify-center">
+                <img src="/images/{{.Fact.ImageFront}}" alt="" class="max-h-[45vh] w-auto max-w-full rounded-lg object-contain pointer-events-none" />
+              </div>
+              {{end}}
+              <div class="md-content w-full text-center text-xl font-medium leading-relaxed text-gray-800 dark:text-gray-100 sm:text-2xl"
+                 _="on load if my textContent.trim().length <= 3 set my style.fontSize to '4rem' set my style.lineHeight to '1'">
+                {{md .Fact.Front}}
+              </div>
+            </div>
+          </div>
+          {{if .Fact.AudioFront}}
+          <div id="pv-player-front" class="review-player relative z-10 mt-4 w-full max-w-xs shrink-0">
+            <audio id="pv-audio-front" src="/audio/{{.Fact.AudioFront}}" preload="none"></audio>
+            <button type="button" id="pv-play-btn-front" class="rp-btn" aria-label="Play audio"></button>
+            <div class="min-w-0 flex-1">
+              <div class="mb-1.5 flex items-center justify-between">
+                <span class="rp-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+                <span class="rp-time"><span id="pv-cur-front">0:00</span>&thinsp;/&thinsp;<span id="pv-dur-front">-:--</span></span>
+              </div>
+              <div id="pv-track-front" class="rp-track">
+                <div id="pv-fill-front" class="rp-fill" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+          {{end}}
+        </div>
+
+        <!-- Back face (answer) -->
+        <div id="pv-card-back" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-8 overflow-hidden rounded-2xl glass-strong" style="display: none; opacity: 0; pointer-events: none;">
+          {{if .Fact.ImageBack}}
+          <img src="/images/{{.Fact.ImageBack}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
+          <div class="pointer-events-none absolute inset-0 bg-white/60 dark:bg-[#17161e]/70"></div>
+          {{end}}
+          <span class="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-xs font-semibold uppercase tracking-widest text-emerald-500/80 dark:text-emerald-300/70">Answer</span>
+          <div class="relative z-10 flex w-full flex-1 min-h-0 flex-col overflow-y-auto overscroll-contain">
+            <div class="m-auto flex w-full flex-col items-center gap-3 py-4">
+              {{if .Fact.ImageBack}}
+              <div class="flex w-full shrink-0 items-center justify-center">
+                <img src="/images/{{.Fact.ImageBack}}" alt="" class="max-h-[45vh] w-auto max-w-full rounded-lg object-contain pointer-events-none" />
+              </div>
+              {{end}}
+              <div class="md-content w-full text-center text-xl font-medium leading-relaxed text-gray-900 dark:text-white sm:text-2xl"
+                 _="on load if my textContent.trim().length <= 3 set my style.fontSize to '4rem' set my style.lineHeight to '1'">
+                {{md .Fact.Back}}
+              </div>
+            </div>
+          </div>
+          {{if .Fact.AudioBack}}
+          <div id="pv-player-back" class="review-player relative z-10 mt-4 w-full max-w-xs shrink-0">
+            <audio id="pv-audio-back" src="/audio/{{.Fact.AudioBack}}" preload="none"></audio>
+            <button type="button" id="pv-play-btn-back" class="rp-btn" aria-label="Play audio"></button>
+            <div class="min-w-0 flex-1">
+              <div class="mb-1.5 flex items-center justify-between">
+                <span class="rp-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+                <span class="rp-time"><span id="pv-cur-back">0:00</span>&thinsp;/&thinsp;<span id="pv-dur-back">-:--</span></span>
+              </div>
+              <div id="pv-track-back" class="rp-track">
+                <div id="pv-fill-back" class="rp-fill" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+          {{end}}
+        </div>
+
+      </div>
+    </div>
+
+    <p class="mt-2 shrink-0 text-center text-xs text-gray-400 dark:text-gray-500">Tap the card to flip &middot; preview only, not counted as a review</p>
+  </div>
+
+  <script>
+  (function () {
+    var flipCard = document.getElementById('pv-flip-card');
+    var front    = document.getElementById('pv-card-front');
+    var back     = document.getElementById('pv-card-back');
+    var showingBack = false;
+
+    function initPlayer(audioEl, suffix) {
+      var btn     = document.getElementById('pv-play-btn-' + suffix);
+      var track   = document.getElementById('pv-track-' + suffix);
+      var fill    = document.getElementById('pv-fill-' + suffix);
+      var cur     = document.getElementById('pv-cur-' + suffix);
+      var dur     = document.getElementById('pv-dur-' + suffix);
+      var wrapper = document.getElementById('pv-player-' + suffix);
+      if (!btn || !track) return;
+      var PLAY_ICON  = '<svg viewBox="0 0 10 10" fill="currentColor" style="width:15px;height:15px;margin-left:2px"><path d="M2 1.5v7l6-3.5z"/></svg>';
+      var PAUSE_ICON = '<svg viewBox="0 0 10 10" fill="currentColor" style="width:15px;height:15px"><rect x="1.5" y="1" width="2.5" height="8" rx="0.8"/><rect x="6" y="1" width="2.5" height="8" rx="0.8"/></svg>';
+      function fmt(s) {
+        if (!isFinite(s) || isNaN(s)) return '-:--';
+        var m = Math.floor(s / 60), sec = Math.floor(s % 60);
+        return m + ':' + (sec < 10 ? '0' : '') + sec;
+      }
+      function sync() {
+        var pct = audioEl.duration ? (audioEl.currentTime / audioEl.duration) * 100 : 0;
+        fill.style.width = pct + '%';
+        if (cur) cur.textContent = fmt(audioEl.currentTime);
+        if (dur) dur.textContent = fmt(audioEl.duration);
+        btn.innerHTML = audioEl.paused ? PLAY_ICON : PAUSE_ICON;
+        wrapper.classList.toggle('playing', !audioEl.paused);
+      }
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (audioEl.paused) audioEl.play().catch(function () {});
+        else audioEl.pause();
+      });
+      track.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (!audioEl.duration) return;
+        var rect = track.getBoundingClientRect();
+        audioEl.currentTime = ((e.clientX - rect.left) / rect.width) * audioEl.duration;
+      });
+      audioEl.addEventListener('timeupdate', sync);
+      audioEl.addEventListener('durationchange', sync);
+      audioEl.addEventListener('play', sync);
+      audioEl.addEventListener('pause', sync);
+      audioEl.addEventListener('ended', function () { audioEl.currentTime = 0; sync(); });
+      sync();
+    }
+
+    var audioFront = document.getElementById('pv-audio-front');
+    var audioBack  = document.getElementById('pv-audio-back');
+    if (audioFront) initPlayer(audioFront, 'front');
+    if (audioBack)  initPlayer(audioBack,  'back');
+
+    flipCard.addEventListener('click', function () {
+      showingBack = !showingBack;
+      if (audioFront) { audioFront.pause(); }
+      if (audioBack)  { audioBack.pause(); }
+      if (showingBack) {
+        front.style.opacity = '0';
+        front.style.pointerEvents = 'none';
+        back.style.display = 'flex';
+        void back.offsetHeight;
+        back.style.opacity = '1';
+        back.style.pointerEvents = 'auto';
+      } else {
+        back.style.opacity = '0';
+        back.style.pointerEvents = 'none';
+        front.style.opacity = '1';
+        front.style.pointerEvents = 'auto';
+      }
+    });
+  })();
+  </script>
+</div>
