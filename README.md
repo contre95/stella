@@ -23,6 +23,11 @@ go run ./src
 Configuration lives in `config.yaml` (see `config.example.yaml`); the path is
 overridable via `STELLA_CONFIG_PATH`.
 
+`public/css/app.css` is a generated file (Tailwind, compiled from
+`styles/input.css`) and a compiled copy is committed so this works out of the
+box. If you edit styles or template class names, see `CONTRIBUTING.md` for
+rebuilding it.
+
 ## Users & login
 
 Stella runs in one of two modes, controlled by `auth.singleUser`:

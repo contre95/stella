@@ -7,6 +7,13 @@
 - SQLite (`mattn/go-sqlite3`), no migration framework
 - YAML config + `validator/v10`
 
+## Dev environment (devenv, optional)
+
+If you use [devenv](https://devenv.sh) + Nix, `devenv shell` (or `devenv up`
+to also run the server) drops you into a shell with Go and the Tailwind CLI
+on `PATH`, and rebuilds `public/css/app.css` automatically on entry. Nothing
+else below is needed in that case.
+
 ## CSS (Tailwind)
 
 `public/css/app.css` is a **generated file** — compiled from `styles/input.css`
@@ -14,7 +21,7 @@
 whatever utility classes `tailwind.config.js` finds used under `views/**/*.html`.
 Edit `styles/input.css`, not `public/css/app.css` directly.
 
-It's compiled with the Tailwind standalone CLI (no Node/npm needed):
+Without devenv, compile it with the Tailwind standalone CLI (no Node/npm needed):
 
 ```sh
 # one-time: download the CLI (matches the version pinned in Containerfile)

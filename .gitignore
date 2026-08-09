@@ -13,5 +13,11 @@ CLAUDE.md
 # Tailwind CLI (standalone binary — see CONTRIBUTING.md)
 /tailwindcss
 
+# devenv
+.devenv/
+.devenv.flake.nix
+devenv.local.nix
+.direnv/
+
 # Editor
 .DS_Store
