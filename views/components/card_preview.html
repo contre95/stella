@@ -102,6 +102,25 @@
 
   <script>
   (function () {
+    // Pinch-zoom is disabled site-wide (viewport meta), but it's useful here
+    // to inspect card images/text up close — relax it while this modal is open.
+    var viewportMeta = document.querySelector('meta[name="viewport"]');
+    var originalViewportContent = viewportMeta ? viewportMeta.getAttribute('content') : null;
+    if (viewportMeta) {
+      viewportMeta.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover');
+    }
+    var viewportRestored = false;
+    function restoreViewport() {
+      if (viewportRestored) return;
+      viewportRestored = true;
+      if (viewportMeta && originalViewportContent) viewportMeta.setAttribute('content', originalViewportContent);
+      modalObserver.disconnect();
+    }
+    var modalObserver = new MutationObserver(function () {
+      if (!document.getElementById('card-preview-modal')) restoreViewport();
+    });
+    modalObserver.observe(document.body, { childList: true });
+
     var flipCard = document.getElementById('pv-flip-card');
     var front    = document.getElementById('pv-card-front');
     var back     = document.getElementById('pv-card-back');
