@@ -10,8 +10,8 @@ CLAUDE.md
 /stella
 /tmp/
 
-# Node / Tailwind
-/node_modules/
+# Tailwind CLI (standalone binary — see CONTRIBUTING.md)
+/tailwindcss
 
 # Editor
 .DS_Store

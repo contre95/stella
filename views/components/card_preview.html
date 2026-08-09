@@ -12,9 +12,7 @@
       class="absolute right-4 top-4 z-30 rounded-lg p-1.5 text-gray-400 hover:bg-pink-500/10 hover:text-pink-500 transition-colors dark:hover:text-pink-400"
       _="on click remove #card-preview-modal"
     >
-      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-      </svg>
+      {{template "icon-close" (dict "Class" "h-5 w-5")}}
     </button>
 
     <div id="pv-card-outer" class="relative flex-1 min-h-0">
@@ -126,52 +124,10 @@
     var back     = document.getElementById('pv-card-back');
     var showingBack = false;
 
-    function initPlayer(audioEl, suffix) {
-      var btn     = document.getElementById('pv-play-btn-' + suffix);
-      var track   = document.getElementById('pv-track-' + suffix);
-      var fill    = document.getElementById('pv-fill-' + suffix);
-      var cur     = document.getElementById('pv-cur-' + suffix);
-      var dur     = document.getElementById('pv-dur-' + suffix);
-      var wrapper = document.getElementById('pv-player-' + suffix);
-      if (!btn || !track) return;
-      var PLAY_ICON  = '<svg viewBox="0 0 10 10" fill="currentColor" style="width:15px;height:15px;margin-left:2px"><path d="M2 1.5v7l6-3.5z"/></svg>';
-      var PAUSE_ICON = '<svg viewBox="0 0 10 10" fill="currentColor" style="width:15px;height:15px"><rect x="1.5" y="1" width="2.5" height="8" rx="0.8"/><rect x="6" y="1" width="2.5" height="8" rx="0.8"/></svg>';
-      function fmt(s) {
-        if (!isFinite(s) || isNaN(s)) return '-:--';
-        var m = Math.floor(s / 60), sec = Math.floor(s % 60);
-        return m + ':' + (sec < 10 ? '0' : '') + sec;
-      }
-      function sync() {
-        var pct = audioEl.duration ? (audioEl.currentTime / audioEl.duration) * 100 : 0;
-        fill.style.width = pct + '%';
-        if (cur) cur.textContent = fmt(audioEl.currentTime);
-        if (dur) dur.textContent = fmt(audioEl.duration);
-        btn.innerHTML = audioEl.paused ? PLAY_ICON : PAUSE_ICON;
-        wrapper.classList.toggle('playing', !audioEl.paused);
-      }
-      btn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        if (audioEl.paused) audioEl.play().catch(function () {});
-        else audioEl.pause();
-      });
-      track.addEventListener('click', function (e) {
-        e.stopPropagation();
-        if (!audioEl.duration) return;
-        var rect = track.getBoundingClientRect();
-        audioEl.currentTime = ((e.clientX - rect.left) / rect.width) * audioEl.duration;
-      });
-      audioEl.addEventListener('timeupdate', sync);
-      audioEl.addEventListener('durationchange', sync);
-      audioEl.addEventListener('play', sync);
-      audioEl.addEventListener('pause', sync);
-      audioEl.addEventListener('ended', function () { audioEl.currentTime = 0; sync(); });
-      sync();
-    }
-
     var audioFront = document.getElementById('pv-audio-front');
     var audioBack  = document.getElementById('pv-audio-back');
-    if (audioFront) initPlayer(audioFront, 'front');
-    if (audioBack)  initPlayer(audioBack,  'back');
+    if (audioFront) window.stellaInitAudioPlayer(audioFront, 'pv-', 'front');
+    if (audioBack)  window.stellaInitAudioPlayer(audioBack,  'pv-', 'back');
 
     flipCard.addEventListener('click', function () {
       showingBack = !showingBack;

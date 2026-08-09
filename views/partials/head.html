@@ -17,34 +17,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ["Inter", "Noto Sans JP", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
-          },
-          colors: {
-            pink: {
-              50:  "#fdf2f8",
-              100: "#fce7f3",
-              200: "#fbcfe8",
-              300: "#f9a8d4",
-              400: "#f472b6",
-              500: "#ec4899",
-              600: "#db2777",
-              700: "#be185d",
-              800: "#9d174d",
-              900: "#831843",
-              950: "#500724",
-            }
-          }
-        }
-      }
-    };
-  </script>
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -58,5 +30,68 @@
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
     }
+  </script>
+  <script>
+    // Shared play/pause/scrub widget for card audio (review card + preview
+    // modal). Defined here (rather than partials/scripts.html) because it
+    // must exist before those inline <script> blocks run on a full page load —
+    // scripts.html loads at the end of <body>, after they do.
+    //
+    // Element ids follow the pattern `<idPrefix>play-btn-<suffix>`,
+    // `<idPrefix>track-<suffix>`, `<idPrefix>fill-<suffix>`,
+    // `<idPrefix>cur-<suffix>`, `<idPrefix>dur-<suffix>`,
+    // `<idPrefix>player-<suffix>` (the wrapper).
+    (function () {
+      var PLAY_ICON  = '<svg viewBox="0 0 10 10" fill="currentColor" style="width:15px;height:15px;margin-left:2px"><path d="M2 1.5v7l6-3.5z"/></svg>';
+      var PAUSE_ICON = '<svg viewBox="0 0 10 10" fill="currentColor" style="width:15px;height:15px"><rect x="1.5" y="1" width="2.5" height="8" rx="0.8"/><rect x="6" y="1" width="2.5" height="8" rx="0.8"/></svg>';
+
+      window.stellaInitAudioPlayer = function (audioEl, idPrefix, suffix, opts) {
+        opts = opts || {};
+        var btn     = document.getElementById(idPrefix + 'play-btn-' + suffix);
+        var track   = document.getElementById(idPrefix + 'track-' + suffix);
+        var fill    = document.getElementById(idPrefix + 'fill-' + suffix);
+        var cur     = document.getElementById(idPrefix + 'cur-' + suffix);
+        var dur     = document.getElementById(idPrefix + 'dur-' + suffix);
+        var wrapper = document.getElementById(idPrefix + 'player-' + suffix);
+        if (!btn || !track) return;
+
+        if (opts.stopTouchPropagation) {
+          wrapper.addEventListener('touchstart', function (e) { e.stopPropagation(); }, { passive: true });
+          wrapper.addEventListener('touchend', function (e) { e.stopPropagation(); });
+        }
+
+        function fmt(s) {
+          if (!isFinite(s) || isNaN(s)) return '-:--';
+          var m = Math.floor(s / 60), sec = Math.floor(s % 60);
+          return m + ':' + (sec < 10 ? '0' : '') + sec;
+        }
+        function sync() {
+          var pct = audioEl.duration ? (audioEl.currentTime / audioEl.duration) * 100 : 0;
+          fill.style.width = pct + '%';
+          if (cur) cur.textContent = fmt(audioEl.currentTime);
+          if (dur) dur.textContent = fmt(audioEl.duration);
+          btn.innerHTML = audioEl.paused ? PLAY_ICON : PAUSE_ICON;
+          wrapper.classList.toggle('playing', !audioEl.paused);
+        }
+
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (audioEl.paused) audioEl.play().catch(function () {});
+          else audioEl.pause();
+        });
+        track.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (!audioEl.duration) return;
+          var rect = track.getBoundingClientRect();
+          audioEl.currentTime = ((e.clientX - rect.left) / rect.width) * audioEl.duration;
+        });
+        audioEl.addEventListener('timeupdate', sync);
+        audioEl.addEventListener('durationchange', sync);
+        audioEl.addEventListener('play', sync);
+        audioEl.addEventListener('pause', sync);
+        audioEl.addEventListener('ended', function () { audioEl.currentTime = 0; sync(); });
+        sync();
+      };
+    })();
   </script>
 </head>
