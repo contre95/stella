@@ -15,6 +15,14 @@ IMAGE_TAG=stella podman build -t stella .
 
 ## Run locally
 
+With [devenv](https://devenv.sh) + Nix:
+
+```bash
+devenv up   # Go + Tailwind CLI provided, CSS rebuilt on shell entry, runs the server
+```
+
+Otherwise:
+
 ```bash
 # Web UI on :8858 (MCP, when enabled, is served at /mcp)
 go run ./src
@@ -26,7 +34,7 @@ overridable via `STELLA_CONFIG_PATH`.
 `public/css/app.css` is a generated file (Tailwind, compiled from
 `styles/input.css`) and a compiled copy is committed so this works out of the
 box. If you edit styles or template class names, see `CONTRIBUTING.md` for
-rebuilding it.
+rebuilding it (or just use devenv, which does it automatically).
 
 ## Users & login
 
