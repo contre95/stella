@@ -14,22 +14,22 @@
       _="on htmx:afterRequest call me.reset()"
       class="glass flex flex-1 flex-col gap-3 rounded-2xl p-4"
     >
-      <div class="flex gap-3">
+      <div class="flex flex-col gap-3 sm:flex-row">
         <input
           name="name"
           required
           maxlength="32"
           placeholder="Deck name (max 32 chars)"
-          class="glass-input min-w-0 flex-1 rounded-xl px-3 py-2 text-sm"
+          class="glass-input min-w-0 rounded-xl px-3 py-2 text-sm sm:flex-1"
         />
         <input
           name="description"
           placeholder="Optional description"
-          class="glass-input min-w-0 flex-1 rounded-xl px-3 py-2 text-sm"
+          class="glass-input min-w-0 rounded-xl px-3 py-2 text-sm sm:flex-1"
         />
         <select
           name="group_id"
-          class="glass-input shrink-0 rounded-xl px-3 py-2 text-sm"
+          class="glass-input rounded-xl px-3 py-2 text-sm sm:shrink-0"
         >
           <option value="">No group</option>
           {{range .Groups}}
@@ -38,19 +38,19 @@
         </select>
         <button
           type="submit"
-          class="btn-primary inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold"
+          class="btn-primary inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold sm:shrink-0"
         >
           Create deck
           <svg class="htmx-indicator h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
         </button>
       </div>
-      <label class="flex items-center gap-3">
+      <label class="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
         <span class="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Cover <span class="font-normal normal-case">(optional)</span></span>
         <input
           type="file"
           name="image"
           accept=".jpg,.jpeg,.png,.gif,.webp"
-          class="glass-input min-w-0 flex-1 rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"
+          class="glass-input min-w-0 rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300 sm:flex-1"
         />
       </label>
     </form>
@@ -62,17 +62,17 @@
         hx-target="#deck-list"
         hx-swap="innerHTML"
         _="on htmx:afterRequest call me.reset()"
-        class="glass flex flex-1 items-center gap-3 rounded-2xl p-4"
+        class="glass flex flex-1 flex-col gap-3 rounded-2xl p-4 sm:flex-row sm:items-center"
       >
         <input
           name="name"
           required
           placeholder="New group name"
-          class="glass-input min-w-0 flex-1 rounded-xl px-3 py-2 text-sm"
+          class="glass-input min-w-0 rounded-xl px-3 py-2 text-sm sm:flex-1"
         />
         <button
           type="submit"
-          class="btn-ghost shrink-0 rounded-xl px-4 py-2 text-sm font-semibold"
+          class="btn-ghost rounded-xl px-4 py-2 text-sm font-semibold sm:shrink-0"
         >
           Create group
         </button>
@@ -85,18 +85,18 @@
         hx-swap="innerHTML"
         hx-encoding="multipart/form-data"
         _="on htmx:afterRequest call me.reset()"
-        class="glass flex flex-1 items-center gap-3 rounded-2xl p-4"
+        class="glass flex flex-1 flex-col gap-3 rounded-2xl p-4 sm:flex-row sm:items-center"
       >
         <input
           type="file"
           name="file"
           accept=".zip,.json"
           required
-          class="glass-input min-w-0 flex-1 rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-gray-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-gray-600 hover:file:bg-gray-500/25 dark:file:text-gray-300"
+          class="glass-input min-w-0 rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-gray-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-gray-600 hover:file:bg-gray-500/25 dark:file:text-gray-300 sm:flex-1"
         />
         <button
           type="submit"
-          class="btn-ghost inline-flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold"
+          class="btn-ghost inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold sm:shrink-0"
         >
           Import
           <svg class="htmx-indicator h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
