@@ -37,6 +37,11 @@ type Auth struct {
 	// runs in single-user mode: no login required and all data belongs to one
 	// built-in local account.
 	Enabled bool `yaml:"enabled"`
+	// PublicURL is the external base URL of this Stella instance. The OIDC
+	// redirect URL registered at the provider must be <publicURL>/auth/callback.
+	// It also doubles as Stella's own OAuth issuer for MCP clients, since
+	// Stella acts as its own Authorization Server for the MCP endpoint.
+	PublicURL string `yaml:"publicURL"`
 	// OIDC configures the OpenID Connect provider used when Enabled is true.
 	OIDC OIDC `yaml:"oidc"`
 }
@@ -48,9 +53,6 @@ type OIDC struct {
 	Issuer       string `yaml:"issuer"`
 	ClientID     string `yaml:"clientID"`
 	ClientSecret string `yaml:"clientSecret"`
-	// PublicURL is the external base URL of this Stella instance; the OIDC
-	// redirect URL registered at the provider must be <publicURL>/auth/callback.
-	PublicURL string `yaml:"publicURL"`
 }
 
 // Validate enforces the conditional requirement struct tags cannot express:
@@ -61,11 +63,11 @@ func (a *Auth) Validate() error {
 	}
 	var missing []string
 	for key, val := range map[string]string{
-		"issuer": a.OIDC.Issuer, "clientID": a.OIDC.ClientID,
-		"clientSecret": a.OIDC.ClientSecret, "publicURL": a.OIDC.PublicURL,
+		"oidc.issuer": a.OIDC.Issuer, "oidc.clientID": a.OIDC.ClientID,
+		"oidc.clientSecret": a.OIDC.ClientSecret, "publicURL": a.PublicURL,
 	} {
 		if strings.TrimSpace(val) == "" {
-			missing = append(missing, "auth.oidc."+key)
+			missing = append(missing, "auth."+key)
 		}
 	}
 	if len(missing) > 0 {

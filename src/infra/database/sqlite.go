@@ -77,6 +77,37 @@ CREATE TABLE IF NOT EXISTS api_tokens (
 	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS oauth_clients (
+	client_id     TEXT PRIMARY KEY,
+	client_name   TEXT NOT NULL DEFAULT '',
+	redirect_uris TEXT NOT NULL,
+	created       INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS oauth_codes (
+	code_hash      TEXT PRIMARY KEY,
+	client_id      TEXT NOT NULL,
+	user_id        TEXT NOT NULL,
+	redirect_uri   TEXT NOT NULL,
+	code_challenge TEXT NOT NULL,
+	scope          TEXT NOT NULL DEFAULT '',
+	expires        INTEGER NOT NULL,
+	FOREIGN KEY (client_id) REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS oauth_tokens (
+	access_token_hash  TEXT PRIMARY KEY,
+	refresh_token_hash TEXT UNIQUE,
+	client_id          TEXT NOT NULL,
+	user_id            TEXT NOT NULL,
+	scope              TEXT NOT NULL DEFAULT '',
+	access_expires     INTEGER NOT NULL,
+	created            INTEGER NOT NULL,
+	FOREIGN KEY (client_id) REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS groups (
 	id      TEXT PRIMARY KEY,
 	user_id TEXT NOT NULL,

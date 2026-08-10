@@ -32,12 +32,66 @@ var ErrNoSession = errors.New("no session")
 // unknown.
 var ErrInvalidAPIToken = errors.New("invalid api token")
 
+// ErrInvalidOAuthToken is returned by Store.UserByOAuthAccessToken when the
+// access token is unknown, revoked, or expired.
+var ErrInvalidOAuthToken = errors.New("invalid oauth token")
+
+// ErrOAuthClientNotFound is returned by Store.OAuthClientByID for an unknown
+// client_id.
+var ErrOAuthClientNotFound = errors.New("oauth client not found")
+
+// ErrInvalidGrant is returned by Store.ConsumeAuthCode and
+// Store.OAuthTokenByRefreshHash for an unknown, expired, or already-used
+// code/token — mirrors the OAuth "invalid_grant" error code.
+var ErrInvalidGrant = errors.New("invalid grant")
+
 // APIToken grants bearer-token access to the MCP endpoint for its owner.
 type APIToken struct {
 	Hash    string // SHA-256 hex of the raw token (never store raw)
 	UserID  string
 	Name    string
 	Created int64 // POSIX seconds
+}
+
+// OAuthClient is an MCP client dynamically registered via RFC 7591. Stella
+// only supports public clients (PKCE, no client secret), so there is no
+// secret to store.
+type OAuthClient struct {
+	ID           string
+	Name         string
+	RedirectURIs []string
+	Created      int64 // POSIX seconds
+}
+
+// AuthCode is a single-use OAuth authorization code, bound to the client,
+// user, redirect URI, and PKCE challenge it was issued for.
+type AuthCode struct {
+	ClientID      string
+	UserID        string
+	RedirectURI   string
+	CodeChallenge string // PKCE S256 challenge; "plain" is not supported
+	Scope         string
+	Expires       int64 // POSIX seconds
+}
+
+// OAuthToken is an access/refresh token pair issued to an OAuth client on
+// behalf of a user. RefreshHash is empty for a token with no refresh token.
+type OAuthToken struct {
+	AccessHash    string
+	RefreshHash   string
+	ClientID      string
+	UserID        string
+	Scope         string
+	AccessExpires int64 // POSIX seconds
+	Created       int64 // POSIX seconds
+}
+
+// AuthorizedClient is an OAuth client a user has granted access to, for the
+// "connected apps" list in account settings.
+type AuthorizedClient struct {
+	ClientID string
+	Name     string
+	Created  int64 // POSIX seconds of the most recent authorization
 }
 
 // User is an account that owns decks, groups, facts, cards, and reviews.
@@ -81,6 +135,37 @@ type Store interface {
 	// user can never revoke another's token even if they learn its hash.
 	DeleteAPIToken(ctx context.Context, tokenHash, userID string) error
 	ListAPITokens(ctx context.Context, userID string) ([]*APIToken, error)
+
+	// AddOAuthClient persists a dynamically registered OAuth client.
+	AddOAuthClient(ctx context.Context, c *OAuthClient) error
+	// OAuthClientByID returns the registered client, or ErrOAuthClientNotFound.
+	OAuthClientByID(ctx context.Context, clientID string) (*OAuthClient, error)
+
+	AddAuthCode(ctx context.Context, codeHash string, c *AuthCode) error
+	// ConsumeAuthCode fetches and deletes an authorization code by hash in one
+	// step, so a code can never be redeemed twice; ErrInvalidGrant if unknown
+	// or expired.
+	ConsumeAuthCode(ctx context.Context, codeHash string, now int64) (*AuthCode, error)
+
+	AddOAuthToken(ctx context.Context, t *OAuthToken) error
+	// UserByOAuthAccessToken resolves an unexpired access token hash to its
+	// owner; ErrInvalidOAuthToken when unknown or expired.
+	UserByOAuthAccessToken(ctx context.Context, accessHash string, now int64) (*User, error)
+	// OAuthTokenByRefreshHash returns the token record for a refresh token
+	// hash; ErrInvalidGrant when unknown. Refresh tokens don't expire on
+	// their own — they live until RevokeOAuthClientForUser deletes them.
+	OAuthTokenByRefreshHash(ctx context.Context, refreshHash string) (*OAuthToken, error)
+	// RotateOAuthAccessToken replaces the access token bound to a refresh
+	// token with a newly issued one, keeping the same refresh token.
+	RotateOAuthAccessToken(ctx context.Context, refreshHash, newAccessHash string, newExpires int64) error
+	// ListOAuthClientsForUser returns the clients userID has authorized, most
+	// recently authorized first.
+	ListOAuthClientsForUser(ctx context.Context, userID string) ([]*AuthorizedClient, error)
+	// RevokeOAuthClientForUser deletes every token userID holds for clientID,
+	// scoped to userID so one user can never revoke another's grant.
+	RevokeOAuthClientForUser(ctx context.Context, clientID, userID string) error
+	DeleteExpiredOAuthCodes(ctx context.Context, now int64) error
+	DeleteExpiredOAuthTokens(ctx context.Context, now int64) error
 }
 
 // Service drives authentication: the OIDC login flow, session cookies, and
@@ -116,7 +201,7 @@ func NewService(ctx context.Context, store Store, cfg *config.Manager) (*Service
 		ClientID:     a.OIDC.ClientID,
 		ClientSecret: a.OIDC.ClientSecret,
 		Endpoint:     provider.Endpoint(),
-		RedirectURL:  strings.TrimRight(a.OIDC.PublicURL, "/") + "/auth/callback",
+		RedirectURL:  strings.TrimRight(a.PublicURL, "/") + "/auth/callback",
 		Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
 	}
 	return s, nil
@@ -128,7 +213,14 @@ func (s *Service) SingleUser() bool { return !s.cfg.Get().Auth.Enabled }
 // secureCookies reports whether cookies should carry the Secure flag, derived
 // from the instance being served over https.
 func (s *Service) secureCookies() bool {
-	return strings.HasPrefix(s.cfg.Get().Auth.OIDC.PublicURL, "https://")
+	return strings.HasPrefix(s.cfg.Get().Auth.PublicURL, "https://")
+}
+
+// PublicURL returns Stella's external base URL, with no trailing slash. It is
+// both the OIDC redirect base and Stella's own OAuth issuer identity, since
+// Stella acts as its own Authorization Server for MCP clients.
+func (s *Service) PublicURL() string {
+	return strings.TrimRight(s.cfg.Get().Auth.PublicURL, "/")
 }
 
 // randomToken returns a fresh 256-bit URL-safe random string.
@@ -189,7 +281,9 @@ func MCPUserIDFromContext(ctx context.Context) string {
 
 // MCPBearerMiddleware is a net/http middleware that authenticates requests to
 // the MCP endpoint. In single-user mode the local user is assumed without a
-// token check; in multi-user mode a valid Bearer token is required.
+// token check; in multi-user mode a valid Bearer token is required — either a
+// long-lived static API token (/settings/tokens) or an OAuth access token
+// issued via the /oauth/* flow (see oauth_server.go).
 func (s *Service) MCPBearerMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var userID string
@@ -198,16 +292,33 @@ func (s *Service) MCPBearerMiddleware(next http.Handler) http.Handler {
 		} else {
 			parts := strings.Fields(r.Header.Get("Authorization"))
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-				http.Error(w, "missing bearer token", http.StatusUnauthorized)
+				s.mcpUnauthorized(w, "missing bearer token")
 				return
 			}
-			user, err := s.userByRawAPIToken(r.Context(), parts[1])
+			user, err := s.userByMCPBearer(r.Context(), parts[1])
 			if err != nil {
-				http.Error(w, "invalid token", http.StatusUnauthorized)
+				s.mcpUnauthorized(w, "invalid or expired token")
 				return
 			}
 			userID = user.ID
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), mcpUserIDKey{}, userID)))
 	})
+}
+
+// userByMCPBearer resolves a raw MCP bearer token against both credential
+// stores, trying the static API tokens first.
+func (s *Service) userByMCPBearer(ctx context.Context, raw string) (*User, error) {
+	if user, err := s.userByRawAPIToken(ctx, raw); err == nil {
+		return user, nil
+	}
+	return s.store.UserByOAuthAccessToken(ctx, hashToken(raw), time.Now().Unix())
+}
+
+// mcpUnauthorized replies 401 with a WWW-Authenticate header pointing MCP
+// clients at protected resource metadata (RFC 9728 / the MCP authorization
+// spec), so a client with no token yet can discover how to obtain one.
+func (s *Service) mcpUnauthorized(w http.ResponseWriter, msg string) {
+	w.Header().Set("WWW-Authenticate", fmt.Sprintf("Bearer resource_metadata=%q", s.PublicURL()+"/.well-known/oauth-protected-resource"))
+	http.Error(w, msg, http.StatusUnauthorized)
 }

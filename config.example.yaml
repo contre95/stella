@@ -15,15 +15,17 @@ auth:
   # true = multi-user mode: OIDC login required; every user gets their own
   # decks, cards, and review history. Requires the oidc settings below.
   enabled: false
+  # External base URL of this Stella instance. Register <publicURL>/auth/callback
+  # as the redirect URI at the OIDC provider. Also used as Stella's own OAuth
+  # issuer identity for MCP clients (Stella is its own Authorization Server
+  # for /mcp, layered on top of this OIDC login).
+  publicURL: ""
   oidc:
     # Issuer URL of your OpenID Connect provider (Keycloak, Authentik, etc.);
     # its discovery document must live at <issuer>/.well-known/openid-configuration.
     issuer: ""
     clientID: ""
     clientSecret: ""
-    # External base URL of this Stella instance. Register
-    # <publicURL>/auth/callback as the redirect URI at the provider.
-    publicURL: ""
 mcp:
   # Enable the MCP endpoint at /mcp (StreamableHTTP transport).
   enabled: false

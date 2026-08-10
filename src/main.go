@@ -82,8 +82,9 @@ func main() {
 
 	// 5. Routes + server.
 	tokenHandler := authService.NewTokenHandler()
+	oauthConsentHandler := authService.NewOAuthConsentHandler()
 	deviceSyncHandler := devicesync.NewHandler(devicesync.NewService(db), authService, location)
-	registrars := []hosting.RouteRegistrar{uiHandler, cardsHandler, portabilityHandler, reviewHandler, tokenHandler, deviceSyncHandler}
+	registrars := []hosting.RouteRegistrar{uiHandler, cardsHandler, portabilityHandler, reviewHandler, tokenHandler, oauthConsentHandler, deviceSyncHandler}
 	if cfgManager.Get().MCP.Enabled {
 		registrars = append(registrars, mcppresenter.NewHTTPRegistrar(cfgManager.Get().Server.AppName, version, cardsService, authService))
 		slog.Info("mcp enabled", "path", "/mcp")

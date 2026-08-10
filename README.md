@@ -38,13 +38,23 @@ rebuilding it (or just use devenv, which does it automatically).
 
 ## Users & login
 
-Stella runs in one of two modes, controlled by `auth.singleUser`:
+Stella runs in one of two modes, controlled by `auth.enabled`:
 
-- `singleUser: true` (default) — no login. All data belongs to one built-in
-  local account.
-- `singleUser: false` — multi-user. Login goes through any OpenID Connect
-  provider (Keycloak, Authentik, Pocket ID, ...) configured under `auth.oidc`,
-  and each user gets their own decks, cards, and review history. Register
-  `<publicURL>/auth/callback` as the redirect URI at the provider. The MCP
-  endpoint is only served in single-user mode, since MCP clients have no
-  login session.
+- `enabled: false` (default) — single-user, no login. All data belongs to one
+  built-in local account. The `/mcp` endpoint (when enabled) has no auth
+  either — put it behind a trusted network (Tailscale, localhost, VPN) if you
+  expose it.
+- `enabled: true` — multi-user. Login goes through any OpenID Connect provider
+  (Keycloak, Authentik, Pocket ID, ...) configured under `auth.oidc`, and each
+  user gets their own decks, cards, and review history. Register
+  `<publicURL>/auth/callback` as the redirect URI at the provider.
+
+  `/mcp` accepts two kinds of credential in this mode:
+  - A static bearer token from `/settings/tokens` — paste it into the MCP
+    client's config as `Authorization: Bearer <token>`.
+  - OAuth: Stella acts as its own OAuth Authorization Server for MCP clients
+    (dynamic client registration, PKCE, consent screen), layered on top of the
+    OIDC login above. Point an OAuth-capable MCP client (Claude Desktop,
+    Claude Code, Claude.ai custom connectors, ...) at `<publicURL>/mcp` and it
+    discovers the flow automatically — no manual token needed. Connected apps
+    can be revoked from `/settings/tokens`.

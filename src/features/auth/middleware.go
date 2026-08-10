@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"net/url"
 	"strings"
 	"time"
 
@@ -61,7 +62,7 @@ func (s *Service) Middleware() fiber.Handler {
 			return c.SendStatus(fiber.StatusUnauthorized)
 		}
 		if c.Method() == fiber.MethodGet || c.Method() == fiber.MethodHead {
-			return c.Redirect("/auth/login", fiber.StatusFound)
+			return c.Redirect("/auth/login?return_to="+url.QueryEscape(c.OriginalURL()), fiber.StatusFound)
 		}
 		return fiber.ErrUnauthorized
 	}

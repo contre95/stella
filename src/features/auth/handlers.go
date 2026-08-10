@@ -1,7 +1,9 @@
 package auth
 
 import (
+	"encoding/base64"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -29,29 +31,49 @@ func (s *Service) RegisterRoutes(app *fiber.App) {
 	app.Get("/auth/login", s.login)
 	app.Get("/auth/callback", s.callback)
 	app.Get("/auth/logout", s.logout)
+	s.registerOAuthEndpoints(app)
 }
 
-// login starts the OIDC authorization-code flow: remember state, nonce, and
-// PKCE verifier in a short-lived cookie, then hand the browser to the issuer.
+// login starts the OIDC authorization-code flow: remember state, nonce, PKCE
+// verifier, and where to return the browser afterwards in a short-lived
+// cookie, then hand the browser to the issuer.
 func (s *Service) login(c *fiber.Ctx) error {
 	state, nonce, verifier := randomToken(), randomToken(), oauth2.GenerateVerifier()
-	s.setCookie(c, flowCookieName, state+"."+nonce+"."+verifier, flowTTL)
+	returnTo := base64.RawURLEncoding.EncodeToString([]byte(sameOriginPath(c.Query("return_to"))))
+	s.setCookie(c, flowCookieName, state+"."+nonce+"."+verifier+"."+returnTo, flowTTL)
 	return c.Redirect(
 		s.oauth.AuthCodeURL(state, oauth2.SetAuthURLParam("nonce", nonce), oauth2.S256ChallengeOption(verifier)),
 		fiber.StatusFound,
 	)
 }
 
+// sameOriginPath restricts a return_to value to a same-origin relative path,
+// ruling out its use as an open redirect — "https://evil.example" and
+// "//evil.example" (protocol-relative) both parse with a non-empty host.
+func sameOriginPath(raw string) string {
+	if raw == "" || !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") {
+		return "/"
+	}
+	if u, err := url.Parse(raw); err != nil || u.Host != "" || u.Scheme != "" {
+		return "/"
+	}
+	return raw
+}
+
 // callback finishes the flow: validate state, exchange the code, verify the
 // ID token (issuer, audience, signature, nonce), upsert the user, and open a
 // session.
 func (s *Service) callback(c *fiber.Ctx) error {
-	flow := strings.Split(c.Cookies(flowCookieName), ".")
+	flow := strings.SplitN(c.Cookies(flowCookieName), ".", 4)
 	s.clearCookie(c, flowCookieName)
-	if len(flow) != 3 || c.Query("state") == "" || c.Query("state") != flow[0] {
+	if len(flow) != 4 || c.Query("state") == "" || c.Query("state") != flow[0] {
 		return fiber.NewError(fiber.StatusBadRequest, "login flow expired or state mismatch — go to /auth/login and try again")
 	}
 	nonce, verifier := flow[1], flow[2]
+	returnTo := "/"
+	if b, err := base64.RawURLEncoding.DecodeString(flow[3]); err == nil {
+		returnTo = sameOriginPath(string(b))
+	}
 	if e := c.Query("error"); e != "" {
 		return fiber.NewError(fiber.StatusBadGateway, "identity provider error: "+e+": "+c.Query("error_description"))
 	}
@@ -104,7 +126,7 @@ func (s *Service) callback(c *fiber.Ctx) error {
 	// Logins are rare; piggyback session garbage collection on them.
 	_ = s.store.DeleteExpiredSessions(c.Context(), now.Unix())
 	s.setCookie(c, sessionCookieName, sessionToken, sessionTTL)
-	return c.Redirect("/", fiber.StatusFound)
+	return c.Redirect(returnTo, fiber.StatusFound)
 }
 
 // logout deletes the session and shows a minimal signed-out page instead of
