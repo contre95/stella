@@ -1,6 +1,19 @@
-// Package auth owns users, login sessions, and the OIDC login flow. When
-// auth.enabled is false (single-user mode) it collapses to a middleware that
-// pins every request to the built-in local user and registers no routes.
+// Package auth owns users, login sessions, the OIDC login flow, and (in
+// multi-user mode) Stella acting as its own OAuth Authorization Server for
+// MCP clients — see oauth_server.go and oauth_handlers.go. When auth.enabled
+// is false (single-user mode) it collapses to a middleware that pins every
+// request to the built-in local user and registers no routes.
+//
+// Scope is not currently an access-control boundary: every credential this
+// package can issue — a static API token, or an OAuth access token from any
+// approved client — grants the same full read/write/delete access to the
+// owning user's data. OAuth requests still carry a "scope" value end to end
+// (consent screen, AuthCode, OAuthToken) and it's shown to the user and
+// echoed back to the client, but nothing checks it against what a tool call
+// is allowed to do. A scope of "read-only" would look identical, in terms of
+// actual access, to no scope at all. Narrowing this would mean threading a
+// granted-scope check into every MCP tool handler in src/presenter/mcp — out
+// of scope for now, but the plumbing is already there to build on.
 package auth
 
 import (
@@ -70,20 +83,24 @@ type AuthCode struct {
 	UserID        string
 	RedirectURI   string
 	CodeChallenge string // PKCE S256 challenge; "plain" is not supported
-	Scope         string
-	Expires       int64 // POSIX seconds
+	Scope         string // carried through end to end, not enforced — see the package doc comment
+	Expires       int64  // POSIX seconds
 }
 
 // OAuthToken is an access/refresh token pair issued to an OAuth client on
 // behalf of a user. RefreshHash is empty for a token with no refresh token.
+// Scope is stored and echoed back to the client but not currently enforced —
+// every grant (OAuth or a static API token) has the same full access; see the
+// package doc comment.
 type OAuthToken struct {
-	AccessHash    string
-	RefreshHash   string
-	ClientID      string
-	UserID        string
-	Scope         string
-	AccessExpires int64 // POSIX seconds
-	Created       int64 // POSIX seconds
+	AccessHash     string
+	RefreshHash    string
+	ClientID       string
+	UserID         string
+	Scope          string
+	AccessExpires  int64 // POSIX seconds
+	RefreshExpires int64 // POSIX seconds; the whole grant dies here, not just the access token
+	Created        int64 // POSIX seconds
 }
 
 // AuthorizedClient is an OAuth client a user has granted access to, for the
@@ -151,10 +168,10 @@ type Store interface {
 	// UserByOAuthAccessToken resolves an unexpired access token hash to its
 	// owner; ErrInvalidOAuthToken when unknown or expired.
 	UserByOAuthAccessToken(ctx context.Context, accessHash string, now int64) (*User, error)
-	// OAuthTokenByRefreshHash returns the token record for a refresh token
-	// hash; ErrInvalidGrant when unknown. Refresh tokens don't expire on
-	// their own — they live until RevokeOAuthClientForUser deletes them.
-	OAuthTokenByRefreshHash(ctx context.Context, refreshHash string) (*OAuthToken, error)
+	// OAuthTokenByRefreshHash returns the token record for an unexpired
+	// refresh token hash; ErrInvalidGrant when unknown or expired — the
+	// client must then send the user through /oauth/authorize again.
+	OAuthTokenByRefreshHash(ctx context.Context, refreshHash string, now int64) (*OAuthToken, error)
 	// RotateOAuthAccessToken replaces the access token bound to a refresh
 	// token with a newly issued one, keeping the same refresh token.
 	RotateOAuthAccessToken(ctx context.Context, refreshHash, newAccessHash string, newExpires int64) error

@@ -57,4 +57,9 @@ Stella runs in one of two modes, controlled by `auth.enabled`:
     OIDC login above. Point an OAuth-capable MCP client (Claude Desktop,
     Claude Code, Claude.ai custom connectors, ...) at `<publicURL>/mcp` and it
     discovers the flow automatically — no manual token needed. Connected apps
-    can be revoked from `/settings/tokens`.
+    can be revoked from `/settings/tokens`. Refresh tokens are valid for
+    `mcp.refreshTokenDays` (default 30) before the client has to reconnect
+    through the consent screen.
+
+  Both credential kinds grant the same full access — there's currently no way
+  to scope a connection to e.g. read-only.

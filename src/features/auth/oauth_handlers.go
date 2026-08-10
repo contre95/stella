@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"time"
 
@@ -117,6 +118,7 @@ func (s *Service) token(c *fiber.Ctx) error {
 	case "refresh_token":
 		tokens, err = s.RefreshAccessToken(c.Context(), c.FormValue("refresh_token"), c.FormValue("client_id"))
 	default:
+		slog.Warn("oauth token request with unsupported grant_type", "grant_type", c.FormValue("grant_type"), "content_type", c.Get("Content-Type"))
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "unsupported_grant_type"})
 	}
 	if err != nil {
@@ -235,7 +237,28 @@ func (h *OAuthConsentHandler) authorize(c *fiber.Ctx) error {
 	if err := h.svc.setPendingAuthorization(c, pending); err != nil {
 		return err
 	}
-	return c.Render("oauth_consent", fiber.Map{"ClientName": name, "Scope": pending.Scope})
+	// client_name is whatever the client claimed at registration — DCR is
+	// open, so a malicious client could register itself as e.g. "Claude
+	// Desktop" to phish a user who follows a crafted /oauth/authorize link.
+	// redirect_uri, by contrast, is exactly where the authorization code is
+	// actually about to be sent — show it so the user has something to
+	// verify beyond a self-asserted name.
+	return c.Render("oauth_consent", fiber.Map{
+		"ClientName":     name,
+		"Scope":          pending.Scope,
+		"RedirectOrigin": displayOrigin(redirectURI),
+	})
+}
+
+// displayOrigin extracts a redirect_uri's scheme://host for display on the
+// consent screen, e.g. "https://claude.ai" or "http://127.0.0.1:53219". Falls
+// back to the raw URI for schemes with no host (native-app custom schemes).
+func displayOrigin(redirectURI string) string {
+	u, err := url.Parse(redirectURI)
+	if err != nil || u.Host == "" {
+		return redirectURI
+	}
+	return u.Scheme + "://" + u.Host
 }
 
 // decide handles the consent screen's Approve/Deny submission.

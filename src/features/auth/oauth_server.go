@@ -9,7 +9,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"slices"
 	"strings"
@@ -19,7 +21,24 @@ import (
 const (
 	authCodeTTL    = 5 * time.Minute
 	accessTokenTTL = time.Hour
+	// defaultRefreshTokenDays is used when mcp.refreshTokenDays is unset or
+	// non-positive in config.
+	defaultRefreshTokenDays = 30
 )
+
+// refreshTokenTTL is how long a freshly issued refresh token stays valid,
+// configured via mcp.refreshTokenDays. This is a fixed lifetime set at
+// issuance, not a sliding window — a refresh token stops working this long
+// after the user approved the consent screen, no matter how often it's used,
+// so the client must go through /oauth/authorize again. This bounds how long
+// a leaked refresh token stays useful.
+func (s *Service) refreshTokenTTL() time.Duration {
+	days := s.cfg.Get().MCP.RefreshTokenDays
+	if days <= 0 {
+		days = defaultRefreshTokenDays
+	}
+	return time.Duration(days) * 24 * time.Hour
+}
 
 // IssuedTokens is the token-endpoint response: a fresh access token, and a
 // refresh token when one was issued (empty when refreshing, since refresh
@@ -27,8 +46,8 @@ const (
 type IssuedTokens struct {
 	AccessToken  string
 	RefreshToken string
-	ExpiresIn    int64 // seconds
-	Scope        string
+	ExpiresIn    int64  // seconds
+	Scope        string // echoed back to the client, not enforced — see the package doc comment
 }
 
 // RegisterOAuthClient implements Dynamic Client Registration (RFC 7591) for
@@ -108,26 +127,36 @@ func (s *Service) IssueAuthCode(ctx context.Context, clientID, userID, redirectU
 
 // ExchangeAuthorizationCode redeems a single-use authorization code for an
 // access + refresh token pair, verifying the redirect_uri, client_id, and
-// PKCE code_verifier all match what the code was issued for.
+// PKCE code_verifier all match what the code was issued for. Every rejection
+// is logged with which check failed (never the secret values themselves) —
+// "invalid_grant" alone doesn't tell an operator anything actionable.
 func (s *Service) ExchangeAuthorizationCode(ctx context.Context, code, clientID, redirectURI, codeVerifier string) (*IssuedTokens, error) {
 	c, err := s.store.ConsumeAuthCode(ctx, hashToken(code), time.Now().Unix())
 	if err != nil {
+		slog.Warn("oauth token exchange rejected: code unknown, expired, or already used", "client_id", clientID)
 		return nil, err
 	}
-	if c.ClientID != clientID || c.RedirectURI != redirectURI {
+	if c.ClientID != clientID {
+		slog.Warn("oauth token exchange rejected: client_id mismatch", "issued_to", c.ClientID, "presented", clientID)
+		return nil, ErrInvalidGrant
+	}
+	if c.RedirectURI != redirectURI {
+		slog.Warn("oauth token exchange rejected: redirect_uri mismatch", "client_id", clientID, "issued_for", c.RedirectURI, "presented", redirectURI)
 		return nil, ErrInvalidGrant
 	}
 	if pkceChallengeS256(codeVerifier) != c.CodeChallenge {
+		slog.Warn("oauth token exchange rejected: PKCE code_verifier does not match code_challenge", "client_id", clientID)
 		return nil, ErrInvalidGrant
 	}
 	return s.issueTokenPair(ctx, c.ClientID, c.UserID, c.Scope)
 }
 
 // RefreshAccessToken exchanges a refresh token for a fresh access token. The
-// refresh token itself is not rotated — the same one keeps working until the
-// user revokes the client from account settings.
+// refresh token itself is not rotated — the same one keeps working, up to
+// its original expiry, until the user revokes the client from account
+// settings.
 func (s *Service) RefreshAccessToken(ctx context.Context, refreshToken, clientID string) (*IssuedTokens, error) {
-	t, err := s.store.OAuthTokenByRefreshHash(ctx, hashToken(refreshToken))
+	t, err := s.store.OAuthTokenByRefreshHash(ctx, hashToken(refreshToken), time.Now().Unix())
 	if err != nil {
 		return nil, err
 	}
@@ -137,6 +166,9 @@ func (s *Service) RefreshAccessToken(ctx context.Context, refreshToken, clientID
 	access := randomToken()
 	expires := time.Now().Add(accessTokenTTL).Unix()
 	if err := s.store.RotateOAuthAccessToken(ctx, hashToken(refreshToken), hashToken(access), expires); err != nil {
+		if !errors.Is(err, ErrInvalidGrant) {
+			slog.Error("oauth refresh failed: unexpected store error", "client_id", clientID, "err", err)
+		}
 		return nil, err
 	}
 	return &IssuedTokens{AccessToken: access, ExpiresIn: int64(accessTokenTTL.Seconds()), Scope: t.Scope}, nil
@@ -148,15 +180,22 @@ func (s *Service) issueTokenPair(ctx context.Context, clientID, userID, scope st
 	access, refresh := randomToken(), randomToken()
 	now := time.Now()
 	err := s.store.AddOAuthToken(ctx, &OAuthToken{
-		AccessHash:    hashToken(access),
-		RefreshHash:   hashToken(refresh),
-		ClientID:      clientID,
-		UserID:        userID,
-		Scope:         scope,
-		AccessExpires: now.Add(accessTokenTTL).Unix(),
-		Created:       now.Unix(),
+		AccessHash:     hashToken(access),
+		RefreshHash:    hashToken(refresh),
+		ClientID:       clientID,
+		UserID:         userID,
+		Scope:          scope,
+		AccessExpires:  now.Add(accessTokenTTL).Unix(),
+		RefreshExpires: now.Add(s.refreshTokenTTL()).Unix(),
+		Created:        now.Unix(),
 	})
 	if err != nil {
+		// An unexpected store failure, not a client-input rejection — the
+		// earlier checks (code lookup, client_id, redirect_uri, PKCE) all
+		// already passed. Worth its own error log: the generic 400 this
+		// turns into on the wire (see token() in oauth_handlers.go) gives an
+		// operator nothing to go on otherwise.
+		slog.Error("oauth token issuance failed: unexpected store error", "client_id", clientID, "err", err)
 		return nil, fmt.Errorf("issuing tokens: %w", err)
 	}
 	// Codes and tokens accumulate quickly (every /oauth/token call), unlike

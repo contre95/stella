@@ -16,7 +16,8 @@ func defaultConfig() Config {
 			Enabled: false,
 		},
 		MCP: MCP{
-			Enabled: false,
+			Enabled:          false,
+			RefreshTokenDays: 30,
 		},
 		Logger: Logger{
 			Level: "info",

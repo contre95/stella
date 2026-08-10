@@ -92,6 +92,11 @@ type Server struct {
 // MCP holds the Model Context Protocol server settings.
 type MCP struct {
 	Enabled bool `yaml:"enabled"`
+	// RefreshTokenDays is how long an OAuth refresh token issued to an MCP
+	// client (multi-user mode only) stays valid before the client must send
+	// the user through the consent screen again. 0 or unset falls back to a
+	// 30-day default.
+	RefreshTokenDays int `yaml:"refreshTokenDays"`
 }
 
 // Logger holds logging settings.

@@ -14,9 +14,9 @@ func (s *SqliteSRS) AddOAuthToken(ctx context.Context, t *auth.OAuthToken) error
 		refreshHash = t.RefreshHash
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO oauth_tokens (access_token_hash, refresh_token_hash, client_id, user_id, scope, access_expires, created)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		t.AccessHash, refreshHash, t.ClientID, t.UserID, t.Scope, t.AccessExpires, t.Created)
+		`INSERT INTO oauth_tokens (access_token_hash, refresh_token_hash, client_id, user_id, scope, access_expires, refresh_expires, created)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		t.AccessHash, refreshHash, t.ClientID, t.UserID, t.Scope, t.AccessExpires, t.RefreshExpires, t.Created)
 	return err
 }
 
@@ -36,12 +36,12 @@ func (s *SqliteSRS) UserByOAuthAccessToken(ctx context.Context, accessHash strin
 	return &u, nil
 }
 
-func (s *SqliteSRS) OAuthTokenByRefreshHash(ctx context.Context, refreshHash string) (*auth.OAuthToken, error) {
+func (s *SqliteSRS) OAuthTokenByRefreshHash(ctx context.Context, refreshHash string, now int64) (*auth.OAuthToken, error) {
 	var t auth.OAuthToken
 	err := s.db.QueryRowContext(ctx,
-		`SELECT access_token_hash, refresh_token_hash, client_id, user_id, scope, access_expires, created
-		 FROM oauth_tokens WHERE refresh_token_hash=?`, refreshHash).
-		Scan(&t.AccessHash, &t.RefreshHash, &t.ClientID, &t.UserID, &t.Scope, &t.AccessExpires, &t.Created)
+		`SELECT access_token_hash, refresh_token_hash, client_id, user_id, scope, access_expires, refresh_expires, created
+		 FROM oauth_tokens WHERE refresh_token_hash=? AND refresh_expires>?`, refreshHash, now).
+		Scan(&t.AccessHash, &t.RefreshHash, &t.ClientID, &t.UserID, &t.Scope, &t.AccessExpires, &t.RefreshExpires, &t.Created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, auth.ErrInvalidGrant
 	}
@@ -95,7 +95,10 @@ func (s *SqliteSRS) RevokeOAuthClientForUser(ctx context.Context, clientID, user
 	return err
 }
 
+// DeleteExpiredOAuthTokens purges grants whose refresh token has expired —
+// once that's gone the access token can never be renewed again either, so
+// the whole row is dead.
 func (s *SqliteSRS) DeleteExpiredOAuthTokens(ctx context.Context, now int64) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM oauth_tokens WHERE refresh_token_hash IS NULL AND access_expires<=?`, now)
+	_, err := s.db.ExecContext(ctx, `DELETE FROM oauth_tokens WHERE refresh_expires<=?`, now)
 	return err
 }

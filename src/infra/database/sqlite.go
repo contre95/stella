@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
 	user_id            TEXT NOT NULL,
 	scope              TEXT NOT NULL DEFAULT '',
 	access_expires     INTEGER NOT NULL,
+	refresh_expires    INTEGER NOT NULL,
 	created            INTEGER NOT NULL,
 	FOREIGN KEY (client_id) REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
 	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE

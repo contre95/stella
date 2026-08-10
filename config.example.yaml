@@ -29,6 +29,10 @@ auth:
 mcp:
   # Enable the MCP endpoint at /mcp (StreamableHTTP transport).
   enabled: false
+  # How many days an OAuth refresh token issued to an MCP client stays valid
+  # (multi-user mode only) before the client must reconnect through the
+  # consent screen. 0 or unset = 30.
+  refreshTokenDays: 30
 logger:
   level: info   # debug | info | warn | error
   format: ""    # logfmt (default) | text | json
