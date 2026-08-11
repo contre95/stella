@@ -111,10 +111,18 @@ func NewService(ctx context.Context, store Store, cfg *config.Manager) (*Service
 	if err != nil {
 		return nil, fmt.Errorf("oidc discovery for %q: %w", a.OIDC.Issuer, err)
 	}
-	s.verifier = provider.Verifier(&oidc.Config{ClientID: a.OIDC.ClientID})
+	// CIMD clients are public by definition (token_endpoint_auth_method:
+	// none) — the client_id is the URL of the metadata document Stella
+	// serves itself (see clientMetadata in handlers.go), not a
+	// provider-issued string, and there is no secret.
+	clientID, clientSecret := a.OIDC.ClientID, a.OIDC.ClientSecret
+	if a.OIDC.CIMD {
+		clientID, clientSecret = clientMetadataURL(a.OIDC.PublicURL), ""
+	}
+	s.verifier = provider.Verifier(&oidc.Config{ClientID: clientID})
 	s.oauth = &oauth2.Config{
-		ClientID:     a.OIDC.ClientID,
-		ClientSecret: a.OIDC.ClientSecret,
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
 		Endpoint:     provider.Endpoint(),
 		RedirectURL:  strings.TrimRight(a.OIDC.PublicURL, "/") + "/auth/callback",
 		Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},

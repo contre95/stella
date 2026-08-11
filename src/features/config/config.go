@@ -48,22 +48,34 @@ type OIDC struct {
 	Issuer       string `yaml:"issuer"`
 	ClientID     string `yaml:"clientID"`
 	ClientSecret string `yaml:"clientSecret"`
+	// CIMD registers Stella as an OIDC client via a self-hosted Client ID
+	// Metadata Document (<publicURL>/auth/client-metadata.json) instead of a
+	// manually created clientID/clientSecret pair. Only supported by
+	// providers implementing the CIMD spec (e.g. Pocket ID); mutually
+	// exclusive with clientID/clientSecret.
+	CIMD bool `yaml:"cimd"`
 	// PublicURL is the external base URL of this Stella instance; the OIDC
 	// redirect URL registered at the provider must be <publicURL>/auth/callback.
 	PublicURL string `yaml:"publicURL"`
 }
 
 // Validate enforces the conditional requirement struct tags cannot express:
-// multi-user mode needs a fully configured OIDC provider.
+// multi-user mode needs a fully configured OIDC provider, via either a
+// manually registered client or CIMD, not both.
 func (a *Auth) Validate() error {
 	if !a.Enabled {
 		return nil
 	}
+	if a.OIDC.CIMD && (a.OIDC.ClientID != "" || a.OIDC.ClientSecret != "") {
+		return fmt.Errorf("auth.oidc.cimd is true but clientID/clientSecret are also set — use one or the other")
+	}
+	required := map[string]string{"issuer": a.OIDC.Issuer, "publicURL": a.OIDC.PublicURL}
+	if !a.OIDC.CIMD {
+		required["clientID"] = a.OIDC.ClientID
+		required["clientSecret"] = a.OIDC.ClientSecret
+	}
 	var missing []string
-	for key, val := range map[string]string{
-		"issuer": a.OIDC.Issuer, "clientID": a.OIDC.ClientID,
-		"clientSecret": a.OIDC.ClientSecret, "publicURL": a.OIDC.PublicURL,
-	} {
+	for key, val := range required {
 		if strings.TrimSpace(val) == "" {
 			missing = append(missing, "auth.oidc."+key)
 		}
