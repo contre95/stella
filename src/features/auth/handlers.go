@@ -19,7 +19,17 @@ const (
 	// round trip to the identity provider.
 	flowCookieName = "stella_oidc_flow"
 	flowTTL        = 10 * time.Minute
+	// clientMetadataPath is where Stella serves its own Client ID Metadata
+	// Document (CIMD) when auth.oidc.cimd is enabled.
+	clientMetadataPath = "/auth/client-metadata.json"
 )
+
+// clientMetadataURL is the client_id CIMD-registered clients authenticate
+// as — per the CIMD spec it must exactly match the URL the document is
+// served at.
+func clientMetadataURL(publicURL string) string {
+	return strings.TrimRight(publicURL, "/") + clientMetadataPath
+}
 
 // RegisterRoutes mounts the login endpoints. They sit in front of the auth
 // middleware so an unauthenticated browser can reach them. Single-user mode
@@ -31,7 +41,27 @@ func (s *Service) RegisterRoutes(app *fiber.App) {
 	app.Get("/auth/login", s.login)
 	app.Get("/auth/callback", s.callback)
 	app.Get("/auth/logout", s.logout)
+	if s.cfg.Get().Auth.OIDC.CIMD {
+		app.Get(clientMetadataPath, s.clientMetadata)
+	}
 	s.registerOAuthEndpoints(app)
+}
+
+// clientMetadata serves Stella's Client ID Metadata Document so an identity
+// provider that supports CIMD (e.g. Pocket ID) can register Stella as an
+// OIDC client without a manually created client record — the operator just
+// allowlists this URL at the provider instead.
+func (s *Service) clientMetadata(c *fiber.Ctx) error {
+	a := s.cfg.Get().Auth
+	base := strings.TrimRight(a.PublicURL, "/")
+	return c.JSON(fiber.Map{
+		"client_id":                  clientMetadataURL(a.PublicURL),
+		"client_name":                s.cfg.Get().Server.AppName,
+		"redirect_uris":              []string{base + "/auth/callback"},
+		"token_endpoint_auth_method": "none",
+		"grant_types":                []string{"authorization_code", "refresh_token"},
+		"response_types":             []string{"code"},
+	})
 }
 
 // login starts the OIDC authorization-code flow: remember state, nonce, PKCE

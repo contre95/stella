@@ -21,11 +21,19 @@ auth:
   # for /mcp, layered on top of this OIDC login).
   publicURL: ""
   oidc:
-    # Issuer URL of your OpenID Connect provider (Keycloak, Authentik, etc.);
-    # its discovery document must live at <issuer>/.well-known/openid-configuration.
+    # Issuer URL of your OpenID Connect provider (Keycloak, Authentik, Pocket
+    # ID, etc.); its discovery document must live at
+    # <issuer>/.well-known/openid-configuration.
     issuer: ""
     clientID: ""
     clientSecret: ""
+    # If true, Stella registers itself with the provider via a self-hosted
+    # Client ID Metadata Document (<publicURL>/auth/client-metadata.json)
+    # instead of clientID/clientSecret above — no manually created client
+    # record needed, just allowlist that URL at the provider. Only supported
+    # by providers implementing CIMD (e.g. Pocket ID). Mutually exclusive
+    # with clientID/clientSecret.
+    cimd: false
 mcp:
   # Enable the MCP endpoint at /mcp (StreamableHTTP transport).
   enabled: false
