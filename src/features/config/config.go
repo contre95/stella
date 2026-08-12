@@ -37,11 +37,18 @@ type Auth struct {
 	// runs in single-user mode: no login required and all data belongs to one
 	// built-in local account.
 	Enabled bool `yaml:"enabled"`
-	// PublicURL is the external base URL of this Stella instance. The OIDC
-	// redirect URL registered at the provider must be <publicURL>/auth/callback.
-	// It also doubles as Stella's own OAuth issuer for MCP clients, since
-	// Stella acts as its own Authorization Server for the MCP endpoint.
-	PublicURL string `yaml:"publicURL"`
+	// PublicURLs are the external base URL(s) this Stella instance is
+	// reachable at (e.g. a LAN address and a public domain). Each entry needs
+	// its own <publicURL>/auth/callback registered as a redirect URI at the
+	// OIDC provider — and, in CIMD mode, its own
+	// <publicURL>/auth/client-metadata.json allowlisted, since CIMD's
+	// client_id is the metadata document's URL, making each entry a distinct
+	// client identity to the provider. Incoming requests are matched against
+	// this list by Host header, so the login flow and the OAuth AS surface for
+	// MCP clients (issuer, discovery, etc.) both mirror whichever domain the
+	// request actually came in on; an unrecognized Host falls back to the
+	// first entry.
+	PublicURLs []string `yaml:"publicURLs"`
 	// OIDC configures the OpenID Connect provider used when Enabled is true.
 	OIDC OIDC `yaml:"oidc"`
 }
@@ -71,7 +78,7 @@ func (a *Auth) Validate() error {
 	if a.OIDC.CIMD && (a.OIDC.ClientID != "" || a.OIDC.ClientSecret != "") {
 		return fmt.Errorf("auth.oidc.cimd is true but clientID/clientSecret are also set — use one or the other")
 	}
-	required := map[string]string{"oidc.issuer": a.OIDC.Issuer, "publicURL": a.PublicURL}
+	required := map[string]string{"oidc.issuer": a.OIDC.Issuer}
 	if !a.OIDC.CIMD {
 		required["oidc.clientID"] = a.OIDC.ClientID
 		required["oidc.clientSecret"] = a.OIDC.ClientSecret
@@ -84,6 +91,14 @@ func (a *Auth) Validate() error {
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("auth.enabled is true but %s not set", strings.Join(missing, ", "))
+	}
+	if len(a.PublicURLs) == 0 {
+		return fmt.Errorf("auth.enabled is true but auth.publicURLs not set")
+	}
+	for _, u := range a.PublicURLs {
+		if strings.TrimSpace(u) == "" {
+			return fmt.Errorf("auth.publicURLs contains an empty entry")
+		}
 	}
 	return nil
 }

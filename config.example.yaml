@@ -15,11 +15,17 @@ auth:
   # true = multi-user mode: OIDC login required; every user gets their own
   # decks, cards, and review history. Requires the oidc settings below.
   enabled: false
-  # External base URL of this Stella instance. Register <publicURL>/auth/callback
-  # as the redirect URI at the OIDC provider. Also used as Stella's own OAuth
-  # issuer identity for MCP clients (Stella is its own Authorization Server
-  # for /mcp, layered on top of this OIDC login).
-  publicURL: ""
+  # External base URL(s) this Stella instance is reachable at — usually just
+  # one, but list more (e.g. a LAN address and a public domain) if you reach
+  # it multiple ways. Register <publicURL>/auth/callback as a redirect URI at
+  # the OIDC provider for each one. Also used as Stella's own OAuth issuer
+  # identity for MCP clients (Stella is its own Authorization Server for
+  # /mcp, layered on top of this OIDC login) — requests are matched to one of
+  # these by Host header, falling back to the first entry.
+  publicURLs: []
+  # publicURLs:
+  #   - https://stella.example.com
+  #   - http://192.168.1.50:8858
   oidc:
     # Issuer URL of your OpenID Connect provider (Keycloak, Authentik, Pocket
     # ID, etc.); its discovery document must live at
@@ -30,9 +36,10 @@ auth:
     # If true, Stella registers itself with the provider via a self-hosted
     # Client ID Metadata Document (<publicURL>/auth/client-metadata.json)
     # instead of clientID/clientSecret above — no manually created client
-    # record needed, just allowlist that URL at the provider. Only supported
-    # by providers implementing CIMD (e.g. Pocket ID). Mutually exclusive
-    # with clientID/clientSecret.
+    # record needed, just allowlist that URL at the provider for each entry
+    # in publicURLs above (each is a distinct client identity under CIMD).
+    # Only supported by providers implementing CIMD (e.g. Pocket ID). Mutually
+    # exclusive with clientID/clientSecret.
     cimd: false
 mcp:
   # Enable the MCP endpoint at /mcp (StreamableHTTP transport).

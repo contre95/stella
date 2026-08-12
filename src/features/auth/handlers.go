@@ -52,12 +52,11 @@ func (s *Service) RegisterRoutes(app *fiber.App) {
 // OIDC client without a manually created client record — the operator just
 // allowlists this URL at the provider instead.
 func (s *Service) clientMetadata(c *fiber.Ctx) error {
-	a := s.cfg.Get().Auth
-	base := strings.TrimRight(a.PublicURL, "/")
+	publicURL := s.effectivePublicURL(c.Hostname())
 	return c.JSON(fiber.Map{
-		"client_id":                  clientMetadataURL(a.PublicURL),
+		"client_id":                  clientMetadataURL(publicURL),
 		"client_name":                s.cfg.Get().Server.AppName,
-		"redirect_uris":              []string{base + "/auth/callback"},
+		"redirect_uris":              []string{publicURL + "/auth/callback"},
 		"token_endpoint_auth_method": "none",
 		"grant_types":                []string{"authorization_code", "refresh_token"},
 		"response_types":             []string{"code"},
@@ -71,8 +70,9 @@ func (s *Service) login(c *fiber.Ctx) error {
 	state, nonce, verifier := randomToken(), randomToken(), oauth2.GenerateVerifier()
 	returnTo := base64.RawURLEncoding.EncodeToString([]byte(sameOriginPath(c.Query("return_to"))))
 	s.setCookie(c, flowCookieName, state+"."+nonce+"."+verifier+"."+returnTo, flowTTL)
+	oauthCfg := s.oauthConfig(s.effectivePublicURL(c.Hostname()))
 	return c.Redirect(
-		s.oauth.AuthCodeURL(state, oauth2.SetAuthURLParam("nonce", nonce), oauth2.S256ChallengeOption(verifier)),
+		oauthCfg.AuthCodeURL(state, oauth2.SetAuthURLParam("nonce", nonce), oauth2.S256ChallengeOption(verifier)),
 		fiber.StatusFound,
 	)
 }
@@ -108,7 +108,8 @@ func (s *Service) callback(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadGateway, "identity provider error: "+e+": "+c.Query("error_description"))
 	}
 
-	token, err := s.oauth.Exchange(c.Context(), c.Query("code"), oauth2.VerifierOption(verifier))
+	publicURL := s.effectivePublicURL(c.Hostname())
+	token, err := s.oauthConfig(publicURL).Exchange(c.Context(), c.Query("code"), oauth2.VerifierOption(verifier))
 	if err != nil {
 		return fmt.Errorf("exchanging authorization code: %w", err)
 	}
@@ -116,7 +117,7 @@ func (s *Service) callback(c *fiber.Ctx) error {
 	if !ok {
 		return fiber.NewError(fiber.StatusBadGateway, "identity provider returned no id_token")
 	}
-	idToken, err := s.verifier.Verify(c.Context(), rawIDToken)
+	idToken, err := s.verifiers[publicURL].Verify(c.Context(), rawIDToken)
 	if err != nil {
 		return fmt.Errorf("verifying id token: %w", err)
 	}
@@ -180,7 +181,7 @@ func (s *Service) setCookie(c *fiber.Ctx, name, value string, ttl time.Duration)
 		Path:     "/",
 		Expires:  time.Now().Add(ttl),
 		HTTPOnly: true,
-		Secure:   s.secureCookies(),
+		Secure:   s.secureCookies(s.effectivePublicURL(c.Hostname())),
 		SameSite: fiber.CookieSameSiteLaxMode,
 	})
 }
@@ -192,7 +193,7 @@ func (s *Service) clearCookie(c *fiber.Ctx, name string) {
 		Path:     "/",
 		Expires:  time.Unix(0, 0),
 		HTTPOnly: true,
-		Secure:   s.secureCookies(),
+		Secure:   s.secureCookies(s.effectivePublicURL(c.Hostname())),
 		SameSite: fiber.CookieSameSiteLaxMode,
 	})
 }

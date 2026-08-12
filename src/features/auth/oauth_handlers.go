@@ -9,9 +9,7 @@ import (
 	"net/url"
 	"time"
 
-	adaptor "github.com/gofiber/adaptor/v2"
 	"github.com/gofiber/fiber/v2"
-	sdkauth "github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
 )
 
@@ -28,16 +26,29 @@ func (s *Service) registerOAuthEndpoints(app *fiber.App) {
 	app.Post("/oauth/register", s.registerClient)
 	app.Post("/oauth/token", s.token)
 	app.Get("/.well-known/oauth-authorization-server", s.authServerMetadata)
-	app.Get("/.well-known/oauth-protected-resource", adaptor.HTTPHandler(sdkauth.ProtectedResourceMetadataHandler(&oauthex.ProtectedResourceMetadata{
-		Resource:             s.PublicURL() + "/mcp",
-		AuthorizationServers: []string{s.PublicURL()},
-		ScopesSupported:      []string{"mcp"},
-	})))
+	app.Get("/.well-known/oauth-protected-resource", s.protectedResourceMetadata)
 	// Browser-based MCP clients (e.g. a claude.ai custom connector calling
 	// these endpoints via fetch()) send a CORS preflight before a JSON POST;
 	// answer it directly since these routes sit ahead of any CORS middleware.
 	app.Options("/oauth/register", corsPreflight)
 	app.Options("/oauth/token", corsPreflight)
+}
+
+// protectedResourceMetadata serves RFC 9728 metadata — reimplemented from
+// sdkauth.ProtectedResourceMetadataHandler (same headers/behavior) rather than
+// using that fixed-metadata handler directly, since Resource and
+// AuthorizationServers must reflect whichever of Auth.PublicURLs the request
+// came in on.
+func (s *Service) protectedResourceMetadata(c *fiber.Ctx) error {
+	base := s.effectivePublicURL(c.Hostname())
+	c.Set("Access-Control-Allow-Origin", "*")
+	c.Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	c.Set("Access-Control-Allow-Headers", "Content-Type")
+	return c.JSON(oauthex.ProtectedResourceMetadata{
+		Resource:             base + "/mcp",
+		AuthorizationServers: []string{base},
+		ScopesSupported:      []string{"mcp"},
+	})
 }
 
 // corsPreflight answers a CORS preflight OPTIONS request for the public
@@ -53,7 +64,7 @@ func corsPreflight(c *fiber.Ctx) error {
 // own OAuth Authorization Server for MCP clients — layered on top of the
 // OIDC login the /oauth/authorize consent screen requires.
 func (s *Service) authServerMetadata(c *fiber.Ctx) error {
-	base := s.PublicURL()
+	base := s.effectivePublicURL(c.Hostname())
 	c.Set("Access-Control-Allow-Origin", "*")
 	return c.JSON(oauthex.AuthServerMeta{
 		Issuer:                            base,

@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -188,10 +189,11 @@ type Store interface {
 // Service drives authentication: the OIDC login flow, session cookies, and
 // the request middleware. In single-user mode only the middleware is active.
 type Service struct {
-	store    Store
-	cfg      *config.Manager
-	oauth    *oauth2.Config
-	verifier *oidc.IDTokenVerifier
+	store      Store
+	cfg        *config.Manager
+	publicURLs []string // normalized (no trailing slash); [0] is the fallback for an unrecognized Host
+	endpoint   oauth2.Endpoint
+	verifiers  map[string]*oidc.IDTokenVerifier // keyed by the matching entry in publicURLs
 }
 
 // NewService builds the auth service. Single-user mode just ensures the local
@@ -209,25 +211,28 @@ func NewService(ctx context.Context, store Store, cfg *config.Manager) (*Service
 		}
 		return s, nil
 	}
+	for _, u := range a.PublicURLs {
+		s.publicURLs = append(s.publicURLs, strings.TrimRight(u, "/"))
+	}
 	provider, err := oidc.NewProvider(ctx, a.OIDC.Issuer)
 	if err != nil {
 		return nil, fmt.Errorf("oidc discovery for %q: %w", a.OIDC.Issuer, err)
 	}
+	s.endpoint = provider.Endpoint()
 	// CIMD clients are public by definition (token_endpoint_auth_method:
 	// none) — the client_id is the URL of the metadata document Stella
 	// serves itself (see clientMetadata in handlers.go), not a
-	// provider-issued string, and there is no secret.
-	clientID, clientSecret := a.OIDC.ClientID, a.OIDC.ClientSecret
-	if a.OIDC.CIMD {
-		clientID, clientSecret = clientMetadataURL(a.PublicURL), ""
-	}
-	s.verifier = provider.Verifier(&oidc.Config{ClientID: clientID})
-	s.oauth = &oauth2.Config{
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-		Endpoint:     provider.Endpoint(),
-		RedirectURL:  strings.TrimRight(a.PublicURL, "/") + "/auth/callback",
-		Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
+	// provider-issued string, and there is no secret. Under CIMD, each
+	// configured public URL is a distinct client identity to the provider
+	// (its client_id is that URL's own metadata document), so each needs its
+	// own verifier checking the ID token audience against it.
+	s.verifiers = make(map[string]*oidc.IDTokenVerifier, len(s.publicURLs))
+	for _, publicURL := range s.publicURLs {
+		clientID := a.OIDC.ClientID
+		if a.OIDC.CIMD {
+			clientID = clientMetadataURL(publicURL)
+		}
+		s.verifiers[publicURL] = provider.Verifier(&oidc.Config{ClientID: clientID})
 	}
 	return s, nil
 }
@@ -235,17 +240,46 @@ func NewService(ctx context.Context, store Store, cfg *config.Manager) (*Service
 // SingleUser reports whether authentication is disabled (auth.enabled: false).
 func (s *Service) SingleUser() bool { return !s.cfg.Get().Auth.Enabled }
 
-// secureCookies reports whether cookies should carry the Secure flag, derived
-// from the instance being served over https.
-func (s *Service) secureCookies() bool {
-	return strings.HasPrefix(s.cfg.Get().Auth.PublicURL, "https://")
+// oauthConfig builds the oauth2.Config for logging a browser in against the
+// upstream OIDC provider, scoped to publicURL: the client_id (in CIMD mode)
+// and redirect_uri both depend on which of Auth.PublicURLs the request came
+// in on.
+func (s *Service) oauthConfig(publicURL string) *oauth2.Config {
+	a := s.cfg.Get().Auth
+	clientID, clientSecret := a.OIDC.ClientID, a.OIDC.ClientSecret
+	if a.OIDC.CIMD {
+		clientID, clientSecret = clientMetadataURL(publicURL), ""
+	}
+	return &oauth2.Config{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		Endpoint:     s.endpoint,
+		RedirectURL:  publicURL + "/auth/callback",
+		Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
+	}
 }
 
-// PublicURL returns Stella's external base URL, with no trailing slash. It is
-// both the OIDC redirect base and Stella's own OAuth issuer identity, since
-// Stella acts as its own Authorization Server for MCP clients.
-func (s *Service) PublicURL() string {
-	return strings.TrimRight(s.cfg.Get().Auth.PublicURL, "/")
+// secureCookies reports whether cookies should carry the Secure flag, derived
+// from publicURL — the request's resolved base URL — being served over https.
+func (s *Service) secureCookies(publicURL string) bool {
+	return strings.HasPrefix(publicURL, "https://")
+}
+
+// effectivePublicURL returns the configured Auth.PublicURLs entry whose host
+// matches host (as sent in the request's Host header), so the login flow and
+// the OAuth AS surface for MCP clients both mirror whichever domain the
+// instance was actually reached at. Falls back to the first configured entry
+// for a Host that matches none of them — e.g. a request via a raw IP.
+func (s *Service) effectivePublicURL(host string) string {
+	for _, u := range s.publicURLs {
+		if pu, err := url.Parse(u); err == nil && pu.Host == host {
+			return u
+		}
+	}
+	if len(s.publicURLs) > 0 {
+		return s.publicURLs[0]
+	}
+	return ""
 }
 
 // randomToken returns a fresh 256-bit URL-safe random string.
@@ -317,12 +351,12 @@ func (s *Service) MCPBearerMiddleware(next http.Handler) http.Handler {
 		} else {
 			parts := strings.Fields(r.Header.Get("Authorization"))
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-				s.mcpUnauthorized(w, "missing bearer token")
+				s.mcpUnauthorized(w, r, "missing bearer token")
 				return
 			}
 			user, err := s.userByMCPBearer(r.Context(), parts[1])
 			if err != nil {
-				s.mcpUnauthorized(w, "invalid or expired token")
+				s.mcpUnauthorized(w, r, "invalid or expired token")
 				return
 			}
 			userID = user.ID
@@ -343,7 +377,8 @@ func (s *Service) userByMCPBearer(ctx context.Context, raw string) (*User, error
 // mcpUnauthorized replies 401 with a WWW-Authenticate header pointing MCP
 // clients at protected resource metadata (RFC 9728 / the MCP authorization
 // spec), so a client with no token yet can discover how to obtain one.
-func (s *Service) mcpUnauthorized(w http.ResponseWriter, msg string) {
-	w.Header().Set("WWW-Authenticate", fmt.Sprintf("Bearer resource_metadata=%q", s.PublicURL()+"/.well-known/oauth-protected-resource"))
+func (s *Service) mcpUnauthorized(w http.ResponseWriter, r *http.Request, msg string) {
+	publicURL := s.effectivePublicURL(r.Host)
+	w.Header().Set("WWW-Authenticate", fmt.Sprintf("Bearer resource_metadata=%q", publicURL+"/.well-known/oauth-protected-resource"))
 	http.Error(w, msg, http.StatusUnauthorized)
 }
