@@ -19,21 +19,30 @@
       <div id="pv-flip-card" class="absolute inset-0 cursor-pointer">
 
         <!-- Front face (question) -->
-        <div id="pv-card-front" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-8 overflow-hidden rounded-2xl glass-strong" style="transition: opacity 0.32s ease;">
+        <div id="pv-card-front" class="absolute inset-0 flex flex-col items-center justify-center text-center overflow-hidden rounded-2xl glass-strong" style="transition: opacity 0.32s ease;">
           {{if .Fact.ImageFront}}
           <img src="/images/{{.Fact.ImageFront}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
           <div class="pointer-events-none absolute inset-0 bg-white/60 dark:bg-[#17161e]/70"></div>
           {{end}}
           <span class="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-xs font-semibold uppercase tracking-widest text-pink-500/80 dark:text-pink-300/70">Question</span>
           <div class="relative z-10 flex w-full flex-1 min-h-0 flex-col overflow-y-auto overscroll-contain">
-            <div class="m-auto flex w-full flex-col items-center gap-3 py-4">
+            <div class="m-auto flex w-full flex-col items-center gap-3 px-4 py-4 sm:px-6 sm:py-5">
               {{if .Fact.ImageFront}}
               <div class="flex w-full shrink-0 items-center justify-center">
                 <img src="/images/{{.Fact.ImageFront}}" alt="" class="max-h-[45vh] w-auto max-w-full rounded-lg object-contain pointer-events-none" />
               </div>
               {{end}}
               <div class="md-content w-full text-center text-xl font-medium leading-relaxed text-gray-800 dark:text-gray-100 sm:text-2xl"
-                 _="on load if my textContent.trim().length <= 3 set my style.fontSize to '4rem' set my style.lineHeight to '1'">
+                 _="on load
+                      set L to my textContent.trim().length
+                      if L <= 3
+                        set my style.fontSize to '4rem'
+                        set my style.lineHeight to '1'
+                      else if L > 200
+                        set my style.fontSize to '0.85em'
+                      else if L > 100
+                        set my style.fontSize to '0.92em'
+                      end">
                 {{md .Fact.Front}}
               </div>
             </div>
@@ -56,21 +65,35 @@
         </div>
 
         <!-- Back face (answer) -->
-        <div id="pv-card-back" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-8 overflow-hidden rounded-2xl glass-strong" style="display: none; opacity: 0; pointer-events: none;">
+        <div id="pv-card-back" class="absolute inset-0 flex flex-col items-center justify-center text-center overflow-hidden rounded-2xl glass-strong" style="display: none; opacity: 0; pointer-events: none;">
           {{if .Fact.ImageBack}}
           <img src="/images/{{.Fact.ImageBack}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
           <div class="pointer-events-none absolute inset-0 bg-white/60 dark:bg-[#17161e]/70"></div>
           {{end}}
           <span class="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-xs font-semibold uppercase tracking-widest text-emerald-500/80 dark:text-emerald-300/70">Answer</span>
           <div class="relative z-10 flex w-full flex-1 min-h-0 flex-col overflow-y-auto overscroll-contain">
-            <div class="m-auto flex w-full flex-col items-center gap-3 py-4">
+            <div class="m-auto flex w-full flex-col items-center gap-3 px-4 py-4 sm:px-6 sm:py-5">
               {{if .Fact.ImageBack}}
               <div class="flex w-full shrink-0 items-center justify-center">
                 <img src="/images/{{.Fact.ImageBack}}" alt="" class="max-h-[45vh] w-auto max-w-full rounded-lg object-contain pointer-events-none" />
               </div>
               {{end}}
               <div class="md-content w-full text-center text-xl font-medium leading-relaxed text-gray-900 dark:text-white sm:text-2xl"
-                 _="on load if my textContent.trim().length <= 3 set my style.fontSize to '4rem' set my style.lineHeight to '1'">
+                 _="on load
+                      set L to my textContent.trim().length
+                      if L > 80
+                        set my style.textAlign to 'justify'
+                      else
+                        set my style.textAlign to 'center'
+                      end
+                      if L <= 3
+                        set my style.fontSize to '4rem'
+                        set my style.lineHeight to '1'
+                      else if L > 200
+                        set my style.fontSize to '0.85em'
+                      else if L > 100
+                        set my style.fontSize to '0.92em'
+                      end">
                 {{md .Fact.Back}}
               </div>
             </div>

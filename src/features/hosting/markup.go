@@ -2,6 +2,7 @@ package hosting
 
 import (
 	"bytes"
+	"encoding/base64"
 	"html/template"
 	"log/slog"
 	"regexp"
@@ -42,18 +43,27 @@ var ttsOpenRe = regexp.MustCompile(`\{tts:(en|ja)\}`)
 
 const ttsCloseTok = "{/tts}"
 
+// mathDisplayRe matches "$$...$$" (block formulas); mathInlineRe matches
+// "$...$" (inline formulas, no "$" or newline inside so it can't span a
+// paragraph or swallow an unrelated later "$"). Display is extracted first
+// so its own "$$" pairs are gone before the inline pattern ever runs.
+var mathDisplayRe = regexp.MustCompile(`(?s)\$\$(.+?)\$\$`)
+var mathInlineRe = regexp.MustCompile(`\$([^$\n]+?)\$`)
+
 // Sentinels are Unicode Private-Use-Area characters: inert to goldmark's
 // inline parser (they're just ordinary text), so they survive markdown
 // parsing (including inside bold/italic) undisturbed and get swapped for
 // real markup only after goldmark has rendered the HTML.
 const (
-	colorOpenSentinel  = '\uE000'
-	colorCloseSentinel = '\uE001'
-	furiOpenSentinel   = '\uE002'
-	furiMidSentinel    = '\uE003'
-	furiCloseSentinel  = '\uE004'
-	ttsOpenSentinel    = '\uE005'
-	ttsCloseSentinel   = '\uE006'
+	colorOpenSentinel   = '\uE000'
+	colorCloseSentinel  = '\uE001'
+	furiOpenSentinel    = '\uE002'
+	furiMidSentinel     = '\uE003'
+	furiCloseSentinel   = '\uE004'
+	ttsOpenSentinel     = '\uE005'
+	ttsCloseSentinel    = '\uE006'
+	mathInlineSentinel  = '\uE007'
+	mathDisplaySentinel = '\uE008'
 )
 
 var colorOpenSentinelRe = regexp.MustCompile(string(colorOpenSentinel) + `([0-9a-fA-F]{6})`)
@@ -62,6 +72,15 @@ var furiSentinelRe = regexp.MustCompile(
 	string(furiOpenSentinel) + `(.*?)` + string(furiMidSentinel) + `(.*?)` + string(furiCloseSentinel))
 
 var ttsOpenSentinelRe = regexp.MustCompile(string(ttsOpenSentinel) + `(en|ja)`)
+
+// mathInlineSentinelRe / mathDisplaySentinelRe match a formula sentinel
+// wrapping its base64-encoded TeX. Base64's alphabet (letters, digits,
+// "+", "/", "=") contains none of goldmark's inline-markup characters, so
+// the payload is inert to markdown parsing -- and never collides with the
+// sentinel itself, so the same PUA character can serve as both the open
+// and close marker.
+var mathInlineSentinelRe = regexp.MustCompile(string(mathInlineSentinel) + `([A-Za-z0-9+/=]*)` + string(mathInlineSentinel))
+var mathDisplaySentinelRe = regexp.MustCompile(string(mathDisplaySentinel) + `([A-Za-z0-9+/=]*)` + string(mathDisplaySentinel))
 
 // preprocessColor swaps "{#hex}...{/}" for sentinel markers goldmark will
 // pass through untouched.
@@ -124,9 +143,55 @@ func postprocessTTS(htmlOut string) string {
 	return strings.ReplaceAll(htmlOut, string(ttsCloseSentinel), "</span></span>")
 }
 
+// preprocessMath swaps "$$...$$" and "$...$" for sentinels wrapping their
+// base64-encoded TeX, so goldmark can never reinterpret "_", "*", "^" or "\"
+// inside a formula as markdown. It runs before the other preprocessors so
+// braces inside a formula (e.g. "$x_{i}$") can't be mistaken for their
+// "{...}"-based syntax.
+func preprocessMath(src string) string {
+	src = mathDisplayRe.ReplaceAllStringFunc(src, func(m string) string {
+		tex := m[2 : len(m)-2]
+		return string(mathDisplaySentinel) + base64.StdEncoding.EncodeToString([]byte(tex)) + string(mathDisplaySentinel)
+	})
+	return mathInlineRe.ReplaceAllStringFunc(src, func(m string) string {
+		tex := m[1 : len(m)-1]
+		return string(mathInlineSentinel) + base64.StdEncoding.EncodeToString([]byte(tex)) + string(mathInlineSentinel)
+	})
+}
+
+// mathSpanHTML renders a single decoded formula sentinel match as a
+// <span class="katex-math" data-tex="..."> placeholder. The element's text
+// content is the literal "$...$"/"$$...$$" source, a plain-text fallback for
+// when the client-side KaTeX render (see scripts.html) hasn't run yet; KaTeX
+// overwrites it in place once it does.
+func mathSpanHTML(b64 string, display bool) string {
+	raw, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return "" // sentinel payload is always our own base64 output; unreachable in practice
+	}
+	escaped := template.HTMLEscapeString(string(raw))
+	delim, attrs := "$"+escaped+"$", ""
+	if display {
+		delim, attrs = "$$"+escaped+"$$", ` data-tex-display="1"`
+	}
+	return `<span class="katex-math"` + attrs + ` data-tex="` + escaped + `">` + delim + `</span>`
+}
+
+// postprocessMath swaps the sentinel markers left in rendered HTML for KaTeX
+// placeholder spans.
+func postprocessMath(htmlOut string) string {
+	htmlOut = mathDisplaySentinelRe.ReplaceAllStringFunc(htmlOut, func(m string) string {
+		return mathSpanHTML(mathDisplaySentinelRe.FindStringSubmatch(m)[1], true)
+	})
+	return mathInlineSentinelRe.ReplaceAllStringFunc(htmlOut, func(m string) string {
+		return mathSpanHTML(mathInlineSentinelRe.FindStringSubmatch(m)[1], false)
+	})
+}
+
 // MarkdownHTML converts fact front/back text to sanitized HTML for display.
 // Registered as the `md` template function.
 func MarkdownHTML(src string) template.HTML {
+	src = preprocessMath(src)
 	src = preprocessColor(src)
 	src = preprocessFurigana(src)
 	src = preprocessTTS(src)
@@ -138,5 +203,6 @@ func MarkdownHTML(src string) template.HTML {
 	out := postprocessColor(buf.String())
 	out = postprocessFurigana(out)
 	out = postprocessTTS(out)
+	out = postprocessMath(out)
 	return template.HTML(out)
 }

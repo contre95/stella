@@ -40,7 +40,7 @@
   </div>
 
   <!-- Card outer: fills remaining space, clips the flying-out card -->
-  <div id="card-outer" class="relative flex-1 min-h-0" style="min-height: 240px;">
+  <div id="card-outer" class="relative mx-auto w-full max-w-4xl flex-1 min-h-0" style="min-height: 240px;">
 
     <!-- Drag-direction labels (float over card, not transformed with it) -->
     <div id="drag-label-again" class="pointer-events-none absolute left-4 top-6 z-20 opacity-0" style="transition: opacity 0.08s;">
@@ -68,7 +68,7 @@
       <!-- Front face (question) -->
       <div
         id="card-front"
-        class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-10 overflow-hidden rounded-2xl glass-strong"
+        class="absolute inset-0 flex flex-col items-center justify-center text-center overflow-hidden rounded-2xl glass-strong"
         style="transition: opacity 0.32s ease;"
       >
         {{if and .DeckImage (not $frontImg)}}
@@ -78,20 +78,21 @@
         <img src="/images/{{$frontImg}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
         <div class="pointer-events-none absolute inset-0 bg-white/60 dark:bg-[#17161e]/70"></div>
         {{end}}
-        <span class="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-xs font-semibold uppercase tracking-widest text-pink-500/80 dark:text-pink-300/70">
+        <span class="absolute top-4 left-1/2 -translate-x-1/2 z-20 text-xs font-semibold uppercase tracking-widest text-pink-500/80 dark:text-pink-300/70">
           {{if eq .Card.View "forward"}}Question{{else}}Reverse{{end}}
         </span>
+        <div class="face-fade face-fade-top absolute inset-x-0 top-0 h-14 rounded-t-2xl bg-gradient-to-b from-white/85 via-white/40 to-transparent dark:from-[#17161e]/85 dark:via-[#17161e]/40"></div>
         {{$frontAudio := ""}}{{if eq .Card.View "forward"}}{{$frontAudio = .Fact.AudioFront}}{{else}}{{$frontAudio = .Fact.AudioBack}}{{end}}
         <!-- Scroll viewport: centres content when it fits, scrolls when the card is too short for it -->
         <div id="card-scroll-front" class="relative z-10 flex w-full flex-1 min-h-0 flex-col overflow-y-auto overscroll-contain">
-          <div id="content-wrap-front" class="m-auto flex w-full flex-col items-center gap-3 py-4">
+          <div id="content-wrap-front" class="m-auto flex w-full flex-col items-center gap-3 px-5 pt-16 pb-6 sm:px-8 sm:pt-20 sm:pb-8">
             {{if $frontImg}}
             <div class="flex w-full shrink-0 items-center justify-center">
               <img src="/images/{{$frontImg}}" alt="" class="max-h-[55vh] w-auto max-w-full rounded-lg object-contain pointer-events-none" />
             </div>
             {{end}}
-            <div id="face-content-front" class="md-content w-full text-center text-xl font-medium leading-relaxed text-gray-800 dark:text-gray-100 sm:text-2xl"
-               _="on load if my textContent.trim().length <= 3 set my style.fontSize to '6rem' set my style.lineHeight to '1'">
+            <div id="face-content-front" class="md-content w-full text-center font-medium leading-relaxed text-gray-800 dark:text-gray-100"
+               _="on load js(me) window.stellaFitCardText(document.getElementById('card-scroll-front'), me) end">
               {{if eq .Card.View "forward"}}{{md .Fact.Front}}{{else}}{{md .Fact.Back}}{{end}}
             </div>
           </div>
@@ -141,7 +142,7 @@
       <!-- Back face (answer) -->
       <div
         id="card-back"
-        class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center sm:p-10 overflow-hidden rounded-2xl glass-strong"
+        class="absolute inset-0 flex flex-col items-center justify-center text-center overflow-hidden rounded-2xl glass-strong"
         style="display: none; opacity: 0; pointer-events: none;"
       >
         {{if and .DeckImage (not $backImg)}}
@@ -151,18 +152,25 @@
         <img src="/images/{{$backImg}}" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover blur-3xl scale-110" />
         <div class="pointer-events-none absolute inset-0 bg-white/60 dark:bg-[#17161e]/70"></div>
         {{end}}
-        <span class="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-xs font-semibold uppercase tracking-widest text-emerald-500/80 dark:text-emerald-300/70">Answer</span>
+        <span class="absolute top-4 left-1/2 -translate-x-1/2 z-20 text-xs font-semibold uppercase tracking-widest text-emerald-500/80 dark:text-emerald-300/70">Answer</span>
+        <div class="face-fade face-fade-top absolute inset-x-0 top-0 h-14 rounded-t-2xl bg-gradient-to-b from-white/85 via-white/40 to-transparent dark:from-[#17161e]/85 dark:via-[#17161e]/40"></div>
         {{$backAudio := ""}}{{if eq .Card.View "forward"}}{{$backAudio = .Fact.AudioBack}}{{else}}{{$backAudio = .Fact.AudioFront}}{{end}}
         <!-- Scroll viewport: centres content when it fits, scrolls when the card is too short for it -->
         <div id="card-scroll-back" class="relative z-10 flex w-full flex-1 min-h-0 flex-col overflow-y-auto overscroll-contain">
-          <div id="content-wrap-back" class="m-auto flex w-full flex-col items-center gap-3 pt-4 pb-10">
+          <div id="content-wrap-back" class="m-auto flex w-full flex-col items-center gap-3 px-5 pt-16 pb-20 sm:px-8 sm:pt-20 sm:pb-24">
             {{if $backImg}}
             <div class="flex w-full shrink-0 items-center justify-center">
               <img src="/images/{{$backImg}}" alt="" class="max-h-[55vh] w-auto max-w-full rounded-lg object-contain pointer-events-none" />
             </div>
             {{end}}
-            <div id="face-content-back" class="md-content w-full text-center text-xl font-medium leading-relaxed text-gray-900 dark:text-white sm:text-2xl"
-               _="on load if my textContent.trim().length <= 3 set my style.fontSize to '6rem' set my style.lineHeight to '1'">
+            <div id="face-content-back" class="md-content w-full text-center font-medium leading-relaxed text-gray-900 dark:text-white"
+               _="on load
+                    set L to my textContent.trim().length
+                    if L > 80
+                      set my style.textAlign to 'justify'
+                    else
+                      set my style.textAlign to 'center'
+                    end">
               {{if eq .Card.View "forward"}}{{md .Fact.Back}}{{else}}{{md .Fact.Front}}{{end}}
             </div>
           </div>
@@ -182,7 +190,7 @@
           </div>
         </div>
         {{end}}
-        <div class="pointer-events-none absolute inset-x-0 bottom-0 z-[15] h-20 rounded-b-2xl bg-gradient-to-t from-white/85 via-white/40 to-transparent dark:from-[#17161e]/85 dark:via-[#17161e]/40"></div>
+        <div class="face-fade face-fade-bottom absolute inset-x-0 bottom-0 h-16 rounded-b-2xl bg-gradient-to-t from-white/85 via-white/40 to-transparent dark:from-[#17161e]/85 dark:via-[#17161e]/40"></div>
         <button
           type="button"
           id="edit-card-btn"
@@ -229,7 +237,7 @@
   </div>
 
   <!-- Button area — fixed height so the card above never resizes -->
-  <div class="mt-3 shrink-0" style="min-height: 56px;">
+  <div class="mx-auto w-full max-w-4xl mt-3 shrink-0" style="min-height: 56px;">
     <!-- Tap to reveal — shown before flip -->
     <button id="tap-to-reveal-btn"
       class="w-full rounded-2xl py-4 text-sm font-bold transition-colors bg-white/60 text-gray-600 ring-1 ring-inset ring-gray-300/50 hover:bg-white/80 dark:bg-white/10 dark:text-gray-300 dark:ring-white/10 dark:hover:bg-white/20 cursor-pointer"
@@ -322,6 +330,10 @@
       cardFront.style.pointerEvents = 'none';
       cardBack.style.display        = 'flex';
       void cardBack.offsetHeight;
+      // Only measurable once display isn't "none" — this is its first
+      // real layout, so the fit-to-container sizing runs here rather
+      // than on load.
+      window.stellaFitCardText(document.getElementById('card-scroll-back'), document.getElementById('face-content-back'));
       cardBack.style.transition     = 'opacity 0.32s ease';
       cardBack.style.opacity        = '1';
       cardBack.style.pointerEvents  = 'auto';
@@ -341,6 +353,24 @@
       cardFront.style.pointerEvents = 'auto';
       if (autoplayAudio && audioFront) audioFront.play().catch(function(){});
     }
+
+    // Re-fits whichever face is currently visible — called after a resize
+    // (container width changed, so the fluid base size did too) and after
+    // KaTeX renders math (see scripts.html), since that changes content
+    // height after the initial fit already ran.
+    window.stellaRefitReviewCard = function () {
+      window.stellaFitCardText(document.getElementById('card-scroll-front'), document.getElementById('face-content-front'));
+      if (showingBack) {
+        window.stellaFitCardText(document.getElementById('card-scroll-back'), document.getElementById('face-content-back'));
+      }
+    };
+    // Assigned (not addEventListener) so each swapped-in card replaces the
+    // previous card's handler — same rationale as the keyboard handler below.
+    var reviewResizeTimer;
+    window.onresize = function () {
+      clearTimeout(reviewResizeTimer);
+      reviewResizeTimer = setTimeout(window.stellaRefitReviewCard, 150);
+    };
 
     function reveal() {
       if (revealed) return;

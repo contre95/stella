@@ -284,6 +284,28 @@
     document.addEventListener('htmx:afterSwap', initAll);
   })();
 
+  // KaTeX math rendering — the server emits <span class="katex-math" data-tex="...">
+  // placeholders (see markup.go) holding the literal "$...$"/"$$...$$" source
+  // as a plain-text fallback; render each in place once, here.
+  (function () {
+    function renderAll() {
+      if (typeof katex === 'undefined') return;
+      var rendered = false;
+      document.querySelectorAll('.katex-math[data-tex]:not([data-rendered])').forEach(function (el) {
+        el.dataset.rendered = '1';
+        rendered = true;
+        try {
+          katex.render(el.dataset.tex, el, { displayMode: el.dataset.texDisplay === '1', throwOnError: false });
+        } catch (e) {}
+      });
+      // Math rendering changes content height after the review card's
+      // initial text-fit already ran (see head.html's stellaFitCardText).
+      if (rendered && window.stellaRefitReviewCard) window.stellaRefitReviewCard();
+    }
+    document.addEventListener('DOMContentLoaded', renderAll);
+    document.addEventListener('htmx:afterSwap', renderAll);
+  })();
+
   // Image paste widget — lets the card image fields accept a clipboard image
   // (paste button or Ctrl+V) while keeping the native file browser.
   (function () {

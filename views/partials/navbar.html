@@ -1,12 +1,20 @@
 <header class="glass-nav flex items-center justify-between border-b px-4 py-3 sm:px-6">
   <!-- Mobile brand -->
-  <div class="flex items-center gap-2 lg:hidden">
+  <a
+    href="/"
+    hx-get="/"
+    hx-target="#contenido"
+    hx-swap="outerHTML"
+    hx-push-url="true"
+    _="on click remove .nav-active from .nav-link then add .nav-active to #nav-dashboard"
+    class="flex items-center gap-2 lg:hidden"
+  >
     <img src="/logo.png" alt="Stella" class="h-12 w-12 rounded-lg object-contain" />
     <div>
       <span class="text-xl font-bold bg-gradient-to-r from-pink-400 to-pink-600 bg-clip-text text-transparent">Stella</span>
-      <div hx-get="/sidebar-stats" hx-trigger="load" hx-target="this"></div>
+      <div hx-get="/sidebar-stats" hx-trigger="load" hx-target="this" hx-push-url="false"></div>
     </div>
-  </div>
+  </a>
 
   <div class="ml-auto flex items-center gap-2">
     <button

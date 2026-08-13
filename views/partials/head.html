@@ -20,6 +20,8 @@
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <link rel="stylesheet" href="/css/app.css" />
   <script>
     (function() {
@@ -93,5 +95,38 @@
         sync();
       };
     })();
+  </script>
+  <script>
+    // Fits a card face's text to the space actually available for it,
+    // instead of a fixed/viewport-driven size: only genuinely short content
+    // (a single kanji/word — <=3 chars, matching the old fixed-size rule
+    // this replaced) grows past the fluid base size (see .katex-math's
+    // sibling rule in input.css); everything else is capped at that base
+    // size and only shrinks, until it stops needing to scroll or hits the
+    // floor, in which case it scrolls (see .face-fade in input.css for the
+    // blur that keeps that legible). Without this cap, any content short
+    // enough to fit a tall card at a big size — not just single-word
+    // cards — got stretched toward MAX_PX and looked oversized.
+    window.stellaFitCardText = function (scrollEl, contentEl) {
+      if (!scrollEl || !contentEl) return;
+      contentEl.style.fontSize = '';
+      var base = parseFloat(getComputedStyle(contentEl).fontSize) || 16;
+      var isShort = contentEl.textContent.trim().length <= 3;
+      var MAX_PX = 48; // hard cap — never grow past this, however short the content
+      var lo = 14, hi = isShort ? Math.min(base * 2, MAX_PX) : base;
+
+      function fits(px) {
+        contentEl.style.fontSize = px + 'px';
+        return scrollEl.scrollHeight <= scrollEl.clientHeight + 1;
+      }
+
+      if (fits(hi)) { contentEl.style.fontSize = hi + 'px'; return; }
+      if (!fits(lo)) { contentEl.style.fontSize = lo + 'px'; return; }
+      for (var i = 0; i < 8; i++) {
+        var mid = (lo + hi) / 2;
+        if (fits(mid)) lo = mid; else hi = mid;
+      }
+      contentEl.style.fontSize = lo + 'px';
+    };
   </script>
 </head>

@@ -1,16 +1,25 @@
 <aside class="glass-nav hidden w-60 shrink-0 flex-col border-r lg:flex">
   <!-- Logo -->
-  <div class="flex items-center gap-2.5 px-5 py-5">
+  <a
+    href="/"
+    hx-get="/"
+    hx-target="#contenido"
+    hx-swap="outerHTML"
+    hx-push-url="true"
+    _="on click remove .nav-active from .nav-link then add .nav-active to #nav-dashboard"
+    class="flex items-center gap-2.5 px-5 py-5"
+  >
     <img src="/logo.png" alt="Stella" class="h-14 w-14 rounded-xl object-contain" />
     <div>
       <span class="text-2xl font-bold tracking-tight bg-gradient-to-r from-pink-400 to-pink-600 bg-clip-text text-transparent">Stella</span>
-      <div hx-get="/sidebar-stats" hx-trigger="load" hx-target="this"></div>
+      <div hx-get="/sidebar-stats" hx-trigger="load" hx-target="this" hx-swap="innerHTML" hx-push-url="false"></div>
     </div>
-  </div>
+  </a>
 
   <!-- Nav -->
   <nav class="flex-1 px-3 py-4 space-y-1">
     <a
+      id="nav-dashboard"
       href="/"
       hx-get="/"
       hx-target="#contenido"

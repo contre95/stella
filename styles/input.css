@@ -12,6 +12,17 @@ body {
 }
 .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
 
+/* ── Fluid review-card text ────────────────────────────────────
+   Scales continuously with the card's own rendered width (a container
+   query unit) instead of jumping at fixed viewport breakpoints, and
+   instead of the viewport so it doesn't shift when the sidebar shows/hides
+   at the lg breakpoint. The per-length em multipliers set inline by
+   review_card.html's hyperscript still apply on top of this. */
+#card-front, #card-back { container-type: inline-size; }
+#face-content-front, #face-content-back {
+  font-size: clamp(1.25rem, 0.4rem + 3.5cqw, 4rem);
+}
+
 /* ── Rendered fact markdown ─────────────────────────────────── */
 /* Sizes in em so headings scale with the card's base text size.
    Tailwind preflight zeroes heading sizes and list markers — restore them. */
@@ -54,6 +65,24 @@ body {
 }
 .md-content a { text-decoration: underline; text-underline-offset: 2px; }
 .md-content hr { border-top: 1px solid rgba(107, 114, 128, 0.35); }
+/* Rendered formula (see markup.go's katex-math placeholder). Inline formulas
+   get a code-like pill; display ones get their own centered, padded box. */
+.katex-math {
+  padding: 0.05em 0.35em;
+  border-radius: 0.35em;
+  background: rgba(236, 72, 153, 0.12);
+}
+.katex-math[data-tex-display="1"] {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0.5em auto;
+  padding: 0.5em 0.9em;
+  border-radius: 0.6em;
+}
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.15em 0; }
+.dark .katex-math { background: rgba(244, 114, 182, 0.16); }
+.eink .katex-math { background: rgba(0, 0, 0, 0.06); }
 /* Furigana: the reading (<rt>) rides above the kanji. It inherits the
    surrounding text colour by default; wrap it in {#hex}…{/} to colour a
    specific reading. margin-bottom nudges it 2px clear of the kanji below. */
@@ -171,12 +200,32 @@ textarea.glass-input:focus {
 }
 .dark .btn-ghost:hover { background: rgba(255, 255, 255, 0.1); }
 
+/* ── Blur/fade behind the face label & bottom action bar while scrolled
+   card content passes underneath. Sits between the content (z-10) and the
+   label/buttons (z-20); mask-image tapers the blur from full strength at
+   the card edge to none a bit further in. */
+.face-fade {
+  z-index: 15;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.face-fade-top {
+  -webkit-mask-image: linear-gradient(to bottom, #000 40%, transparent);
+  mask-image: linear-gradient(to bottom, #000 40%, transparent);
+}
+.face-fade-bottom {
+  -webkit-mask-image: linear-gradient(to top, #000 40%, transparent);
+  mask-image: linear-gradient(to top, #000 40%, transparent);
+}
+.eink .face-fade { backdrop-filter: none; -webkit-backdrop-filter: none; }
+
 /* ── Swipeable rows ────────────────────────────────────────── */
 .swipe-row { position: relative; overflow: hidden; }
 .swipe-actions { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; z-index: 0; }
 .swipe-actions.left { left: 0; }
 .swipe-actions.right { right: 0; }
-.swipe-content { position: relative; z-index: 1; transition: transform 0.2s ease; background: inherit; }
+.swipe-content { position: relative; z-index: 1; transition: transform 0.2s ease; }
 .swipe-btn {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 72px; height: 100%; padding: 0 12px;
@@ -480,21 +529,6 @@ nav .nav-link.nav-active { color: #db2777; font-weight: 600; }
   transform: scale(1.12);
 }
 
-/* ── Mobile bottom-nav clearance ───────────────────────────── */
-@media (max-width: 1023px) {
-  #contenido { padding-bottom: 7rem; }
-}
-
-/* ── Immersive review ──────────────────────────────────────────
-   While a review card is on screen, hide the mobile bottom nav and
-   drop its bottom clearance. This keeps the card the same height
-   whether or not the sidebar is showing, so it doesn't shrink at the
-   lg breakpoint where the sidebar collapses into the mobile nav. */
-body:has(#review-card-wrap) #mobile-nav { display: none; }
-@media (max-width: 1023px) {
-  body:has(#review-card-wrap) #contenido { padding-bottom: 0; }
-}
-
 /* ── SweetAlert2 glass theme ──────────────────────────────── */
 .swal2-container { backdrop-filter: blur(6px) !important; -webkit-backdrop-filter: blur(6px) !important; }
 .swal2-popup {
@@ -711,13 +745,14 @@ html.dark .swal2-cancel.swal2-styled:hover { background: rgba(255,255,255,0.13) 
 }
 .eink #grade-buttons button:hover { background: rgba(0,0,0,0.05) !important; }
 .eink #show-question-btn {
-  color: #555555;
-  border: 1px solid #888888;
+  background-color: #000000;
+  color: #ffffff;
+  border: 1px solid #000000;
   padding: 0.4rem 0.75rem;
   border-radius: 0.5rem;
   margin-top: 0.75rem;
 }
-.eink #show-question-btn:hover { color: #000000; border-color: #1a1a1a; }
+.eink #show-question-btn:hover { background-color: #222222; color: #ffffff; }
 .eink .deck-badge {
   background-color: transparent !important;
   color: #1a1a1a !important;
