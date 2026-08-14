@@ -58,6 +58,8 @@
 
     {{$frontImg := ""}}{{if eq .Card.View "forward"}}{{$frontImg = .Fact.ImageFront}}{{else}}{{$frontImg = .Fact.ImageBack}}{{end}}
     {{$backImg := ""}}{{if eq .Card.View "forward"}}{{$backImg = .Fact.ImageBack}}{{else}}{{$backImg = .Fact.ImageFront}}{{end}}
+    {{$frontText := ""}}{{if eq .Card.View "forward"}}{{$frontText = .Fact.Front}}{{else}}{{$frontText = .Fact.Back}}{{end}}
+    {{$backText := ""}}{{if eq .Card.View "forward"}}{{$backText = .Fact.Back}}{{else}}{{$backText = .Fact.Front}}{{end}}
 
     <!-- The card itself (gets drag-transformed) -->
     <div
@@ -93,7 +95,7 @@
             {{end}}
             <div id="face-content-front" class="md-content w-full text-center font-medium leading-relaxed text-gray-800 dark:text-gray-100"
                _="on load js(me) window.stellaFitCardText(document.getElementById('card-scroll-front'), me) end">
-              {{if eq .Card.View "forward"}}{{md .Fact.Front}}{{else}}{{md .Fact.Back}}{{end}}
+              {{md $frontText}}
             </div>
           </div>
         </div>
@@ -163,15 +165,8 @@
               <img src="/images/{{$backImg}}" alt="" class="max-h-[55vh] w-auto max-w-full rounded-lg object-contain pointer-events-none" />
             </div>
             {{end}}
-            <div id="face-content-back" class="md-content w-full text-center font-medium leading-relaxed text-gray-900 dark:text-white"
-               _="on load
-                    set L to my textContent.trim().length
-                    if L > 80
-                      set my style.textAlign to 'justify'
-                    else
-                      set my style.textAlign to 'center'
-                    end">
-              {{if eq .Card.View "forward"}}{{md .Fact.Back}}{{else}}{{md .Fact.Front}}{{end}}
+            <div id="face-content-back" class="md-content w-full text-justify font-medium leading-relaxed text-gray-900 dark:text-white">
+              {{md $backText}}
             </div>
           </div>
         </div>

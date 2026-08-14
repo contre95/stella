@@ -28,6 +28,11 @@ func TestMarkdownHTMLRendersFormatting(t *testing.T) {
 		{"unclosed tts span degrades", "{tts:en}hello", `<span class="tts-text">hello`},
 		{"tts wrapping furigana", "{tts:ja}{漢字|かんじ}{/tts}", `<span class="tts-text"><ruby>漢字<rt>かんじ</rt></ruby></span></span>`},
 		{"tts wrapping color", "{tts:en}{#ff6600}orange{/}{/tts}", `<span class="tts-text"><span style="color:#ff6600">orange</span></span></span>`},
+		{"center directive wraps a div", "{center}short answer{/center}", `<div style="text-align:center">`},
+		{"center directive strips its tokens", "{center}short answer{/center}", "short answer"},
+		{"text outside center stays out of the div", "before {center}mid{/center} after", "<p>before</p>"},
+		{"center wrapping formatting", "{center}**bold**{/center}", `<div style="text-align:center"><p><strong>bold</strong></p>`},
+		{"unclosed center degrades to plain text", "{center}no close", "<p>{center}no close</p>"},
 	} {
 		got := string(MarkdownHTML(tc.in))
 		if !strings.Contains(got, tc.want) {

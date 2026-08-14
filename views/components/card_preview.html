@@ -78,14 +78,9 @@
                 <img src="/images/{{.Fact.ImageBack}}" alt="" class="max-h-[45vh] w-auto max-w-full rounded-lg object-contain pointer-events-none" />
               </div>
               {{end}}
-              <div class="md-content w-full text-center text-xl font-medium leading-relaxed text-gray-900 dark:text-white sm:text-2xl"
+              <div class="md-content w-full text-justify text-xl font-medium leading-relaxed text-gray-900 dark:text-white sm:text-2xl"
                  _="on load
                       set L to my textContent.trim().length
-                      if L > 80
-                        set my style.textAlign to 'justify'
-                      else
-                        set my style.textAlign to 'center'
-                      end
                       if L <= 3
                         set my style.fontSize to '4rem'
                         set my style.lineHeight to '1'

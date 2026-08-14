@@ -43,6 +43,15 @@ var ttsOpenRe = regexp.MustCompile(`\{tts:(en|ja)\}`)
 
 const ttsCloseTok = "{/tts}"
 
+// centerOpenTok matches the block-level "{center}" opener: fact text is
+// justified by default (see the .md-content base style), and "{center}...
+// {/center}" opts a run of it back to centered — typically the whole face,
+// for short answers where justify would just look left-aligned. The close
+// token is the literal "{/center}", not "{/}": reusing "{/}" would collide
+// with the color-close token for the same reason documented on ttsOpenRe.
+const centerOpenTok = "{center}"
+const centerCloseTok = "{/center}"
+
 // mathDisplayRe matches "$$...$$" (block formulas); mathInlineRe matches
 // "$...$" (inline formulas, no "$" or newline inside so it can't span a
 // paragraph or swallow an unrelated later "$"). Display is extracted first
@@ -188,9 +197,10 @@ func postprocessMath(htmlOut string) string {
 	})
 }
 
-// MarkdownHTML converts fact front/back text to sanitized HTML for display.
-// Registered as the `md` template function.
-func MarkdownHTML(src string) template.HTML {
+// renderMarkdown runs one segment of fact text through the full markup
+// pipeline (math, color, furigana, tts, then goldmark itself) and returns
+// the rendered HTML string.
+func renderMarkdown(src string) string {
 	src = preprocessMath(src)
 	src = preprocessColor(src)
 	src = preprocessFurigana(src)
@@ -198,11 +208,40 @@ func MarkdownHTML(src string) template.HTML {
 	var buf bytes.Buffer
 	if err := markdown.Convert([]byte(src), &buf); err != nil {
 		slog.Error("markdown render failed, falling back to escaped text", "err", err)
-		return template.HTML(template.HTMLEscapeString(src))
+		return template.HTMLEscapeString(src)
 	}
 	out := postprocessColor(buf.String())
 	out = postprocessFurigana(out)
 	out = postprocessTTS(out)
 	out = postprocessMath(out)
-	return template.HTML(out)
+	return out
+}
+
+// MarkdownHTML converts fact front/back text to sanitized HTML for display.
+// Registered as the `md` template function. Card text is justified by
+// default (see .md-content's base style); "{center}...{/center}" opts the
+// text between the two tokens back to centered — typically the whole face,
+// for short answers where justify would just look left-aligned.
+//
+// The three segments (before/center/after) are rendered as three separate
+// markdown documents rather than swapped in as an inline sentinel like the
+// other constructs: "{center}" commonly wraps a whole face, i.e. several
+// block elements (headings, paragraphs, lists), and a <div> can't validly
+// nest inside goldmark's <p> the way substituting a marker mid-render would
+// require. The tradeoff is that a color/tts/furigana span can't straddle a
+// "{center}"/"{/center}" boundary — an acceptable limitation, not a use
+// case that comes up in practice.
+func MarkdownHTML(src string) template.HTML {
+	i := strings.Index(src, centerOpenTok)
+	if i == -1 {
+		return template.HTML(renderMarkdown(src))
+	}
+	j := strings.LastIndex(src, centerCloseTok)
+	if j <= i {
+		return template.HTML(renderMarkdown(src))
+	}
+	before := renderMarkdown(src[:i])
+	centered := renderMarkdown(src[i+len(centerOpenTok) : j])
+	after := renderMarkdown(src[j+len(centerCloseTok):])
+	return template.HTML(before + `<div style="text-align:center">` + centered + `</div>` + after)
 }
