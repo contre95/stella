@@ -1,7 +1,9 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -16,10 +18,13 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// newTestSession wires the MCP server onto a temp database and connects an
-// in-memory client, returning a ready-to-call session and the media directory
-// the server stores card media in.
-func newTestSession(t *testing.T) (*mcpsdk.ClientSession, string) {
+// newTestCards builds a cards.Service backed by a temp sqlite database and
+// media directory, with the local single-user account created. Split out of
+// newTestSession so tests can seed fact media directly on the service —
+// bypassing the MCP tool layer's http(s)-only restriction on image/audio
+// sources (see mediaHTTPClient) — while still exercising get_card_image over
+// a real MCP session.
+func newTestCards(t *testing.T) (*cards.Service, string) {
 	t.Helper()
 	dir := t.TempDir()
 	db, err := database.NewSqliteSRS(filepath.Join(dir, "test.db"))
@@ -50,7 +55,14 @@ func newTestSession(t *testing.T) (*mcpsdk.ClientSession, string) {
 	if _, err := auth.NewService(context.Background(), db, cfg); err != nil {
 		t.Fatalf("auth service: %v", err)
 	}
-	srv := NewServer("stella-test", "0.0.0", cards.NewService(db, scheduler, cfg), auth.LocalUserID)
+	return cards.NewService(db, scheduler, cfg), mediaDir
+}
+
+// newTestSessionFor wires an MCP server backed by cardsService onto an
+// in-memory client and returns a ready-to-call session.
+func newTestSessionFor(t *testing.T, cardsService *cards.Service) *mcpsdk.ClientSession {
+	t.Helper()
+	srv := NewServer("stella-test", "0.0.0", cardsService, auth.LocalUserID)
 
 	ctx := context.Background()
 	serverT, clientT := mcpsdk.NewInMemoryTransports()
@@ -63,7 +75,16 @@ func newTestSession(t *testing.T) (*mcpsdk.ClientSession, string) {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { cs.Close() })
-	return cs, mediaDir
+	return cs
+}
+
+// newTestSession wires the MCP server onto a temp database and connects an
+// in-memory client, returning a ready-to-call session and the media directory
+// the server stores card media in.
+func newTestSession(t *testing.T) (*mcpsdk.ClientSession, string) {
+	t.Helper()
+	cardsService, mediaDir := newTestCards(t)
+	return newTestSessionFor(t, cardsService), mediaDir
 }
 
 // decodeStructured re-decodes a tool's structured output into v.
@@ -533,5 +554,87 @@ func TestEditCardRejectsBadInput(t *testing.T) {
 	res, _ = editCard(t, cs, map[string]any{"factId": factID, "audioFront": "/tmp/notes.txt"})
 	if !res.IsError {
 		t.Error("expected a tool error for an unsupported audio extension")
+	}
+}
+
+// onePixelPNG is a valid 1x1 transparent PNG, used as fixture image bytes.
+const onePixelPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+
+// TestGetCardImage seeds a fact with an image file already on disk (create_card
+// only accepts http(s) sources, so the fixture is written directly via the
+// cards service — see newTestCards) and checks get_card_image returns it as
+// inline image content with the right bytes and MIME type, honours the side
+// filter, and reports tool errors for a missing side, an unknown side value,
+// and an unknown factId.
+func TestGetCardImage(t *testing.T) {
+	ctx := context.Background()
+	cardsService, mediaDir := newTestCards(t)
+
+	deck, err := cardsService.AddDeck(ctx, auth.LocalUserID, "Test Deck", "", "", "")
+	if err != nil {
+		t.Fatalf("add deck: %v", err)
+	}
+	pngBytes, err := base64.StdEncoding.DecodeString(onePixelPNG)
+	if err != nil {
+		t.Fatalf("decode fixture png: %v", err)
+	}
+	if err := os.MkdirAll(mediaDir, 0o755); err != nil {
+		t.Fatalf("mkdir media dir: %v", err)
+	}
+	const imgName = "front.png"
+	if err := os.WriteFile(filepath.Join(mediaDir, imgName), pngBytes, 0o644); err != nil {
+		t.Fatalf("write fixture image: %v", err)
+	}
+	fact, err := cardsService.AddFact(ctx, auth.LocalUserID, "q", "a", deck.ID, srs.GradeUnseen, false, imgName, "", "", "")
+	if err != nil {
+		t.Fatalf("add fact: %v", err)
+	}
+
+	cs := newTestSessionFor(t, cardsService)
+	call := func(args map[string]any) *mcpsdk.CallToolResult {
+		t.Helper()
+		res, err := cs.CallTool(ctx, &mcpsdk.CallToolParams{Name: "get_card_image", Arguments: args})
+		if err != nil {
+			t.Fatalf("get_card_image: %v", err)
+		}
+		return res
+	}
+
+	res := call(map[string]any{"factId": fact.ID, "side": "front"})
+	if res.IsError {
+		t.Fatalf("get_card_image returned an error: %+v", res.Content)
+	}
+	var out GetCardImageOutput
+	decodeStructured(t, res, &out)
+	if out.ImageFront != imgName || out.ImageBack != "" {
+		t.Errorf("output = %+v, want ImageFront %q and empty ImageBack", out, imgName)
+	}
+	var img *mcpsdk.ImageContent
+	for _, c := range res.Content {
+		if ic, ok := c.(*mcpsdk.ImageContent); ok {
+			img = ic
+		}
+	}
+	if img == nil {
+		t.Fatalf("expected an ImageContent block in the result, got %+v", res.Content)
+	}
+	if img.MIMEType != "image/png" {
+		t.Errorf("MIMEType = %q, want image/png", img.MIMEType)
+	}
+	if !bytes.Equal(img.Data, pngBytes) {
+		t.Error("returned image bytes do not match the stored file")
+	}
+
+	if res := call(map[string]any{"factId": fact.ID}); res.IsError {
+		t.Errorf("omitting side should return whichever sides have images, not error: %+v", res.Content)
+	}
+	if res := call(map[string]any{"factId": fact.ID, "side": "back"}); !res.IsError {
+		t.Error("expected a tool error when the requested side has no image")
+	}
+	if res := call(map[string]any{"factId": fact.ID, "side": "sideways"}); !res.IsError {
+		t.Error("expected a tool error for an invalid side value")
+	}
+	if res := call(map[string]any{"factId": "no-such-fact"}); !res.IsError {
+		t.Error("expected a tool error for an unknown factId")
 	}
 }

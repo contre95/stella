@@ -200,6 +200,14 @@ func NewServer(name, version string, cardsService *cards.Service, userID string)
 	}, s.setDeckReverse)
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name: "get_card_image",
+		Description: "Download the image(s) attached to a fact by fact ID, returned as inline " +
+			"image content the caller can save or view directly. Pass side \"front\" or \"back\" " +
+			"to fetch just one; omit side to fetch every side that has an image. " +
+			"Use list_recent_cards to find the factId and see which sides have images.",
+	}, s.getCardImage)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
 		Name: "create_cards",
 		Description: "Create multiple flashcards in one call. All cards are filed under the " +
 			"same deck. Each item follows the same rules as create_card: a forward card is " +
@@ -472,6 +480,104 @@ func (s *Server) listRecentCards(ctx context.Context, _ *mcpsdk.CallToolRequest,
 		})
 	}
 	return nil, out, nil
+}
+
+// GetCardImageInput is the argument schema for get_card_image.
+type GetCardImageInput struct {
+	FactID string `json:"factId" jsonschema:"Fact ID to fetch images from. Required — use list_recent_cards to find it."`
+	Side   string `json:"side,omitempty" jsonschema:"Which side's image to fetch: \"front\" or \"back\". Omit to fetch every side that has an image."`
+}
+
+// GetCardImageOutput is the result schema for get_card_image. The actual
+// image bytes travel in the tool result's content blocks (one ImageContent
+// per side returned); this struct just echoes which filenames were sent.
+type GetCardImageOutput struct {
+	FactID     string `json:"factId"`
+	ImageFront string `json:"imageFront,omitempty"`
+	ImageBack  string `json:"imageBack,omitempty"`
+}
+
+func (s *Server) getCardImage(ctx context.Context, _ *mcpsdk.CallToolRequest, in GetCardImageInput) (*mcpsdk.CallToolResult, GetCardImageOutput, error) {
+	if strings.TrimSpace(in.FactID) == "" {
+		return nil, GetCardImageOutput{}, fmt.Errorf("factId is required")
+	}
+	side := strings.ToLower(strings.TrimSpace(in.Side))
+	if side != "" && side != "front" && side != "back" {
+		return nil, GetCardImageOutput{}, fmt.Errorf(`side must be "front" or "back"`)
+	}
+	fact, err := s.cards.GetFact(ctx, s.userID, in.FactID)
+	if err != nil {
+		return nil, GetCardImageOutput{}, fmt.Errorf("looking up fact: %w", err)
+	}
+
+	var content []mcpsdk.Content
+	out := GetCardImageOutput{FactID: fact.ID}
+	include := func(label, filename string) error {
+		if filename == "" {
+			return nil
+		}
+		data, mimeType, err := s.readImage(filename)
+		if err != nil {
+			return fmt.Errorf("reading %s image: %w", label, err)
+		}
+		content = append(content,
+			&mcpsdk.TextContent{Text: label + ": " + filename},
+			&mcpsdk.ImageContent{Data: data, MIMEType: mimeType},
+		)
+		return nil
+	}
+	if side == "" || side == "front" {
+		if err := include("front", fact.ImageFront); err != nil {
+			return nil, GetCardImageOutput{}, err
+		}
+		out.ImageFront = fact.ImageFront
+	}
+	if side == "" || side == "back" {
+		if err := include("back", fact.ImageBack); err != nil {
+			return nil, GetCardImageOutput{}, err
+		}
+		out.ImageBack = fact.ImageBack
+	}
+	if len(content) == 0 {
+		wantSide := side
+		if wantSide == "" {
+			wantSide = "front or back"
+		}
+		return nil, GetCardImageOutput{}, fmt.Errorf("fact has no image on the %s side", wantSide)
+	}
+	return &mcpsdk.CallToolResult{Content: content}, out, nil
+}
+
+// readImage loads a stored image file and reports its MIME type, inferred
+// from the extension saveImageFromURL gave it (jpg, png, gif, or webp — the
+// same set create_card/edit_card accept).
+func (s *Server) readImage(filename string) ([]byte, string, error) {
+	mimeType := imageMIMEType(filename)
+	if mimeType == "" {
+		return nil, "", fmt.Errorf("unsupported image type: %s", filename)
+	}
+	data, err := os.ReadFile(filepath.Join(s.cards.ImagePath(), filename))
+	if err != nil {
+		return nil, "", err
+	}
+	return data, mimeType, nil
+}
+
+// imageMIMEType maps a stored image filename's extension to its MIME type,
+// or "" if the extension isn't one create_card/edit_card can produce.
+func imageMIMEType(filename string) string {
+	switch strings.ToLower(filepath.Ext(filename)) {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	default:
+		return ""
+	}
 }
 
 // CreateDeckInput is the argument schema for create_deck.

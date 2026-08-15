@@ -92,6 +92,14 @@
         {{if .Fact.ImageFront}}
           <div class="mt-1.5 flex items-center gap-3">
             <img src="/images/{{.Fact.ImageFront}}" alt="" class="h-12 w-12 rounded-lg object-cover ring-1 ring-black/10 dark:ring-white/10" />
+            <a
+              href="/images/{{.Fact.ImageFront}}"
+              download
+              title="Download image"
+              class="rounded-lg p-1.5 text-gray-400 hover:bg-pink-500/10 hover:text-pink-500 transition-colors dark:hover:text-pink-400"
+            >
+              {{template "icon-export" (dict "Class" "h-4 w-4")}}
+            </a>
             <label class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
               <input type="checkbox" name="remove_image_front" class="h-3.5 w-3.5 rounded border-gray-300 text-pink-600 focus:ring-pink-500 dark:border-gray-600" />
               Remove
@@ -115,6 +123,14 @@
         {{if .Fact.ImageBack}}
           <div class="mt-1.5 flex items-center gap-3">
             <img src="/images/{{.Fact.ImageBack}}" alt="" class="h-12 w-12 rounded-lg object-cover ring-1 ring-black/10 dark:ring-white/10" />
+            <a
+              href="/images/{{.Fact.ImageBack}}"
+              download
+              title="Download image"
+              class="rounded-lg p-1.5 text-gray-400 hover:bg-pink-500/10 hover:text-pink-500 transition-colors dark:hover:text-pink-400"
+            >
+              {{template "icon-export" (dict "Class" "h-4 w-4")}}
+            </a>
             <label class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
               <input type="checkbox" name="remove_image_back" class="h-3.5 w-3.5 rounded border-gray-300 text-pink-600 focus:ring-pink-500 dark:border-gray-600" />
               Remove
