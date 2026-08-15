@@ -85,22 +85,65 @@
         hx-swap="innerHTML"
         hx-encoding="multipart/form-data"
         _="on htmx:afterRequest call me.reset()"
-        class="glass flex flex-1 flex-col gap-3 rounded-2xl p-4 sm:flex-row sm:items-center"
+        class="glass flex flex-1 flex-col gap-2 rounded-2xl p-4"
       >
-        <input
-          type="file"
-          name="file"
-          accept=".zip,.json"
-          required
-          class="glass-input min-w-0 rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-gray-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-gray-600 hover:file:bg-gray-500/25 dark:file:text-gray-300 sm:flex-1"
-        />
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <input
+            type="file"
+            name="file"
+            accept=".zip,.json"
+            required
+            class="glass-input min-w-0 rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-gray-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-gray-600 hover:file:bg-gray-500/25 dark:file:text-gray-300 sm:flex-1"
+          />
+          <button
+            type="submit"
+            class="btn-ghost inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold sm:shrink-0"
+          >
+            Import
+            <svg class="htmx-indicator h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+          </button>
+        </div>
         <button
-          type="submit"
-          class="btn-ghost inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold sm:shrink-0"
-        >
-          Import
-          <svg class="htmx-indicator h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-        </button>
+          type="button"
+          class="self-start text-xs font-medium text-pink-600 hover:text-pink-700 hover:underline dark:text-pink-400"
+          _="on click call navigator.clipboard.writeText(#sample-deck-json.innerText) then set my.innerText to 'Copied!' then wait 2s then set my.innerText to 'Copy sample json deck'"
+        >Copy sample json deck</button>
+        <pre id="sample-deck-json" class="hidden">{{`{
+  "name": "Stella Feature Showcase",
+  "description": "A sample deck demonstrating every rendering feature Stella supports: markdown, colors, furigana, text-to-speech, centered blocks, and math.",
+  "facts": [
+    {
+      "front": "# Welcome to Stella\n\nThis deck shows off **bold**, *italic*, and\n- bullet\n- lists\n\nas well as [links](https://example.com) and hard line breaks.",
+      "back": "{center}That's the basics of Markdown!{/center}",
+      "reverse": false
+    },
+    {
+      "front": "What color is a stop sign?",
+      "back": "{center}{#ff0000}Red{/}{/center}",
+      "reverse": false
+    },
+    {
+      "front": "{center}How do you say 'water' in Japanese?{/center}",
+      "back": "{center}{tts:ja}{水|みず}{/tts}{/center}",
+      "reverse": false
+    },
+    {
+      "front": "{center}{tts:en}Click the speaker to hear this question read aloud.{/tts}{/center}",
+      "back": "{center}Text-to-speech uses your browser's built-in voice — no audio file required.{/center}",
+      "reverse": false
+    },
+    {
+      "front": "{center}What is the Pythagorean theorem?{/center}",
+      "back": "{center}$$a^2 + b^2 = c^2$$\n\nFor a right triangle with legs $a$, $b$ and hypotenuse $c$.{/center}",
+      "reverse": true
+    },
+    {
+      "front": "{center}This card combines **everything**: {#22aa55}color{/}, {tts:en}speech{/tts}, and {漢字|かんじ}furigana{/} in one {center} block.{/center}",
+      "back": "{center}$E = mc^2$ — {#ff6600}physics is beautiful{/}.{/center}",
+      "reverse": false
+    }
+  ]
+}`}}</pre>
       </form>
     </div>
   </div>
