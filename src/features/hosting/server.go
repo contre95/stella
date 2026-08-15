@@ -8,6 +8,7 @@ import (
 
 	"github.com/contre95/stella/src/features/auth"
 	"github.com/contre95/stella/src/features/config"
+	"github.com/contre95/stella/src/features/hosting/respond"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/template/html/v2"
@@ -56,11 +57,16 @@ func NewServer(cm *config.Manager, authSvc *auth.Service, registrars ...RouteReg
 			// fiber.Error messages (fiber.NewError(...)) are intentionally
 			// user-facing; anything else is an internal error (wrapped Go
 			// errors, DB failures, ...) and must not be echoed to the client.
+			// This also covers requests rejected by fasthttp for exceeding
+			// BodyLimit before any route handler runs (fiber.ErrRequestEntityTooLarge).
 			msg := err.Error()
-			if code >= fiber.StatusInternalServerError {
-				msg = "Something went wrong. Please try again."
+			if code == fiber.StatusRequestEntityTooLarge {
+				msg = fmt.Sprintf("That file is too large. Maximum upload size is %s.", humanBytes(cm.Get().Server.BodyLimit))
 			}
-			return c.Status(code).SendString(msg)
+			// respond.ToastErr renders an HTMX toast partial (or a JSON error
+			// payload for non-HTMX clients) and itself generalises >=500 messages,
+			// so we don't need to duplicate that here.
+			return respond.ToastErr(c, code, msg)
 		},
 	})
 
@@ -96,6 +102,20 @@ func (s *Server) Start() error {
 // Shutdown gracefully stops the server.
 func (s *Server) Shutdown() error {
 	return s.app.Shutdown()
+}
+
+// humanBytes formats a byte count as a short human-readable size, e.g. "10 MB".
+func humanBytes(n int) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for v := int64(n) / unit; v >= unit; v /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.0f %cB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
 // dict builds a map from alternating key/value template args, enabling

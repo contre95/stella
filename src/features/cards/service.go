@@ -33,6 +33,11 @@ func (s *Service) ImagePath() string {
 	return s.cfg.Get().ImagePath
 }
 
+// BodyLimit returns the configured max request body size, in bytes.
+func (s *Service) BodyLimit() int {
+	return s.cfg.Get().Server.BodyLimit
+}
+
 // AddFact creates a fact and its sister cards. A forward card is always made; a
 // reverse card is added when reverse is true and a back exists. When grade >= 0
 // the cards are given that initial grade (counted as a first repetition);

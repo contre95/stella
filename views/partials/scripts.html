@@ -5,8 +5,77 @@
   class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"
 ></div>
 <script>
-  // Global glass-themed SweetAlert2 mixin
+  // Global glass-themed SweetAlert2 mixin — only used for hx-confirm dialogs;
+  // every other message (errors included) goes through the bottom toasts
+  // below so all feedback in the app looks and behaves the same way.
   window.swalGlass = Swal.mixin({ buttonsStyling: true });
+
+  // Formats a byte count as a short human string, e.g. "10 MB".
+  window.humanBytes = function (n) {
+    if (n < 1024) return n + ' B';
+    var units = ['KB', 'MB', 'GB', 'TB'], v = n, i = -1;
+    do { v /= 1024; i++; } while (v >= 1024 && i < units.length - 1);
+    return Math.round(v) + ' ' + units[i];
+  };
+
+  // Appends a toast bubble to #toast-container, matching the server-rendered
+  // toast/toastOk|Err|Info partials exactly, so client- and server-triggered
+  // toasts are indistinguishable. Activates the bubble's own auto-dismiss
+  // hyperscript by hand, since it wasn't inserted through an HTMX swap.
+  window.pushToast = function (kind, msg) {
+    var container = document.getElementById('toast-container');
+    if (!container) return;
+    var style = { ok: ['border-l-emerald-500', '3s'], err: ['border-l-red-500', '5s'], info: ['border-l-pink-500', '4s'] }[kind] || ['border-l-pink-500', '4s'];
+    var div = document.createElement('div');
+    div.className = 'glass flex items-center gap-2 rounded-xl border-l-4 ' + style[0] + ' px-4 py-2.5 text-sm font-medium text-gray-800 shadow-xl dark:text-gray-100';
+    div.setAttribute('_', 'on load wait ' + style[1] + ' then transition opacity to 0 then remove me');
+    div.textContent = msg;
+    container.appendChild(div);
+    if (window._hyperscript) _hyperscript.processNode(div);
+  };
+
+  // Blocks a deck/group import submit when the chosen file already exceeds
+  // the server's configured BodyLimit (read from the form's data-max-bytes),
+  // so oversized uploads get an instant, accurate toast instead of an
+  // ambiguous connection failure once the server drops the request.
+  window.guardImportSize = function (evt, inputId, formId) {
+    var form = document.getElementById(formId);
+    var file = document.getElementById(inputId).files[0];
+    var max = parseInt(form.dataset.maxBytes, 10);
+    if (file && max && file.size > max) {
+      evt.preventDefault();
+      pushToast('err', 'That file is too large. Maximum upload size is ' + humanBytes(max) + '.');
+    }
+  };
+
+  // Reads the clipboard as text, drops it into a deck-import file input as a
+  // .json file, then submits the form through the normal /import flow.
+  window.importDeckFromClipboard = async function (inputId, formId) {
+    var text;
+    try {
+      text = await navigator.clipboard.readText();
+    } catch (err) {
+      pushToast('err', 'Could not read the clipboard: ' + err.message);
+      return;
+    }
+    try {
+      JSON.parse(text);
+    } catch (err) {
+      pushToast('err', 'Clipboard contents are not valid JSON.');
+      return;
+    }
+    var form = document.getElementById(formId);
+    var max = parseInt(form.dataset.maxBytes, 10);
+    if (max && new Blob([text]).size > max) {
+      pushToast('err', 'That deck is too large. Maximum upload size is ' + humanBytes(max) + '.');
+      return;
+    }
+    var file = new File([text], 'clipboard-deck.json', { type: 'application/json' });
+    var dt = new DataTransfer();
+    dt.items.add(file);
+    document.getElementById(inputId).files = dt.files;
+    form.requestSubmit();
+  };
 
   // Intercept hx-confirm to use SweetAlert instead of browser confirm()
   document.addEventListener('htmx:confirm', function(e) {
@@ -20,6 +89,28 @@
       confirmButtonText: 'Confirm',
       cancelButtonText: 'Cancel',
     }).then(function(r) { if (r.isConfirmed) e.detail.issueRequest(true); });
+  });
+
+  // HTMX only processes hx-swap-oob content (how every server toast renders)
+  // on 2xx/3xx responses, so respond.ToastErr's toast never reaches
+  // #toast-container through the normal swap path on a 4xx/5xx. Reuse its
+  // message via pushToast instead; a bodiless failure (connection dropped,
+  // or a 413 with no HTML body) falls back to a status-appropriate message.
+  document.body.addEventListener('htmx:responseError', function (e) {
+    var xhr = e.detail.xhr;
+    var tmp = document.createElement('div');
+    tmp.innerHTML = xhr.responseText || '';
+    var bubble = tmp.querySelector('#toast-container > div');
+    if (bubble) {
+      pushToast('err', bubble.textContent.trim());
+    } else if (xhr.status === 413) {
+      pushToast('err', 'That file is too large to import.');
+    } else {
+      pushToast('err', 'Something went wrong. Please try again.');
+    }
+  });
+  document.body.addEventListener('htmx:sendError', function () {
+    pushToast('err', 'Network error — please check your connection and try again.');
   });
 
   // Shared mouse-swipe logic for swipeable card rows (runs once — avoids accumulation on HTMX swaps)

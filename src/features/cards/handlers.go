@@ -341,7 +341,7 @@ func (h *Handler) RenderDecks(c *fiber.Ctx) error {
 	if err != nil {
 		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
 	}
-	return respond.Section(c, "decks", fiber.Map{"Title": "Decks", "Groups": groups})
+	return respond.Section(c, "decks", fiber.Map{"Title": "Decks", "Groups": groups, "BodyLimit": h.service.BodyLimit()})
 }
 
 // DeckList returns the deck list partial. An optional ?tag=<id> query narrows
