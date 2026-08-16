@@ -191,3 +191,6 @@
     {{end}}
   </div>
 {{end}}
+{{if .EditFormOOB}}
+  <div hx-swap-oob="outerHTML:#card-edit-form">{{template "components/card_edit_form" .}}</div>
+{{end}}

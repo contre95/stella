@@ -1,0 +1,30 @@
+{{/* group_add_form.html — the create-group form, rendered on initial page
+     load and re-rendered by Handler.AddGroup on both success (reset) and
+     validation failure (422, inline error preserved). Success also ships a
+     deck-list refresh via the trailing OOB block below. */}}
+<form
+  hx-post="/groups"
+  hx-target="this"
+  hx-swap="outerHTML"
+  class="glass flex flex-1 flex-col gap-3 rounded-2xl p-4 sm:flex-row sm:items-center"
+>
+  <div class="min-w-0 sm:flex-1">
+    <input
+      name="name"
+      required
+      placeholder="New group name"
+      value="{{.Values.Name}}"
+      class="{{errClass .Errors "name" "glass-input w-full min-w-0 rounded-xl px-3 py-2 text-sm"}}"
+    />
+    {{if index .Errors "name"}}<p class="mt-1 text-xs text-red-600 dark:text-red-400">{{index .Errors "name"}}</p>{{end}}
+  </div>
+  <button
+    type="submit"
+    class="btn-ghost rounded-xl px-4 py-2 text-sm font-semibold sm:shrink-0"
+  >
+    Create group
+  </button>
+</form>
+{{if .ListOOB}}
+  <div id="deck-list" hx-swap-oob="innerHTML">{{template "components/deck_list" .}}</div>
+{{end}}

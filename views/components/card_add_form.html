@@ -1,0 +1,144 @@
+{{/* card_add_form.html — the add-card form, rendered on initial page load and
+     re-rendered by Handler.Add on both success (reset, deck kept) and
+     validation failure (422, values + inline errors preserved). Success also
+     ships a card-list refresh via the trailing OOB block below. */}}
+<form
+  hx-post="/cards"
+  hx-target="this"
+  hx-swap="outerHTML"
+  hx-encoding="multipart/form-data"
+  class="glass rounded-2xl p-5 sm:p-6"
+>
+  <div class="grid gap-4 sm:grid-cols-2">
+    <label class="block">
+      <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Front</span>
+      <textarea
+        name="front"
+        required
+        rows="2"
+        placeholder="Question / prompt — Markdown works: # Title, **bold**, - list"
+        class="{{errClass .Errors "front" "glass-input mt-1.5 w-full rounded-xl px-3 py-2 text-sm"}}"
+      >{{.Values.Front}}</textarea>
+      {{if index .Errors "front"}}<p class="mt-1 text-xs text-red-600 dark:text-red-400">{{index .Errors "front"}}</p>{{end}}
+    </label>
+
+    <label class="block">
+      <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Back</span>
+      <textarea
+        name="back"
+        rows="2"
+        placeholder="Answer"
+        class="glass-input mt-1.5 w-full rounded-xl px-3 py-2 text-sm"
+      >{{.Values.Back}}</textarea>
+    </label>
+
+    <label class="block">
+      <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Initial grade</span>
+      <select
+        name="grade"
+        class="glass-input mt-1.5 w-full rounded-xl px-3 py-2 text-sm"
+      >
+        <option value="-1" {{if or (eq .Values.Grade "") (eq .Values.Grade "-1")}}selected{{end}}>Unseen (grade in review)</option>
+        <option value="0" {{if eq .Values.Grade "0"}}selected{{end}}>0 — blackout</option>
+        <option value="1" {{if eq .Values.Grade "1"}}selected{{end}}>1 — wrong, familiar</option>
+        <option value="2" {{if eq .Values.Grade "2"}}selected{{end}}>2 — wrong, easy recall</option>
+        <option value="3" {{if eq .Values.Grade "3"}}selected{{end}}>3 — right, hard</option>
+        <option value="4" {{if eq .Values.Grade "4"}}selected{{end}}>4 — right, hesitant</option>
+        <option value="5" {{if eq .Values.Grade "5"}}selected{{end}}>5 — perfect</option>
+      </select>
+    </label>
+
+    <label class="block">
+      <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Deck</span>
+      <select
+        name="deckId"
+        required
+        class="{{errClass .Errors "deckId" "glass-input mt-1.5 w-full rounded-xl px-3 py-2 text-sm"}}"
+      >
+        <option value="" disabled {{if eq .Values.DeckID ""}}selected{{end}}>Select a deck</option>
+        {{range .Decks}}
+          <option value="{{.ID}}" {{if eq $.Values.DeckID .ID}}selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+      {{if index .Errors "deckId"}}<p class="mt-1 text-xs text-red-600 dark:text-red-400">{{index .Errors "deckId"}}</p>{{end}}
+    </label>
+
+    <div class="block">
+      <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Front image <span class="font-normal normal-case">(optional)</span></span>
+      <div class="image-paste-widget">
+        <input
+          type="file"
+          name="image_front"
+          accept=".jpg,.jpeg,.png,.gif,.webp"
+          class="{{errClass .Errors "image_front" "glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"}}"
+        />
+        <div class="paste-ui"></div>
+      </div>
+      {{if index .Errors "image_front"}}<p class="mt-1 text-xs text-red-600 dark:text-red-400">{{index .Errors "image_front"}}</p>{{end}}
+    </div>
+
+    <div class="block">
+      <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Back image <span class="font-normal normal-case">(optional)</span></span>
+      <div class="image-paste-widget">
+        <input
+          type="file"
+          name="image_back"
+          accept=".jpg,.jpeg,.png,.gif,.webp"
+          class="{{errClass .Errors "image_back" "glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"}}"
+        />
+        <div class="paste-ui"></div>
+      </div>
+      {{if index .Errors "image_back"}}<p class="mt-1 text-xs text-red-600 dark:text-red-400">{{index .Errors "image_back"}}</p>{{end}}
+    </div>
+
+    <div class="block">
+      <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Front audio <span class="font-normal normal-case">(optional)</span></span>
+      <div class="audio-rec-widget" data-for="audio_front">
+        <input
+          type="file"
+          name="audio_front"
+          accept=".mp3,.ogg,.wav,.m4a,.webm,.aac,.flac"
+          class="{{errClass .Errors "audio_front" "glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"}}"
+        />
+        <div class="rec-ui"></div>
+      </div>
+      {{if index .Errors "audio_front"}}<p class="mt-1 text-xs text-red-600 dark:text-red-400">{{index .Errors "audio_front"}}</p>{{end}}
+    </div>
+
+    <div class="block">
+      <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Back audio <span class="font-normal normal-case">(optional)</span></span>
+      <div class="audio-rec-widget" data-for="audio_back">
+        <input
+          type="file"
+          name="audio_back"
+          accept=".mp3,.ogg,.wav,.m4a,.webm,.aac,.flac"
+          class="{{errClass .Errors "audio_back" "glass-input mt-1.5 w-full rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300"}}"
+        />
+        <div class="rec-ui"></div>
+      </div>
+      {{if index .Errors "audio_back"}}<p class="mt-1 text-xs text-red-600 dark:text-red-400">{{index .Errors "audio_back"}}</p>{{end}}
+    </div>
+  </div>
+
+  <div class="mt-4 flex items-center justify-between">
+    <label class="flex items-center gap-2">
+      <input
+        type="checkbox"
+        name="reverse"
+        {{if .Values.Reverse}}checked{{end}}
+        class="h-4 w-4 rounded border-gray-300 text-pink-600 focus:ring-pink-500 dark:border-gray-600"
+      />
+      <span class="text-sm text-gray-600 dark:text-gray-300">Also add reverse card</span>
+    </label>
+    <button
+      type="submit"
+      class="btn-primary inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold"
+    >
+      Add card
+      <svg class="htmx-indicator h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+    </button>
+  </div>
+</form>
+{{if .ListOOB}}
+  <div id="card-list" hx-swap-oob="innerHTML">{{template "components/card_list" .}}</div>
+{{end}}

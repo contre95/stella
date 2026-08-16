@@ -41,6 +41,12 @@ func NewServer(cm *config.Manager, authSvc *auth.Service, registrars ...RouteReg
 		return "s"
 	})
 	engine.AddFunc("md", MarkdownHTML)
+	engine.AddFunc("errClass", func(errs respond.FieldErrors, name, base string) string {
+		if _, bad := errs[name]; bad {
+			return base + " border-red-500 dark:border-red-500"
+		}
+		return base
+	})
 
 	app := fiber.New(fiber.Config{
 		Views:             engine,

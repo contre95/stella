@@ -65,11 +65,11 @@ func (h *Handler) doneData(c *fiber.Ctx, title, deckFilter string, deckIDs []str
 func (h *Handler) Pick(c *fiber.Ctx) error {
 	named, ungrouped, err := h.service.GroupsForPicker(c.Context(), auth.UserID(c))
 	if err != nil {
-		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+		return err
 	}
 	tags, err := h.service.TagsForPicker(c.Context(), auth.UserID(c))
 	if err != nil {
-		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+		return err
 	}
 	if len(named) == 0 && ungrouped == nil && len(tags) == 0 {
 		return h.RenderSession(c)
@@ -90,13 +90,13 @@ func (h *Handler) RenderSession(c *fiber.Ctx) error {
 	deckFilter := c.Query("decks")
 	deckIDs, err := h.resolveDeckIDs(c, deckFilter)
 	if err != nil {
-		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+		return err
 	}
 	learnAhead := c.Query("learnahead") == "1"
 
 	ci, err := h.service.NextCard(c.Context(), auth.UserID(c), deckIDs, learnAhead)
 	if err != nil {
-		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+		return err
 	}
 	if ci == nil {
 		return respond.Section(c, "review_done", h.doneData(c, "Review", deckFilter, deckIDs))
@@ -127,22 +127,22 @@ func (h *Handler) GradeCard(c *fiber.Ctx) error {
 	deckFilter := c.Query("decks")
 	deckIDs, err := h.resolveDeckIDs(c, deckFilter)
 	if err != nil {
-		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+		return err
 	}
 	learnAhead := c.Query("learnahead") == "1"
 
 	grade, err := strconv.Atoi(c.FormValue("grade"))
 	if err != nil || grade < 0 || grade > 5 {
-		return respond.ToastErr(c, fiber.StatusBadRequest, "grade must be 0–5")
+		return fiber.NewError(fiber.StatusBadRequest, "grade must be 0–5")
 	}
 
 	if err := h.service.Grade(c.Context(), auth.UserID(c), cardID, grade); err != nil {
-		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+		return err
 	}
 
 	ci, err := h.service.NextCard(c.Context(), auth.UserID(c), deckIDs, learnAhead)
 	if err != nil {
-		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+		return err
 	}
 	if ci == nil {
 		c.Set("HX-Retarget", "#contenido")
@@ -173,13 +173,13 @@ func (h *Handler) Reload(c *fiber.Ctx) error {
 	deckFilter := c.Query("decks")
 	deckIDs, err := h.resolveDeckIDs(c, deckFilter)
 	if err != nil {
-		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+		return err
 	}
 	learnAhead := c.Query("learnahead") == "1"
 
 	ci, err := h.service.CardByID(c.Context(), auth.UserID(c), c.Params("cardId"), deckIDs)
 	if err != nil {
-		return respond.ToastErr(c, fiber.StatusInternalServerError, err.Error())
+		return err
 	}
 	return c.Render("partials/review_card", fiber.Map{
 		"Card":          ci.Card,

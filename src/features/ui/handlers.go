@@ -69,6 +69,7 @@ func (h *Handler) Dashboard(c *fiber.Ctx) error {
 func (h *Handler) SidebarStats(c *fiber.Ctx) error {
 	stats, err := h.reviewSvc.Stats(c.Context(), auth.UserID(c))
 	if err != nil {
+		slog.Error("sidebar stats", "err", err)
 		return c.SendString("")
 	}
 	return c.Render("partials/sidebar_stats", fiber.Map{

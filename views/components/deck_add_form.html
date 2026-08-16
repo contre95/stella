@@ -1,0 +1,60 @@
+{{/* deck_add_form.html — the create-deck form, rendered on initial page load
+     and re-rendered by Handler.AddDeck on both success (reset) and
+     validation failure (422, values + inline errors preserved). Success also
+     ships a deck-list refresh via the trailing OOB block below. */}}
+<form
+  hx-post="/decks"
+  hx-target="this"
+  hx-swap="outerHTML"
+  hx-encoding="multipart/form-data"
+  class="glass flex flex-1 flex-col gap-3 rounded-2xl p-4"
+>
+  <div class="flex flex-col gap-3 sm:flex-row">
+    <div class="min-w-0 sm:flex-1">
+      <input
+        name="name"
+        required
+        maxlength="32"
+        placeholder="Deck name (max 32 chars)"
+        value="{{.Values.Name}}"
+        class="{{errClass .Errors "name" "glass-input w-full min-w-0 rounded-xl px-3 py-2 text-sm"}}"
+      />
+      {{if index .Errors "name"}}<p class="mt-1 text-xs text-red-600 dark:text-red-400">{{index .Errors "name"}}</p>{{end}}
+    </div>
+    <input
+      name="description"
+      placeholder="Optional description"
+      value="{{.Values.Description}}"
+      class="glass-input min-w-0 rounded-xl px-3 py-2 text-sm sm:flex-1"
+    />
+    <select
+      name="group_id"
+      class="glass-input rounded-xl px-3 py-2 text-sm sm:shrink-0"
+    >
+      <option value="" {{if eq .Values.GroupID ""}}selected{{end}}>No group</option>
+      {{range .Groups}}
+        <option value="{{.ID}}" {{if eq $.Values.GroupID .ID}}selected{{end}}>{{.Name}}</option>
+      {{end}}
+    </select>
+    <button
+      type="submit"
+      class="btn-primary inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold sm:shrink-0"
+    >
+      Create deck
+      <svg class="htmx-indicator h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+    </button>
+  </div>
+  <label class="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+    <span class="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Cover <span class="font-normal normal-case">(optional)</span></span>
+    <input
+      type="file"
+      name="image"
+      accept=".jpg,.jpeg,.png,.gif,.webp"
+      class="{{errClass .Errors "image" "glass-input min-w-0 rounded-xl px-3 py-1.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-pink-500/15 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-pink-700 hover:file:bg-pink-500/25 dark:file:text-pink-300 sm:flex-1"}}"
+    />
+  </label>
+  {{if index .Errors "image"}}<p class="text-xs text-red-600 dark:text-red-400">{{index .Errors "image"}}</p>{{end}}
+</form>
+{{if .ListOOB}}
+  <div id="deck-list" hx-swap-oob="innerHTML">{{template "components/deck_list" .}}</div>
+{{end}}
