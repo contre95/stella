@@ -1,0 +1,8 @@
+{{/* card_edit_form_oob.html — wraps the edit-card form for an out-of-band
+     swap into #card-edit-form, independent of whatever hx-swap is set on the
+     submitting form's own hx-target (works even under hx-swap="none", as
+     used from the review screen). Reused wherever a validation failure needs
+     to update the modal without touching (or in addition to) a sibling
+     list/grid — see card_list.html, deck_card_grid.html, and Handler.Edit's
+     review-context branch, which renders this alone. */}}
+<div hx-swap-oob="outerHTML:#card-edit-form">{{template "components/card_edit_form" .}}</div>

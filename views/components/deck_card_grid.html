@@ -252,3 +252,4 @@
     <p class="text-sm text-gray-500 dark:text-gray-400">No cards in this deck yet. Add the first one above.</p>
   </div>
 {{end}}
+{{if .EditFormOOB}}{{template "components/card_edit_form_oob" .}}{{end}}

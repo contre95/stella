@@ -53,6 +53,7 @@
             />
             <span class="sr-only">{{if .Deck.Image}}Change deck picture{{else}}Add deck picture{{end}}</span>
           </label>
+          {{if index .ImageErrors "image"}}<p class="mt-1 max-w-[6rem] text-center text-xs text-red-600 dark:text-red-400">{{index .ImageErrors "image"}}</p>{{end}}
         </form>
         <div>
           <span id="deck-name-view" class="flex items-center gap-1.5">
@@ -71,26 +72,29 @@
             hx-put="/decks/{{.Deck.ID}}/name"
             hx-target="#contenido"
             hx-swap="outerHTML"
-            class="hidden flex items-center gap-1.5"
+            class="{{if not .RenameErrors}}hidden {{end}}flex flex-col gap-1"
           >
-            <input
-              id="deck-name-input"
-              name="name"
-              value="{{.Deck.Name}}"
-              maxlength="32"
-              class="glass-input rounded-lg px-2 py-0.5 text-2xl font-bold w-36 text-gray-900 dark:text-white"
-            />
-            <button type="submit" class="rounded p-1 text-gray-400 hover:text-green-600 transition-colors dark:hover:text-green-400" title="Save">
-              {{template "icon-check" (dict "Class" "h-4 w-4" "Stroke" "2.5")}}
-            </button>
-            <button
-              type="button"
-              _="on click add .hidden to #deck-name-edit then remove .hidden from #deck-name-view"
-              class="rounded p-1 text-gray-400 hover:text-red-500 transition-colors dark:hover:text-red-400"
-              title="Cancel"
-            >
-              {{template "icon-close" (dict "Class" "h-4 w-4" "Stroke" "2.5")}}
-            </button>
+            <div class="flex items-center gap-1.5">
+              <input
+                id="deck-name-input"
+                name="name"
+                value="{{.RenameValue}}"
+                maxlength="32"
+                class="{{errClass .RenameErrors "name" "glass-input rounded-lg px-2 py-0.5 text-2xl font-bold w-36 text-gray-900 dark:text-white"}}"
+              />
+              <button type="submit" class="rounded p-1 text-gray-400 hover:text-green-600 transition-colors dark:hover:text-green-400" title="Save">
+                {{template "icon-check" (dict "Class" "h-4 w-4" "Stroke" "2.5")}}
+              </button>
+              <button
+                type="button"
+                _="on click add .hidden to #deck-name-edit then remove .hidden from #deck-name-view"
+                class="rounded p-1 text-gray-400 hover:text-red-500 transition-colors dark:hover:text-red-400"
+                title="Cancel"
+              >
+                {{template "icon-close" (dict "Class" "h-4 w-4" "Stroke" "2.5")}}
+              </button>
+            </div>
+            {{if index .RenameErrors "name"}}<p class="text-xs text-red-600 dark:text-red-400">{{index .RenameErrors "name"}}</p>{{end}}
           </form>
           <div class="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
             <span>{{len .Facts}} card{{if ne (len .Facts) 1}}s{{end}}</span>
@@ -156,8 +160,10 @@
                 required
                 maxlength="32"
                 placeholder="+ tag"
-                class="glass-input w-24 rounded-full px-2.5 py-1 text-xs placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                value="{{.TagValue}}"
+                class="{{errClass .TagErrors "name" "glass-input w-24 rounded-full px-2.5 py-1 text-xs placeholder:text-gray-400 dark:placeholder:text-gray-500"}}"
               />
+              {{if index .TagErrors "name"}}<p class="mt-1 text-xs text-red-600 dark:text-red-400">{{index .TagErrors "name"}}</p>{{end}}
               <datalist id="all-tags">
                 {{range .AllTags}}<option value="{{.Name}}"></option>{{end}}
               </datalist>

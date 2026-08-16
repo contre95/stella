@@ -227,16 +227,24 @@ func (h *Handler) DeckOptions(c *fiber.Ctx) error {
 }
 
 // deckGrid returns the card grid partial for a single deck.
-func (h *Handler) deckGrid(c *fiber.Ctx, deckID string) error {
+func (h *Handler) deckGridData(c *fiber.Ctx, deckID string) (fiber.Map, error) {
 	facts, err := h.service.ListFactsByDeck(c.Context(), auth.UserID(c), deckID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	deckImage := ""
 	if deck, err := h.service.GetDeck(c.Context(), auth.UserID(c), deckID); err == nil {
 		deckImage = deck.Image
 	}
-	return respond.Partial(c, "components/deck_card_grid", fiber.Map{"DeckID": deckID, "Facts": facts, "DeckImage": deckImage})
+	return fiber.Map{"DeckID": deckID, "Facts": facts, "DeckImage": deckImage}, nil
+}
+
+func (h *Handler) deckGrid(c *fiber.Ctx, deckID string) error {
+	data, err := h.deckGridData(c, deckID)
+	if err != nil {
+		return err
+	}
+	return respond.Partial(c, "components/deck_card_grid", data)
 }
 
 // Delete removes a fact and returns the refreshed list. When called from a
@@ -402,12 +410,27 @@ func (h *Handler) Edit(c *fiber.Ctx) error {
 
 	if len(errs) > 0 {
 		h.removeMedia(saved...)
-		if c.Query("deck") != "" || c.Query("cardId") != "" {
-			return fiber.NewError(fiber.StatusBadRequest, firstFieldError(errs))
-		}
 		data, err := h.editFormData(c, &req, errs)
 		if err != nil {
 			return err
+		}
+		// The review screen's edit form submits with hx-swap="none" (see
+		// card_edit_form.html), so an OOB-only response is enough — there's
+		// no sibling target to keep unchanged. The deck-grid and plain-list
+		// contexts submit with hx-swap="innerHTML" against that sibling, so
+		// the response must also carry its unchanged content alongside the
+		// OOB form, or the swap would blank it.
+		if c.Query("cardId") != "" {
+			return respond.FormInvalid(c, "components/card_edit_form_oob", data, errs)
+		}
+		if deckID := c.Query("deck"); deckID != "" {
+			grid, err := h.deckGridData(c, deckID)
+			if err != nil {
+				return err
+			}
+			maps.Copy(data, grid)
+			data["EditFormOOB"] = true
+			return respond.FormInvalid(c, "components/deck_card_grid", data, errs)
 		}
 		list, err := h.listData(c)
 		if err != nil {
@@ -561,13 +584,29 @@ func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
 }
 
 // UpdateGroup renames a group and returns the refreshed list, or the group
-// page when called from there.
+// page when called from there. The rename form only ever submits with
+// ?source=group_page in the UI today; a validation failure there re-renders
+// the group page with the rename field's inline error (422) — see
+// groupPageData. The other source falls back to a toast; nothing in the UI
+// reaches it, but API/MCP callers might.
 func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
-	name := strings.TrimSpace(c.FormValue("name"))
-	if name == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "Group name is required")
+	var req nameRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "could not read form")
 	}
-	if _, err := h.service.UpdateGroup(c.Context(), auth.UserID(c), c.Params("id"), name); err != nil {
+	req.Name = strings.TrimSpace(req.Name)
+	errs := respond.Validate(req)
+	if len(errs) > 0 {
+		if c.Query("source") != "group_page" {
+			return fiber.NewError(fiber.StatusBadRequest, firstFieldError(errs))
+		}
+		data, err := h.groupPageData(c, fiber.Map{"RenameErrors": errs, "RenameValue": req.Name})
+		if err != nil {
+			return err
+		}
+		return respond.FormInvalid(c, "sections/group_page", data, errs)
+	}
+	if _, err := h.service.UpdateGroup(c.Context(), auth.UserID(c), c.Params("id"), req.Name); err != nil {
 		return err
 	}
 	if c.Query("source") == "group_page" {
@@ -753,10 +792,15 @@ func (h *Handler) DeckDetail(c *fiber.Ctx) error {
 	if deck, err := h.service.GetDeck(c.Context(), auth.UserID(c), id); err == nil {
 		deckImage = deck.Image
 	}
-	return respond.Partial(c, "components/deck_facts", fiber.Map{"DeckID": id, "Facts": facts, "DeckImage": deckImage})
+	return respond.Partial(c, "components/deck_facts", fiber.Map{
+		"DeckID":    id,
+		"Facts":     facts,
+		"DeckImage": deckImage,
+		"Values":    deckCardRequest{},
+		"Errors":    respond.FieldErrors(nil),
+	})
 }
 
-// RenderDeckPage renders the full deck detail page.
 // deckPageData builds the template data for the deck detail page, shared by
 // the plain render (RenderDeckPage) and by the deck-page's own forms
 // (rename, add tag, cover image) re-rendering the whole page in place on a
@@ -799,6 +843,8 @@ func (h *Handler) deckPageData(c *fiber.Ctx, override fiber.Map) (fiber.Map, err
 		"TagErrors":    respond.FieldErrors(nil),
 		"TagValue":     "",
 		"ImageErrors":  respond.FieldErrors(nil),
+		"Values":       deckCardRequest{},
+		"Errors":       respond.FieldErrors(nil),
 	}
 	maps.Copy(data, override)
 	return data, nil
@@ -862,42 +908,71 @@ func (h *Handler) groupGrid(c *fiber.Ctx, groupID string) error {
 
 // AddCardToDeck creates a card assigned to a specific deck and returns the
 // refreshed deck card grid partial.
+// deckCardFormData builds the template data for the deck page's add-card
+// form partial, shared by the initial render and both the success/failure
+// re-renders.
+func (h *Handler) deckCardFormData(deckID string, values deckCardRequest, errs respond.FieldErrors) fiber.Map {
+	return fiber.Map{"DeckID": deckID, "Values": values, "Errors": errs, "Submitted": true}
+}
+
+// AddCardToDeck creates a card assigned to a specific deck. On success it
+// re-renders the (reset) add form plus an OOB refresh of the deck's card
+// grid; on validation failure it re-renders the same form with the
+// submitted values and inline field errors (422).
 func (h *Handler) AddCardToDeck(c *fiber.Ctx) error {
 	id := c.Params("id")
-	front := strings.TrimSpace(c.FormValue("front"))
-	if front == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "Front is required")
+	var req deckCardRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "could not read form")
 	}
-	back := strings.TrimSpace(c.FormValue("back"))
-	reverse := c.FormValue("reverse") != ""
+	req.Front = strings.TrimSpace(req.Front)
+	req.Back = strings.TrimSpace(req.Back)
+	errs := respond.Validate(req)
+
 	grade := -1
-	if g := c.FormValue("grade"); g != "" {
-		if parsed, err := strconv.Atoi(g); err == nil && parsed >= 0 && parsed <= 5 {
-			grade = parsed
-		}
+	if parsed, err := strconv.Atoi(req.Grade); err == nil && parsed >= 0 && parsed <= 5 {
+		grade = parsed
 	}
-	imgFront, err := h.saveImage(c, "image_front")
-	if err != nil {
-		return err
-	}
-	imgBack, err := h.saveImage(c, "image_back")
-	if err != nil {
-		h.removeMedia(imgFront)
-		return err
-	}
-	audFront, err := h.saveAudio(c, "audio_front")
-	if err != nil {
-		h.removeMedia(imgFront, imgBack)
-		return err
-	}
-	audBack, err := h.saveAudio(c, "audio_back")
-	if err != nil {
-		h.removeMedia(imgFront, imgBack, audFront)
-		return err
-	}
-	if _, err := h.service.AddFact(c.Context(), auth.UserID(c), front, back, id, grade, reverse, imgFront, imgBack, audFront, audBack); err != nil {
+
+	imgFront, e1 := h.saveImage(c, "image_front")
+	imgBack, e2 := h.saveImage(c, "image_back")
+	audFront, e3 := h.saveAudio(c, "audio_front")
+	audBack, e4 := h.saveAudio(c, "audio_back")
+	var err error
+	if errs, err = mergeFileErr(errs, "image_front", e1); err != nil {
 		h.removeMedia(imgFront, imgBack, audFront, audBack)
 		return err
 	}
-	return h.deckGrid(c, id)
+	if errs, err = mergeFileErr(errs, "image_back", e2); err != nil {
+		h.removeMedia(imgFront, imgBack, audFront, audBack)
+		return err
+	}
+	if errs, err = mergeFileErr(errs, "audio_front", e3); err != nil {
+		h.removeMedia(imgFront, imgBack, audFront, audBack)
+		return err
+	}
+	if errs, err = mergeFileErr(errs, "audio_back", e4); err != nil {
+		h.removeMedia(imgFront, imgBack, audFront, audBack)
+		return err
+	}
+
+	if len(errs) > 0 {
+		h.removeMedia(imgFront, imgBack, audFront, audBack)
+		data := h.deckCardFormData(id, req, errs)
+		return respond.FormInvalid(c, "components/deck_card_add_form", data, errs)
+	}
+
+	if _, err := h.service.AddFact(c.Context(), auth.UserID(c), req.Front, req.Back, id, grade, req.Reverse, imgFront, imgBack, audFront, audBack); err != nil {
+		h.removeMedia(imgFront, imgBack, audFront, audBack)
+		return err
+	}
+
+	data := h.deckCardFormData(id, deckCardRequest{}, nil)
+	grid, err := h.deckGridData(c, id)
+	if err != nil {
+		return err
+	}
+	maps.Copy(data, grid)
+	data["GridOOB"] = true
+	return c.Render("components/deck_card_add_form", data)
 }

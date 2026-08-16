@@ -23,6 +23,15 @@ type editFactRequest struct {
 	Reverse bool   `form:"reverse" field:"reverse"`
 }
 
+// deckCardRequest is the text-field payload for POST /decks/:id/cards — like
+// addFactRequest but without DeckID, which comes from the URL param instead.
+type deckCardRequest struct {
+	Front   string `form:"front" field:"front" validate:"required"`
+	Back    string `form:"back" field:"back"`
+	Reverse bool   `form:"reverse" field:"reverse"`
+	Grade   string `form:"grade" field:"grade"`
+}
+
 // nameRequest is the payload for the single-name forms with no length cap:
 // create/rename group, add a deck tag.
 type nameRequest struct {

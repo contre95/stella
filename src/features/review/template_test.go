@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/contre95/stella/src/features/hosting"
+	"github.com/contre95/stella/src/features/hosting/respond"
 )
 
 // TestReviewTemplatesParse guards the template syntax of the review views,
@@ -22,11 +23,19 @@ func TestReviewTemplatesParse(t *testing.T) {
 		"views/sections/cards.html",
 		"views/sections/study_pick.html",
 		"views/sections/deck_page.html",
+		"views/sections/decks.html",
+		"views/sections/group_page.html",
 		"views/components/deck_facts.html",
 		"views/components/deck_list.html",
 		"views/components/card_list.html",
 		"views/components/card_preview.html",
 		"views/components/deck_card_grid.html",
+		"views/components/card_add_form.html",
+		"views/components/card_edit_form.html",
+		"views/components/card_edit_form_oob.html",
+		"views/components/deck_add_form.html",
+		"views/components/group_add_form.html",
+		"views/components/deck_card_add_form.html",
 		"views/partials/icons.html",
 	} {
 		b, err := os.ReadFile(filepath.Join("../../..", rel))
@@ -56,6 +65,12 @@ func TestReviewTemplatesParse(t *testing.T) {
 					return ""
 				}
 				return "s"
+			},
+			"errClass": func(errs respond.FieldErrors, name, base string) string {
+				if _, bad := errs[name]; bad {
+					return base + " border-red-500 dark:border-red-500"
+				}
+				return base
 			},
 		}
 		if _, err := template.New(rel).Funcs(funcs).Parse(string(b)); err != nil {
