@@ -1,6 +1,15 @@
-// Package devicesync implements the stella-x4 sync protocol under /api/x4.
+// Package devicesync implements the device sync protocol currently exposed
+// under /api/x4. This file holds the sync engine: manifest/etag diffing,
+// idempotent review ingestion, and last-writer-wins scheduling-state merge —
+// all of it device-agnostic, operating purely on domain types (srs.Card,
+// srs.Deck) and a pluggable Normalizer (normalize.go) that curates content
+// for whichever client is asking. x4_wire.go holds the one thing that is
+// genuinely x4-specific: its wire format (CSV export, terse JSON scheduling
+// state) driven by the device's hardware constraints (SD card parsing, small
+// network buffers). A future client family (e.g. a mobile app) would add its
+// own wire-format file and Normalizer and reuse everything here unchanged.
 //
-// The device is offline-first: it studies from the SD card and syncs in
+// The x4 device is offline-first: it studies from the SD card and syncs in
 // explicit batch sessions. One sync session performs, in order:
 //
 //  1. GET  /hello                  — server time, used to fix the device RTC
@@ -12,17 +21,16 @@
 //     GET  /decks/{id}/state?since — download scheduling state changed since
 //     the device's last exchange (LWW)
 //
-// Decks and cards are addressed by their compact 8-hex sync IDs (the device
-// packs IDs into 12-byte fields), never by primary keys. Deck content, deck
-// deletion and study-enablement are server-authoritative: the device only
-// ever writes back review events and scheduling state.
+// Decks and cards are addressed by their compact 8-hex sync IDs (the x4
+// device packs IDs into 12-byte fields), never by primary keys. Deck content,
+// deck deletion and study-enablement are server-authoritative: the device
+// only ever writes back review events and scheduling state.
 package devicesync
 
 import (
 	"bufio"
 	"context"
 	"crypto/sha256"
-	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -35,21 +43,20 @@ import (
 	"github.com/contre95/stella/src/srs"
 )
 
-// ExportCap mirrors stella-x4's MAX_ACTIVE_CARDS: the device loads at most
-// this many cards per deck, so exporting more would only waste its SD space.
-const ExportCap = 1000
-
 // maxLine bounds one NDJSON line; fact-free payloads are tiny, this is slack.
 const maxLine = 64 * 1024
 
 // Service implements the sync operations on top of the domain repository.
+// normalize curates a card's front/back text for the client's rendering
+// capability before it goes out over the wire (see normalize.go).
 type Service struct {
-	repo srs.Repository
+	repo      srs.Repository
+	normalize Normalizer
 }
 
 // NewService constructs the device sync service.
-func NewService(repo srs.Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo srs.Repository, normalize Normalizer) *Service {
+	return &Service{repo: repo, normalize: normalize}
 }
 
 // DeckManifest describes one deck in the sync manifest.
@@ -144,41 +151,19 @@ func (s *Service) exportRows(ctx context.Context, userID, deckID string) ([]srs.
 }
 
 // etag hashes the export rows so the device can skip unchanged decks. Fields
-// are length-prefixed so shifting text between fields cannot collide.
+// are length-prefixed so shifting text between fields cannot collide. Image
+// filenames are included so attaching/removing an image without touching the
+// text still busts the export (the client-visible export changes: an
+// "[IMAGE]" marker appears or disappears — see Normalizer).
 func etag(rows []srs.DeckExportRow) string {
 	h := sha256.New()
 	for _, r := range rows {
-		for _, f := range []string{r.SyncID, r.Front, r.Back} {
+		for _, f := range []string{r.SyncID, r.Front, r.Back, r.ImageFront, r.ImageBack} {
 			fmt.Fprintf(h, "%d:", len(f))
 			io.WriteString(h, f)
 		}
 	}
 	return hex.EncodeToString(h.Sum(nil))[:16]
-}
-
-// WriteDeckCSV streams the deck export as RFC 4180 CSV rows of
-// "sync_id,front,back" — the same format the device already parses, plus the
-// leading ID column. Front/back are stripped to plain text: the device
-// renders literal characters with no markdown/HTML support, so any markup
-// (color spans, bold, headings, ...) is flattened here rather than leaking
-// onto the screen as stray symbols.
-func (s *Service) WriteDeckCSV(ctx context.Context, userID, deckSyncID string, w io.Writer) error {
-	deck, err := s.repo.GetDeckBySyncID(ctx, userID, deckSyncID)
-	if err != nil {
-		return err
-	}
-	rows, _, err := s.exportRows(ctx, userID, deck.ID)
-	if err != nil {
-		return err
-	}
-	cw := csv.NewWriter(w)
-	for _, r := range rows {
-		if err := cw.Write([]string{r.SyncID, curateForDevice(r.Front), curateForDevice(r.Back)}); err != nil {
-			return err
-		}
-	}
-	cw.Flush()
-	return cw.Error()
 }
 
 // DeviceReview is one uploaded line of the device's review log.

@@ -53,7 +53,7 @@ func (s *Service) AddFact(ctx context.Context, userID, front, back, deckID strin
 	}
 	if _, err := s.repo.GetDeck(ctx, userID, deckID); err != nil {
 		if errors.Is(err, srs.ErrNotFound) {
-			return nil, fmt.Errorf("deck %q not found", deckID)
+			return nil, fmt.Errorf("deck %q not found: %w", deckID, srs.ErrNotFound)
 		}
 		return nil, fmt.Errorf("looking up deck: %w", err)
 	}
@@ -174,7 +174,7 @@ func (s *Service) UpdateFact(ctx context.Context, userID, factID, front, back st
 	fact, err := s.repo.GetFact(ctx, userID, factID)
 	if err != nil {
 		if errors.Is(err, srs.ErrNotFound) {
-			return nil, fmt.Errorf("fact %q not found", factID)
+			return nil, fmt.Errorf("fact %q not found: %w", factID, srs.ErrNotFound)
 		}
 		return nil, err
 	}
@@ -297,13 +297,13 @@ func (s *Service) MoveFact(ctx context.Context, userID, factID, deckID string) (
 	}
 	if _, err := s.repo.GetDeck(ctx, userID, deckID); err != nil {
 		if errors.Is(err, srs.ErrNotFound) {
-			return nil, fmt.Errorf("deck %q not found", deckID)
+			return nil, fmt.Errorf("deck %q not found: %w", deckID, srs.ErrNotFound)
 		}
 		return nil, fmt.Errorf("looking up deck: %w", err)
 	}
 	if err := s.repo.MoveFactToDeck(ctx, userID, factID, deckID); err != nil {
 		if errors.Is(err, srs.ErrNotFound) {
-			return nil, fmt.Errorf("fact %q not found", factID)
+			return nil, fmt.Errorf("fact %q not found: %w", factID, srs.ErrNotFound)
 		}
 		return nil, err
 	}
@@ -584,7 +584,7 @@ func (s *Service) DeleteTag(ctx context.Context, userID, id string) error {
 func (s *Service) TagDeck(ctx context.Context, userID, deckID, name string) (*srs.Tag, error) {
 	if _, err := s.repo.GetDeck(ctx, userID, deckID); err != nil {
 		if errors.Is(err, srs.ErrNotFound) {
-			return nil, fmt.Errorf("deck %q not found", deckID)
+			return nil, fmt.Errorf("deck %q not found: %w", deckID, srs.ErrNotFound)
 		}
 		return nil, err
 	}

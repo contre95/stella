@@ -137,7 +137,7 @@ func (h *Handler) GradeCard(c *fiber.Ctx) error {
 	}
 
 	if err := h.service.Grade(c.Context(), auth.UserID(c), cardID, grade); err != nil {
-		return err
+		return respond.NotFound(err, "Card not found")
 	}
 
 	ci, err := h.service.NextCard(c.Context(), auth.UserID(c), deckIDs, learnAhead)
@@ -179,7 +179,7 @@ func (h *Handler) Reload(c *fiber.Ctx) error {
 
 	ci, err := h.service.CardByID(c.Context(), auth.UserID(c), c.Params("cardId"), deckIDs)
 	if err != nil {
-		return err
+		return respond.NotFound(err, "Card not found")
 	}
 	return c.Render("partials/review_card", fiber.Map{
 		"Card":          ci.Card,

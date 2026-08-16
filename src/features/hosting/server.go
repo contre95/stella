@@ -9,6 +9,7 @@ import (
 	"github.com/contre95/stella/src/features/auth"
 	"github.com/contre95/stella/src/features/config"
 	"github.com/contre95/stella/src/features/hosting/respond"
+	"github.com/contre95/stella/src/markup"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/template/html/v2"
@@ -40,7 +41,7 @@ func NewServer(cm *config.Manager, authSvc *auth.Service, registrars ...RouteReg
 		}
 		return "s"
 	})
-	engine.AddFunc("md", MarkdownHTML)
+	engine.AddFunc("md", markup.RenderHTML)
 	engine.AddFunc("errClass", func(errs respond.FieldErrors, name, base string) string {
 		if _, bad := errs[name]; bad {
 			return base + " border-red-500 dark:border-red-500"

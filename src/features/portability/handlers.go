@@ -9,6 +9,7 @@ import (
 
 	"github.com/contre95/stella/src/features/auth"
 	"github.com/contre95/stella/src/features/cards"
+	"github.com/contre95/stella/src/features/hosting/respond"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -27,7 +28,7 @@ func NewHandler(service *Service, cardsHandler *cards.Handler) *Handler {
 func (h *Handler) ExportDeck(c *fiber.Ctx) error {
 	exp, err := h.service.ExportDeck(c.Context(), auth.UserID(c), c.Params("id"))
 	if err != nil {
-		return err
+		return respond.NotFound(err, "Deck not found")
 	}
 	var buf bytes.Buffer
 	if err := writeDeckZip(&buf, exp); err != nil {
@@ -43,7 +44,7 @@ func (h *Handler) ExportDeck(c *fiber.Ctx) error {
 func (h *Handler) ExportGroup(c *fiber.Ctx) error {
 	exp, err := h.service.ExportGroup(c.Context(), auth.UserID(c), c.Params("id"))
 	if err != nil {
-		return err
+		return respond.NotFound(err, "Group not found")
 	}
 	var buf bytes.Buffer
 	if err := writeGroupZip(&buf, exp); err != nil {

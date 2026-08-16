@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/contre95/stella/src/srs"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 )
@@ -63,6 +64,17 @@ func ToastErr(c *fiber.Ctx, status int, msg string) error {
 		return c.Render("toast/toastErr", fiber.Map{"Msg": msg})
 	}
 	return c.JSON(fiber.Map{"ok": false, "msg": msg})
+}
+
+// NotFound translates a service-layer srs.ErrNotFound into a 404 fiber.Error
+// carrying msg; any other error (or nil) passes through unchanged. The
+// caller picks msg, so the handler — not this helper — decides what the
+// client sees for each specific lookup.
+func NotFound(err error, msg string) error {
+	if errors.Is(err, srs.ErrNotFound) {
+		return fiber.NewError(fiber.StatusNotFound, msg)
+	}
+	return err
 }
 
 // ToastInfo renders an info toast (HTMX) or a JSON ok payload.

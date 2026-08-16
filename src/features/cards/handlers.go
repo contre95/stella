@@ -30,6 +30,83 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
+// addFactRequest is the text-field payload for POST /cards. File fields
+// (image_front/back, audio_front/back) are handled separately via
+// c.FormFile — see Handler.saveImage/saveAudio.
+type addFactRequest struct {
+	Front   string `form:"front" field:"front" validate:"required"`
+	Back    string `form:"back" field:"back"`
+	DeckID  string `form:"deckId" field:"deckId" validate:"required"`
+	Reverse bool   `form:"reverse" field:"reverse"`
+	Grade   string `form:"grade" field:"grade"`
+}
+
+// editFactRequest is the text-field payload for PUT /cards/:id.
+type editFactRequest struct {
+	Front   string `form:"front" field:"front" validate:"required"`
+	Back    string `form:"back" field:"back"`
+	Reverse bool   `form:"reverse" field:"reverse"`
+}
+
+// deckCardRequest is the text-field payload for POST /decks/:id/cards — like
+// addFactRequest but without DeckID, which comes from the URL param instead.
+type deckCardRequest struct {
+	Front   string `form:"front" field:"front" validate:"required"`
+	Back    string `form:"back" field:"back"`
+	Reverse bool   `form:"reverse" field:"reverse"`
+	Grade   string `form:"grade" field:"grade"`
+}
+
+// nameRequest is the payload for the single-name forms with no length cap:
+// create/rename group, add a deck tag.
+type nameRequest struct {
+	Name string `form:"name" field:"name" validate:"required"`
+}
+
+// deckNameRequest is the payload for a deck's name field, capped at 32
+// characters (decks previously silently truncated instead of rejecting —
+// rejecting with an inline error is clearer than mangling the input).
+type deckNameRequest struct {
+	Name string `form:"name" field:"name" validate:"required,max=32"`
+}
+
+// addDeckRequest is the text-field payload for POST /decks. The cover image
+// is handled separately via c.FormFile — see Handler.saveImage.
+type addDeckRequest struct {
+	Name        string `form:"name" field:"name" validate:"required,max=32"`
+	Description string `form:"description" field:"description"`
+	GroupID     string `form:"group_id" field:"group_id"`
+}
+
+// mergeFileErr folds a saveImage/saveAudio error into errs under key, when
+// err is the "wrong file type" validation error (a 400 fiber.Error) rather
+// than an infra failure. Infra failures (disk I/O, permissions) are returned
+// as-is by the caller and become a 500 toast, same as any other internal
+// error — only user-fixable input problems become inline field errors.
+func mergeFileErr(errs respond.FieldErrors, key string, err error) (respond.FieldErrors, error) {
+	if err == nil {
+		return errs, nil
+	}
+	if fe, ok := err.(*fiber.Error); ok && fe.Code == fiber.StatusBadRequest {
+		if errs == nil {
+			errs = respond.FieldErrors{}
+		}
+		errs[key] = fe.Message
+		return errs, nil
+	}
+	return errs, err
+}
+
+// firstFieldError picks one message out of a FieldErrors map for contexts
+// that still only support a single toast message (map iteration order is
+// unspecified, but these maps hold at most one or two entries in practice).
+func firstFieldError(errs respond.FieldErrors) string {
+	for _, msg := range errs {
+		return msg
+	}
+	return "Invalid input"
+}
+
 // RenderSection renders the cards page (the list itself loads over HTMX).
 func (h *Handler) RenderSection(c *fiber.Ctx) error {
 	data, err := h.addFormData(c, addFactRequest{}, nil)
@@ -201,7 +278,7 @@ func (h *Handler) Add(c *fiber.Ctx) error {
 
 	if _, err := h.service.AddFact(c.Context(), auth.UserID(c), req.Front, req.Back, req.DeckID, grade, req.Reverse, imgFront, imgBack, audFront, audBack); err != nil {
 		h.removeMedia(imgFront, imgBack, audFront, audBack)
-		return err
+		return respond.NotFound(err, "Deck not found")
 	}
 
 	data, err := h.addFormData(c, addFactRequest{DeckID: req.DeckID}, nil)
@@ -344,7 +421,7 @@ func (h *Handler) Move(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "Deck is required")
 	}
 	if _, err := h.service.MoveFact(c.Context(), auth.UserID(c), c.Params("id"), deckID); err != nil {
-		return err
+		return respond.NotFound(err, "Card or deck not found")
 	}
 	if src := c.Query("deck"); src != "" {
 		return h.deckGrid(c, src)
@@ -443,7 +520,7 @@ func (h *Handler) Edit(c *fiber.Ctx) error {
 
 	if _, err := h.service.UpdateFact(c.Context(), auth.UserID(c), c.Params("id"), req.Front, req.Back, imgFront, imgBack, audFront, audBack, &req.Reverse); err != nil {
 		h.removeMedia(saved...)
-		return err
+		return respond.NotFound(err, "Card not found")
 	}
 	if deckID := c.Query("deck"); deckID != "" {
 		return h.deckGrid(c, deckID)
@@ -524,7 +601,7 @@ func (h *Handler) AddDeckTag(c *fiber.Ctx) error {
 		return respond.FormInvalid(c, "sections/deck_page", data, errs)
 	}
 	if _, err := h.service.TagDeck(c.Context(), auth.UserID(c), c.Params("id"), req.Name); err != nil {
-		return err
+		return respond.NotFound(err, "Deck not found")
 	}
 	return h.RenderDeckPage(c)
 }
@@ -607,7 +684,7 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 		return respond.FormInvalid(c, "sections/group_page", data, errs)
 	}
 	if _, err := h.service.UpdateGroup(c.Context(), auth.UserID(c), c.Params("id"), req.Name); err != nil {
-		return err
+		return respond.NotFound(err, "Group not found")
 	}
 	if c.Query("source") == "group_page" {
 		return h.RenderGroupPage(c)
@@ -619,7 +696,7 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 // deck list, or the deck/group page when called from there.
 func (h *Handler) ToggleDeckStudy(c *fiber.Ctx) error {
 	if _, err := h.service.ToggleDeckStudy(c.Context(), auth.UserID(c), c.Params("id")); err != nil {
-		return err
+		return respond.NotFound(err, "Deck not found")
 	}
 	if c.Query("source") == "deck_page" {
 		return h.RenderDeckPage(c)
@@ -634,7 +711,7 @@ func (h *Handler) ToggleDeckStudy(c *fiber.Ctx) error {
 func (h *Handler) SetDeckGroup(c *fiber.Ctx) error {
 	groupID := strings.TrimSpace(c.FormValue("group_id"))
 	if err := h.service.SetDeckGroup(c.Context(), auth.UserID(c), c.Params("id"), groupID); err != nil {
-		return err
+		return respond.NotFound(err, "Deck not found")
 	}
 	// If called from the deck page, re-render the deck page.
 	if c.Query("source") == "deck_page" {
@@ -724,7 +801,7 @@ func (h *Handler) AddDeck(c *fiber.Ctx) error {
 func (h *Handler) UpdateDeckDescription(c *fiber.Ctx) error {
 	desc := strings.TrimSpace(c.FormValue("description"))
 	if _, err := h.service.UpdateDeckDescription(c.Context(), auth.UserID(c), c.Params("id"), desc); err != nil {
-		return err
+		return respond.NotFound(err, "Deck not found")
 	}
 	return h.RenderDeckPage(c)
 }
@@ -746,7 +823,7 @@ func (h *Handler) RenameDeck(c *fiber.Ctx) error {
 		return respond.FormInvalid(c, "sections/deck_page", data, errs)
 	}
 	if _, err := h.service.RenameDeck(c.Context(), auth.UserID(c), c.Params("id"), req.Name); err != nil {
-		return err
+		return respond.NotFound(err, "Deck not found")
 	}
 	return h.RenderDeckPage(c)
 }
@@ -775,7 +852,7 @@ func (h *Handler) SetDeckImage(c *fiber.Ctx) error {
 	old, err := h.service.SetDeckImage(c.Context(), auth.UserID(c), c.Params("id"), image)
 	if err != nil {
 		h.removeMedia(image)
-		return err
+		return respond.NotFound(err, "Deck not found")
 	}
 	h.removeMedia(old)
 	return h.RenderDeckPage(c)
@@ -964,7 +1041,7 @@ func (h *Handler) AddCardToDeck(c *fiber.Ctx) error {
 
 	if _, err := h.service.AddFact(c.Context(), auth.UserID(c), req.Front, req.Back, id, grade, req.Reverse, imgFront, imgBack, audFront, audBack); err != nil {
 		h.removeMedia(imgFront, imgBack, audFront, audBack)
-		return err
+		return respond.NotFound(err, "Deck not found")
 	}
 
 	data := h.deckCardFormData(id, deckCardRequest{}, nil)

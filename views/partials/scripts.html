@@ -12,13 +12,20 @@
 
   // 422 = form validation failure with a re-rendered form fragment (and
   // possibly an OOB sibling update, e.g. a refreshed list) in the body.
-  // Treat it as a normal swap instead of htmx's default "4xx: no swap, fire
-  // htmx:responseError" handling, so the inline-error fragment actually
-  // lands in the DOM — this is htmx's documented pattern for server-side
-  // form validation. Must run before the built-in 4xx bucket, hence unshift.
-  // A rule with swap:true and no explicit error:true does NOT fire
-  // htmx:responseError, so 422s never reach that listener below.
-  htmx.config.responseHandling.unshift({ code: "422", swap: true });
+  // htmx 1.9 hardcodes shouldSwap = status < 400 with no config knob for
+  // it (that came later, in htmx 2.x) — the documented escape hatch for
+  // this version is htmx:beforeSwap, per htmx's own source comment above
+  // the shouldSwap line. Forcing shouldSwap here makes both the primary
+  // target swap AND any hx-swap-oob fragments in the body apply, instead of
+  // htmx's default "4xx: no swap, fire htmx:responseError". isError=false
+  // suppresses that event too, since the inline error is already visible in
+  // the swapped-in markup — no need for the generic toast fallback below.
+  document.body.addEventListener('htmx:beforeSwap', function (evt) {
+    if (evt.detail.xhr.status === 422) {
+      evt.detail.shouldSwap = true;
+      evt.detail.isError = false;
+    }
+  });
 
   // Formats a byte count as a short human string, e.g. "10 MB".
   window.humanBytes = function (n) {

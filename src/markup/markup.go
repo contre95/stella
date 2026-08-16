@@ -1,4 +1,4 @@
-package hosting
+package markup
 
 import (
 	"bytes"
@@ -217,7 +217,7 @@ func renderMarkdown(src string) string {
 	return out
 }
 
-// MarkdownHTML converts fact front/back text to sanitized HTML for display.
+// RenderHTML converts fact front/back text to sanitized HTML for display.
 // Registered as the `md` template function. Card text is justified by
 // default (see .md-content's base style); "{center}...{/center}" opts the
 // text between the two tokens back to centered — typically the whole face,
@@ -231,7 +231,7 @@ func renderMarkdown(src string) string {
 // require. The tradeoff is that a color/tts/furigana span can't straddle a
 // "{center}"/"{/center}" boundary — an acceptable limitation, not a use
 // case that comes up in practice.
-func MarkdownHTML(src string) template.HTML {
+func RenderHTML(src string) template.HTML {
 	i := strings.Index(src, centerOpenTok)
 	if i == -1 {
 		return template.HTML(renderMarkdown(src))

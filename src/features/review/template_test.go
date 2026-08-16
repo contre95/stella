@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/contre95/stella/src/features/hosting"
 	"github.com/contre95/stella/src/features/hosting/respond"
+	"github.com/contre95/stella/src/markup"
 )
 
 // TestReviewTemplatesParse guards the template syntax of the review views,
@@ -43,7 +43,7 @@ func TestReviewTemplatesParse(t *testing.T) {
 			t.Fatalf("read %s: %v", rel, err)
 		}
 		funcs := template.FuncMap{
-			"md":  hosting.MarkdownHTML,
+			"md":  markup.RenderHTML,
 			"add": func(a, b int) int { return a + b },
 			"sub": func(a, b int) int { return a - b },
 			"dict": func(values ...any) (map[string]any, error) {

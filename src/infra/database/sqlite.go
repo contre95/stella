@@ -419,7 +419,7 @@ func (s *SqliteSRS) DeckExportRows(ctx context.Context, userID, deckID string, l
 		limit = -1
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT c.sync_id, c.card_view, f.front, f.back
+		`SELECT c.sync_id, c.card_view, f.front, f.back, f.image_front, f.image_back
 		 FROM cards c JOIN facts f ON c.fact_id = f.id
 		 WHERE c.user_id=? AND c.deck_id=? AND c.active=1
 		 ORDER BY c.rowid LIMIT ?`, userID, deckID, limit)
@@ -431,11 +431,12 @@ func (s *SqliteSRS) DeckExportRows(ctx context.Context, userID, deckID string, l
 	for rows.Next() {
 		var r srs.DeckExportRow
 		var view string
-		if err := rows.Scan(&r.SyncID, &view, &r.Front, &r.Back); err != nil {
+		if err := rows.Scan(&r.SyncID, &view, &r.Front, &r.Back, &r.ImageFront, &r.ImageBack); err != nil {
 			return nil, err
 		}
 		if srs.CardView(view) == srs.ViewReverse {
 			r.Front, r.Back = r.Back, r.Front
+			r.ImageFront, r.ImageBack = r.ImageBack, r.ImageFront
 		}
 		out = append(out, r)
 	}

@@ -17,9 +17,15 @@ func NewSyncID() string {
 
 // DeckExportRow is one card in a deck export for the device sync protocol:
 // the card's sync ID plus the question/answer text with the view direction
-// already applied (a reverse card's front is the fact's back).
+// already applied (a reverse card's front is the fact's back). ImageFront/
+// ImageBack are the attached image filenames (empty if none), swapped the
+// same way as Front/Back; image files themselves are never sent through the
+// sync protocols, so clients that can't display them use this to know a face
+// has one.
 type DeckExportRow struct {
-	SyncID string
-	Front  string
-	Back   string
+	SyncID     string
+	Front      string
+	Back       string
+	ImageFront string
+	ImageBack  string
 }

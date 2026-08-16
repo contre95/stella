@@ -25,7 +25,7 @@ func newTestService(t *testing.T) (*Service, *database.SqliteSRS) {
 	if _, err := db.UpsertUser(context.Background(), &auth.User{ID: testUser, Issuer: "test", Subject: testUser, Created: 1}); err != nil {
 		t.Fatalf("add user: %v", err)
 	}
-	return NewService(db), db
+	return NewService(db, X4Normalizer), db
 }
 
 // fixture creates a deck with one fact that has forward + reverse cards,
@@ -62,6 +62,72 @@ func TestDeckCSVSwapsReverseCards(t *testing.T) {
 	want := fwd.SyncID + ",la manzana,apple\n" + rev.SyncID + ",apple,la manzana\n"
 	if buf.String() != want {
 		t.Errorf("csv mismatch:\n got %q\nwant %q", buf.String(), want)
+	}
+}
+
+func TestDeckCSVCuratesMarkupAndFlagsImages(t *testing.T) {
+	svc, db := newTestService(t)
+	ctx := context.Background()
+	deck := &srs.Deck{ID: "d1", UserID: testUser, Name: "Physics", Color: "#000", StudyEnabled: true}
+	if err := db.AddDeck(ctx, deck); err != nil {
+		t.Fatalf("add deck: %v", err)
+	}
+	fact := &srs.Fact{
+		ID: "f1", UserID: testUser, DeckID: "d1", Created: 1, Modified: 1,
+		Front:      "{center}what is $E$?{/center}",
+		Back:       "{tts:en}energy{/tts}, see the {#ff0000}diagram{/}",
+		ImageBack:  "diagram.png",
+	}
+	if err := db.AddFact(ctx, fact); err != nil {
+		t.Fatalf("add fact: %v", err)
+	}
+	fwd := &srs.Card{ID: "c1", UserID: testUser, FactID: "f1", DeckID: "d1", View: srs.ViewForward, Grade: srs.GradeUnseen, Easiness: 2.5, LastRep: -1, NextRep: -1, Active: true}
+	if err := db.AddCard(ctx, fwd); err != nil {
+		t.Fatalf("add card: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := svc.WriteDeckCSV(ctx, testUser, deck.SyncID, &buf); err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	want := fwd.SyncID + ",what is E?,\"energy, see the diagram\n[IMAGE]\"\n"
+	if buf.String() != want {
+		t.Errorf("csv mismatch:\n got %q\nwant %q", buf.String(), want)
+	}
+}
+
+func TestManifestEtagChangesWithImage(t *testing.T) {
+	svc, db := newTestService(t)
+	ctx := context.Background()
+	deck := &srs.Deck{ID: "d1", UserID: testUser, Name: "Capitals", Color: "#000", StudyEnabled: true}
+	if err := db.AddDeck(ctx, deck); err != nil {
+		t.Fatalf("add deck: %v", err)
+	}
+	fact := &srs.Fact{ID: "f1", UserID: testUser, Front: "la manzana", Back: "apple", DeckID: "d1", Created: 1, Modified: 1}
+	if err := db.AddFact(ctx, fact); err != nil {
+		t.Fatalf("add fact: %v", err)
+	}
+	card := &srs.Card{ID: "c1", UserID: testUser, FactID: "f1", DeckID: "d1", View: srs.ViewForward, Grade: srs.GradeUnseen, Easiness: 2.5, LastRep: -1, NextRep: -1, Active: true}
+	if err := db.AddCard(ctx, card); err != nil {
+		t.Fatalf("add card: %v", err)
+	}
+
+	before, err := svc.Manifest(ctx, testUser)
+	if err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+
+	fact.ImageBack = "apple.png"
+	if err := db.UpdateFact(ctx, fact); err != nil {
+		t.Fatalf("update fact: %v", err)
+	}
+
+	after, err := svc.Manifest(ctx, testUser)
+	if err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+	if before[0].Etag == after[0].Etag {
+		t.Errorf("etag did not change after attaching an image: %q", before[0].Etag)
 	}
 }
 

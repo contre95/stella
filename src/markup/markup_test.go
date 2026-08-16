@@ -1,11 +1,11 @@
-package hosting
+package markup
 
 import (
 	"strings"
 	"testing"
 )
 
-func TestMarkdownHTMLRendersFormatting(t *testing.T) {
+func TestRenderHTMLRendersFormatting(t *testing.T) {
 	for _, tc := range []struct {
 		name, in, want string
 	}{
@@ -34,15 +34,15 @@ func TestMarkdownHTMLRendersFormatting(t *testing.T) {
 		{"center wrapping formatting", "{center}**bold**{/center}", `<div style="text-align:center"><p><strong>bold</strong></p>`},
 		{"unclosed center degrades to plain text", "{center}no close", "<p>{center}no close</p>"},
 	} {
-		got := string(MarkdownHTML(tc.in))
+		got := string(RenderHTML(tc.in))
 		if !strings.Contains(got, tc.want) {
-			t.Errorf("%s: MarkdownHTML(%q) = %q, want it to contain %q", tc.name, tc.in, got, tc.want)
+			t.Errorf("%s: RenderHTML(%q) = %q, want it to contain %q", tc.name, tc.in, got, tc.want)
 		}
 	}
 }
 
-func TestMarkdownHTMLHardWrapsNewlines(t *testing.T) {
-	got := string(MarkdownHTML("line one\nline two"))
+func TestRenderHTMLHardWrapsNewlines(t *testing.T) {
+	got := string(RenderHTML("line one\nline two"))
 	if !strings.Contains(got, "<br") {
 		t.Errorf("single newline should render as <br>, got %q", got)
 	}
@@ -50,7 +50,7 @@ func TestMarkdownHTMLHardWrapsNewlines(t *testing.T) {
 
 // Fact content is arbitrary user/import data; it must never reach the page as
 // executable markup.
-func TestMarkdownHTMLNeverEmitsRawHTML(t *testing.T) {
+func TestRenderHTMLNeverEmitsRawHTML(t *testing.T) {
 	for _, in := range []string{
 		`<script>alert(1)</script>`,
 		`inline <img src=x onerror=alert(1)> html`,
@@ -61,10 +61,10 @@ func TestMarkdownHTMLNeverEmitsRawHTML(t *testing.T) {
 		`{base|<img src=x onerror=alert(1)>}`,
 		`{tts:en}<script>alert(1)</script>{/tts}`,
 	} {
-		got := string(MarkdownHTML(in))
+		got := string(RenderHTML(in))
 		for _, banned := range []string{"<script", "onerror", "javascript:", "<a href=\"https://evil"} {
 			if strings.Contains(got, banned) {
-				t.Errorf("MarkdownHTML(%q) = %q, must not contain %q", in, got, banned)
+				t.Errorf("RenderHTML(%q) = %q, must not contain %q", in, got, banned)
 			}
 		}
 	}
