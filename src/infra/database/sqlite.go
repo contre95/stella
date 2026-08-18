@@ -843,9 +843,15 @@ func (s *SqliteSRS) FactIDsLearnedToday(ctx context.Context, userID string, from
 	return out, rows.Err()
 }
 
-func (s *SqliteSRS) ReviewTimestampsSince(ctx context.Context, userID string, from int64) ([]int64, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT timestamp FROM reviews WHERE user_id=? AND timestamp>=? ORDER BY timestamp`, userID, from)
+func (s *SqliteSRS) ReviewTimestampsSince(ctx context.Context, userID string, from int64, deckIDs []string) ([]int64, error) {
+	query := `SELECT r.timestamp FROM reviews r WHERE r.user_id=? AND r.timestamp>=?`
+	args := []any{userID, from}
+	if len(deckIDs) > 0 {
+		clause, deckArgs := inClause(deckIDs)
+		query = `SELECT r.timestamp FROM reviews r JOIN cards c ON c.id = r.card_id WHERE r.user_id=? AND r.timestamp>=? AND c.deck_id IN ` + clause
+		args = append(args, deckArgs...)
+	}
+	rows, err := s.db.QueryContext(ctx, query+` ORDER BY r.timestamp`, args...)
 	if err != nil {
 		return nil, err
 	}

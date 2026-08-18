@@ -95,8 +95,10 @@ type Repository interface {
 	// export to carry a card's history alongside its scheduling state.
 	ReviewsForCard(ctx context.Context, userID, cardID string) ([]*Review, error)
 	// ReviewTimestampsSince returns POSIX timestamps of reviews at or after
-	// `from`, ascending, for the study-activity heatmap.
-	ReviewTimestampsSince(ctx context.Context, userID string, from int64) ([]int64, error)
+	// `from`, ascending, for the study-activity heatmap. deckIDs optionally
+	// restricts the log to reviews of cards in those decks; nil/empty means
+	// all decks.
+	ReviewTimestampsSince(ctx context.Context, userID string, from int64, deckIDs []string) ([]int64, error)
 	// FactIDsLearnedToday returns the fact ids memorised during [from, to):
 	// facts newly committed to memory plus facts forgotten and relearned. It is
 	// the union of Mnemosyne's fact_ids_newly_learned_today and

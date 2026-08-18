@@ -21,9 +21,9 @@ func NewHandler(service *Service, cfg *config.Manager) *Handler {
 	return &Handler{service: service, cfg: cfg}
 }
 
-// parseDeckFilter splits the "decks" query param into a slice of IDs.
+// ParseDeckFilter splits the "decks" query param into a slice of IDs.
 // An empty or absent param returns nil (= all decks).
-func parseDeckFilter(raw string) []string {
+func ParseDeckFilter(raw string) []string {
 	if raw == "" {
 		return nil
 	}
@@ -45,7 +45,7 @@ func parseDeckFilter(raw string) []string {
 // non-empty it parses and uses those IDs directly.
 func (h *Handler) resolveDeckIDs(c *fiber.Ctx, raw string) ([]string, error) {
 	if raw != "" {
-		return parseDeckFilter(raw), nil
+		return ParseDeckFilter(raw), nil
 	}
 	return h.service.EnabledDeckIDs(c.Context(), auth.UserID(c))
 }

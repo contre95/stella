@@ -187,7 +187,7 @@ func TestIngestReviewsIsIdempotent(t *testing.T) {
 
 	// Both reviews landed: the resolved one under the card's primary key, the
 	// unknown one under its raw device ID.
-	ts, err := db.ReviewTimestampsSince(ctx, testUser, 0)
+	ts, err := db.ReviewTimestampsSince(ctx, testUser, 0, nil)
 	if err != nil {
 		t.Fatalf("timestamps: %v", err)
 	}

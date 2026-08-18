@@ -5,7 +5,25 @@
 >
   <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" _="on click remove #card-preview-modal"></div>
 
-  <div class="glass-strong relative flex w-full max-w-md flex-col rounded-2xl p-4" style="height: min(640px, 85vh);">
+  <div id="pv-panel" class="glass-strong relative flex w-full max-w-md flex-col rounded-2xl p-4" style="height: min(640px, 85vh);">
+    <button
+      type="button"
+      title="Fullscreen"
+      class="absolute left-4 top-4 z-30 rounded-lg p-1.5 text-gray-400 hover:bg-pink-500/10 hover:text-pink-500 transition-colors dark:hover:text-pink-400"
+      _="on click
+           toggle .pv-fullscreen on #card-preview-modal
+           toggle .hidden on #pv-expand-icon
+           toggle .hidden on #pv-collapse-icon
+           if #card-preview-modal matches .pv-fullscreen
+             set my title to 'Exit fullscreen'
+           else
+             set my title to 'Fullscreen'
+           end"
+    >
+      <span id="pv-expand-icon">{{template "icon-expand" (dict "Class" "h-5 w-5")}}</span>
+      <span id="pv-collapse-icon" class="hidden">{{template "icon-collapse" (dict "Class" "h-5 w-5")}}</span>
+    </button>
+
     <button
       type="button"
       title="Close preview"
@@ -137,6 +155,16 @@
 
     <p class="mt-2 shrink-0 text-center text-xs text-gray-400 dark:text-gray-500">Tap the card to flip &middot; preview only, not counted as a review</p>
   </div>
+
+  <style>
+    #card-preview-modal.pv-fullscreen { padding: 0; }
+    #card-preview-modal.pv-fullscreen #pv-panel {
+      max-width: none;
+      width: 100%;
+      height: 100dvh !important;
+      border-radius: 0;
+    }
+  </style>
 
   <script>
   (function () {

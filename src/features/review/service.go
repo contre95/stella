@@ -294,38 +294,53 @@ func (s *Service) Grade(ctx context.Context, userID, cardID string, grade int) e
 	})
 }
 
-// Stats returns aggregate counts for the dashboard (across all decks).
-func (s *Service) Stats(ctx context.Context, userID string) (*Stats, error) {
+// Stats returns aggregate counts for the dashboard. deckIDs optionally
+// restricts the stats to those decks (e.g. a single group); nil/empty means
+// all study-enabled decks.
+func (s *Service) Stats(ctx context.Context, userID string, deckIDs []string) (*Stats, error) {
 	now := s.scheduler.AdjustedNow(s.scheduler.Now())
-	enabledIDs, err := s.repo.ListStudyEnabledDeckIDs(ctx, userID)
+	scopedIDs := deckIDs
+	if len(scopedIDs) == 0 {
+		enabledIDs, err := s.repo.ListStudyEnabledDeckIDs(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		scopedIDs = enabledIDs
+	}
+	due, err := s.repo.ScheduledCount(ctx, userID, now, scopedIDs)
 	if err != nil {
 		return nil, err
 	}
-	due, err := s.repo.ScheduledCount(ctx, userID, now, enabledIDs)
+	var total int
+	if len(deckIDs) == 0 {
+		total, err = s.repo.ActiveCount(ctx, userID)
+	} else {
+		total, err = s.repo.ActiveCountForDecks(ctx, userID, deckIDs)
+	}
 	if err != nil {
 		return nil, err
 	}
-	total, err := s.repo.ActiveCount(ctx, userID)
+	studyCards, err := s.repo.FactCountForDecks(ctx, userID, scopedIDs)
 	if err != nil {
 		return nil, err
 	}
-	studyCards, err := s.repo.FactCountForDecks(ctx, userID, enabledIDs)
+	newCards, err := s.repo.NonMemorisedCount(ctx, userID, scopedIDs)
 	if err != nil {
 		return nil, err
 	}
-	newCards, err := s.repo.NonMemorisedCount(ctx, userID, enabledIDs)
+	unseenCards, err := s.repo.UnseenCount(ctx, userID, scopedIDs)
 	if err != nil {
 		return nil, err
 	}
-	unseenCards, err := s.repo.UnseenCount(ctx, userID, enabledIDs)
-	if err != nil {
-		return nil, err
+	deckCount := len(scopedIDs)
+	if len(deckIDs) == 0 {
+		decks, err := s.repo.ListDecks(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		deckCount = len(decks)
 	}
-	decks, err := s.repo.ListDecks(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	return &Stats{DueToday: due, TotalCards: total, StudyCards: studyCards, NewCards: newCards, UnseenCards: unseenCards, DeckCount: len(decks)}, nil
+	return &Stats{DueToday: due, TotalCards: total, StudyCards: studyCards, NewCards: newCards, UnseenCards: unseenCards, DeckCount: deckCount}, nil
 }
 
 // GroupSlice is one wedge of a per-group pie chart: a group's share of a
@@ -551,15 +566,25 @@ type ForecastDay struct {
 // days, broken down by group, for the dashboard's upcoming-reviews chart.
 // Today's bucket includes anything already due or overdue; later buckets
 // group retention cards by their scheduled day. days must be >= 1.
-func (s *Service) Forecast(ctx context.Context, userID string, days int) ([]ForecastDay, error) {
+// Forecast returns the 7-day (by default) review forecast, broken down by
+// group. deckIDs optionally restricts it to those decks (e.g. a single
+// group), collapsing the breakdown to a single bucket; nil/empty means all
+// groups.
+func (s *Service) Forecast(ctx context.Context, userID string, days int, deckIDs []string) ([]ForecastDay, error) {
 	if days < 1 {
 		days = 1
 	}
 	now := s.scheduler.AdjustedNow(s.scheduler.Now())
 
-	buckets, err := s.groupBuckets(ctx, userID)
-	if err != nil {
-		return nil, err
+	var buckets []groupBucket
+	if len(deckIDs) > 0 {
+		buckets = []groupBucket{{label: "Selected", color: groupPalette[0], ids: deckIDs}}
+	} else {
+		var err error
+		buckets, err = s.groupBuckets(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// counts[day][bucket] is that bucket's card count on that day.
@@ -657,8 +682,10 @@ const heatmapWeeks = 53
 
 // StudyHeatmap builds a ~year-long study-activity heatmap from the review log,
 // bucketing each review into a study day (honouring day_starts_at, so a late
-// session before the day boundary counts toward the previous day).
-func (s *Service) StudyHeatmap(ctx context.Context, userID string) (*Heatmap, error) {
+// session before the day boundary counts toward the previous day). deckIDs
+// optionally restricts it to reviews of cards in those decks (e.g. a single
+// group); nil/empty means all decks.
+func (s *Service) StudyHeatmap(ctx context.Context, userID string, deckIDs []string) (*Heatmap, error) {
 	loc := s.scheduler.Loc
 	if loc == nil {
 		loc = time.Local
@@ -669,7 +696,7 @@ func (s *Service) StudyHeatmap(ctx context.Context, userID string) (*Heatmap, er
 	startOfWeek := today.AddDate(0, 0, -int(today.Weekday())) // back to Sunday
 	gridStart := startOfWeek.AddDate(0, 0, -(heatmapWeeks-1)*7)
 
-	timestamps, err := s.repo.ReviewTimestampsSince(ctx, userID, gridStart.Unix()-srs.DAY)
+	timestamps, err := s.repo.ReviewTimestampsSince(ctx, userID, gridStart.Unix()-srs.DAY, deckIDs)
 	if err != nil {
 		return nil, err
 	}

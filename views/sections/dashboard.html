@@ -1,7 +1,26 @@
 <div id="contenido">
-  <div class="mb-6">
-    <h1 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Dashboard</h1>
-    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Your spaced-repetition overview.</p>
+  <div class="mb-6 flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">Dashboard</h1>
+      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Your spaced-repetition overview.</p>
+    </div>
+    {{if .StudyGroups}}
+    <select
+      name="decks"
+      aria-label="Filter dashboard by group"
+      class="glass rounded-xl border-0 py-2 pl-3 pr-8 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-pink-500 dark:text-gray-200"
+      hx-get="/"
+      hx-trigger="change"
+      hx-target="#contenido"
+      hx-swap="outerHTML"
+      hx-push-url="true"
+    >
+      <option value="" {{if not .DeckFilter}}selected{{end}}>All Groups</option>
+      {{range .StudyGroups}}
+      <option value="{{.DeckIDs}}" {{if eq $.DeckFilter .DeckIDs}}selected{{end}}>{{.Group.Name}}</option>
+      {{end}}
+    </select>
+    {{end}}
   </div>
 
   <!-- Stats grid -->
@@ -73,9 +92,9 @@
 
   <!-- CTA -->
   {{if gt .DueToday 0}}
-    {{template "study_cta" (dict "Label" (printf "Start review · %d card%s due" .DueToday (pluralS .DueToday)) "StudyGroups" .StudyGroups)}}
+    {{template "study_cta" (dict "Label" (printf "Start review · %d card%s due" .DueToday (pluralS .DueToday)) "StudyGroups" .StudyGroups "DeckFilter" .DeckFilter)}}
   {{else if gt .NewCards 0}}
-    {{template "study_cta" (dict "Label" (printf "Start review · %d new card%s to learn" .NewCards (pluralS .NewCards)) "StudyGroups" .StudyGroups)}}
+    {{template "study_cta" (dict "Label" (printf "Start review · %d new card%s to learn" .NewCards (pluralS .NewCards)) "StudyGroups" .StudyGroups "DeckFilter" .DeckFilter)}}
   {{else if gt .TotalCards 0}}
     <div class="glass mt-5 rounded-2xl p-8 text-center">
       <p class="text-sm text-gray-500 dark:text-gray-400">All caught up — nothing due right now. <span class="text-gradient font-semibold">✦</span></p>
@@ -203,10 +222,12 @@
      dropdown to start a review scoped to just one group instead of every
      enabled deck. */}}
 {{define "study_cta"}}
+  {{$reviewHref := "/review"}}
+  {{if .DeckFilter}}{{$reviewHref = printf "/review?decks=%s" .DeckFilter}}{{end}}
   <div class="relative mt-5 flex gap-2">
     <a
-      href="/review"
-      hx-get="/review"
+      href="{{$reviewHref}}"
+      hx-get="{{$reviewHref}}"
       hx-target="#contenido"
       hx-swap="outerHTML"
       hx-push-url="true"
@@ -218,7 +239,7 @@
       </svg>
       {{.Label}}
     </a>
-    {{if .StudyGroups}}
+    {{if and .StudyGroups (not .DeckFilter)}}
       <div class="relative shrink-0">
         <button type="button"
                 aria-label="Study a specific group"
