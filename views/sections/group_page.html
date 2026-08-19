@@ -3,7 +3,7 @@
     <a
       href="/decks"
       hx-get="/decks"
-      hx-target="#contenido"
+      hx-target="#contenido" hx-sync="#contenido:replace"
       hx-swap="outerHTML"
       hx-push-url="true"
       class="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-pink-600 transition-colors dark:hover:text-pink-400"
@@ -30,7 +30,7 @@
         <form
           id="group-name-edit"
           hx-put="/groups/{{.Group.ID}}?source=group_page"
-          hx-target="#contenido"
+          hx-target="#contenido" hx-sync="#contenido:replace"
           hx-swap="outerHTML"
           class="{{if not .RenameErrors}}hidden {{end}}flex flex-col gap-1"
         >

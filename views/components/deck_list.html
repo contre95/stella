@@ -38,7 +38,7 @@
           <a
             href="/groups/{{$gv.Group.ID}}"
             hx-get="/groups/{{$gv.Group.ID}}"
-            hx-target="#contenido"
+            hx-target="#contenido" hx-sync="#contenido:replace"
             hx-swap="outerHTML"
             hx-push-url="true"
             class="text-base font-semibold text-gray-700 hover:text-pink-600 transition-colors dark:text-gray-300 dark:hover:text-pink-400"
@@ -117,7 +117,7 @@
     <a
       href="/decks/{{$deck.ID}}"
       hx-get="/decks/{{$deck.ID}}"
-      hx-target="#contenido"
+      hx-target="#contenido" hx-sync="#contenido:replace"
       hx-swap="outerHTML"
       hx-push-url="true"
       class="absolute inset-0 z-0 rounded-2xl"
@@ -133,7 +133,7 @@
       <a
         href="/review?decks={{$deck.ID}}"
         hx-get="/review?decks={{$deck.ID}}"
-        hx-target="#contenido"
+        hx-target="#contenido" hx-sync="#contenido:replace"
         hx-swap="outerHTML"
         hx-push-url="true"
         class="btn-primary rounded-lg px-2.5 py-1.5 text-xs font-semibold"

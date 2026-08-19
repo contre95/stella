@@ -8,7 +8,7 @@
     <!-- All enabled decks -->
     <a href="/review"
        hx-get="/review"
-       hx-target="#contenido"
+       hx-target="#contenido" hx-sync="#contenido:replace"
        hx-swap="outerHTML"
        hx-push-url="true"
        class="glass lift flex items-center justify-between rounded-2xl px-5 py-4 transition-colors hover:bg-white/80 dark:hover:bg-white/10 group">
@@ -60,7 +60,7 @@
       {{if .DeckIDs}}
         <a href="/review?decks={{.DeckIDs}}"
            hx-get="/review?decks={{.DeckIDs}}"
-           hx-target="#contenido"
+           hx-target="#contenido" hx-sync="#contenido:replace"
            hx-swap="outerHTML"
            hx-push-url="true"
            class="lift flex min-w-0 flex-1 items-center justify-between gap-3 px-5 py-4 transition-colors hover:bg-white/80 dark:hover:bg-white/10 group">

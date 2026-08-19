@@ -1,6 +1,7 @@
 package review
 
 import (
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -93,6 +94,12 @@ func (h *Handler) RenderSession(c *fiber.Ctx) error {
 		return err
 	}
 	learnAhead := c.Query("learnahead") == "1"
+	slog.Info("review session requested",
+		"user", auth.UserID(c),
+		"decksQuery", deckFilter,
+		"resolvedDeckIDs", deckIDs,
+		"htmx", respond.IsHTMX(c),
+	)
 
 	ci, err := h.service.NextCard(c.Context(), auth.UserID(c), deckIDs, learnAhead)
 	if err != nil {
@@ -101,6 +108,13 @@ func (h *Handler) RenderSession(c *fiber.Ctx) error {
 	if ci == nil {
 		return respond.Section(c, "review_done", h.doneData(c, "Review", deckFilter, deckIDs))
 	}
+	slog.Info("review session returned card",
+		"user", auth.UserID(c),
+		"requestedDeckIDs", deckIDs,
+		"cardID", ci.Card.ID,
+		"cardDeckID", ci.Card.DeckID,
+		"deckName", ci.DeckName,
+	)
 	return respond.Section(c, "review", fiber.Map{
 		"Title":         "Review",
 		"Card":          ci.Card,

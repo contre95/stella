@@ -11,7 +11,7 @@
       class="glass rounded-xl border-0 py-2 pl-3 pr-8 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-pink-500 dark:text-gray-200"
       hx-get="/"
       hx-trigger="change"
-      hx-target="#contenido"
+      hx-target="#contenido" hx-sync="#contenido:replace"
       hx-swap="outerHTML"
       hx-push-url="true"
     >
@@ -103,7 +103,7 @@
     <div class="glass mt-5 rounded-2xl p-8 text-center">
       <p class="text-sm text-gray-500 dark:text-gray-400">
         No cards yet.
-        <a href="/cards" hx-get="/cards" hx-target="#contenido" hx-swap="outerHTML" hx-push-url="true"
+        <a href="/cards" hx-get="/cards" hx-target="#contenido" hx-sync="#contenido:replace" hx-swap="outerHTML" hx-push-url="true"
            class="font-semibold text-pink-600 hover:underline dark:text-pink-400">Add some cards</a>
         to get started.
       </p>
@@ -228,7 +228,7 @@
     <a
       href="{{$reviewHref}}"
       hx-get="{{$reviewHref}}"
-      hx-target="#contenido"
+      hx-target="#contenido" hx-sync="#contenido:replace"
       hx-swap="outerHTML"
       hx-push-url="true"
       class="btn-primary flex flex-1 items-center justify-center gap-2 rounded-2xl px-6 py-3.5 text-sm font-semibold"
@@ -253,7 +253,7 @@
           {{range .StudyGroups}}
             <a href="/review?decks={{.DeckIDs}}"
                hx-get="/review?decks={{.DeckIDs}}"
-               hx-target="#contenido"
+               hx-target="#contenido" hx-sync="#contenido:replace"
                hx-swap="outerHTML"
                hx-push-url="true"
                class="flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm transition-colors hover:bg-white/80 dark:hover:bg-white/10">

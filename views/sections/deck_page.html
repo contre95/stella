@@ -3,7 +3,7 @@
     <a
       href="/decks"
       hx-get="/decks"
-      hx-target="#contenido"
+      hx-target="#contenido" hx-sync="#contenido:replace"
       hx-swap="outerHTML"
       hx-push-url="true"
       class="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-pink-600 transition-colors dark:hover:text-pink-400"
@@ -18,7 +18,7 @@
       <div class="flex items-center gap-4">
         <form
           hx-post="/decks/{{.Deck.ID}}/image"
-          hx-target="#contenido"
+          hx-target="#contenido" hx-sync="#contenido:replace"
           hx-swap="outerHTML"
           hx-encoding="multipart/form-data"
           class="shrink-0"
@@ -70,7 +70,7 @@
           <form
             id="deck-name-edit"
             hx-put="/decks/{{.Deck.ID}}/name"
-            hx-target="#contenido"
+            hx-target="#contenido" hx-sync="#contenido:replace"
             hx-swap="outerHTML"
             class="{{if not .RenameErrors}}hidden {{end}}flex flex-col gap-1"
           >
@@ -112,7 +112,7 @@
             <form
               id="deck-desc-edit"
               hx-put="/decks/{{.Deck.ID}}/description"
-              hx-target="#contenido"
+              hx-target="#contenido" hx-sync="#contenido:replace"
               hx-swap="outerHTML"
               class="hidden mt-1 flex items-center gap-1.5"
             >
@@ -142,7 +142,7 @@
                 <span class="py-1"># {{.Name}}</span>
                 <button
                   hx-delete="/decks/{{$.Deck.ID}}/tags/{{.ID}}"
-                  hx-target="#contenido"
+                  hx-target="#contenido" hx-sync="#contenido:replace"
                   hx-swap="outerHTML"
                   class="inline-flex h-4 w-4 items-center justify-center rounded-full text-sm leading-none text-gray-400 transition-colors hover:bg-red-500/15 hover:text-red-500 dark:hover:text-red-400"
                   title="Remove tag from deck"
@@ -151,7 +151,7 @@
             {{end}}
             <form
               hx-post="/decks/{{.Deck.ID}}/tags"
-              hx-target="#contenido"
+              hx-target="#contenido" hx-sync="#contenido:replace"
               hx-swap="outerHTML"
             >
               <input
@@ -176,7 +176,7 @@
         {{if .Groups}}
           <form
             hx-post="/decks/{{.Deck.ID}}/group?source=deck_page"
-            hx-target="#contenido"
+            hx-target="#contenido" hx-sync="#contenido:replace"
             hx-swap="outerHTML"
             class="flex items-center gap-2"
           >
@@ -195,7 +195,7 @@
         {{end}}
         <button
           hx-post="/decks/{{.Deck.ID}}/toggle-study?source=deck_page"
-          hx-target="#contenido"
+          hx-target="#contenido" hx-sync="#contenido:replace"
           hx-swap="outerHTML"
           title="{{if .Deck.StudyEnabled}}Exclude from global study{{else}}Include in global study{{end}}"
           class="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition-colors {{if .Deck.StudyEnabled}}text-pink-600 bg-pink-500/10 hover:bg-pink-500/20 dark:text-pink-400{{else}}text-gray-400 hover:bg-white/60 dark:hover:bg-white/10 dark:hover:text-gray-200{{end}}"
@@ -207,7 +207,7 @@
           <a
             href="/review?decks={{.Deck.ID}}"
             hx-get="/review?decks={{.Deck.ID}}"
-            hx-target="#contenido"
+            hx-target="#contenido" hx-sync="#contenido:replace"
             hx-swap="outerHTML"
             hx-push-url="true"
             class="btn-primary rounded-xl px-4 py-2 text-sm font-semibold"
@@ -232,7 +232,7 @@
         {{if .Facts}}
           <button
             hx-post="/decks/{{.Deck.ID}}/reset"
-            hx-target="#contenido"
+            hx-target="#contenido" hx-sync="#contenido:replace"
             hx-swap="outerHTML"
             hx-confirm="Reset all cards in this deck to unseen?"
             class="rounded-lg p-2 text-gray-400 hover:bg-amber-500/10 hover:text-amber-600 transition-colors dark:hover:text-amber-400"

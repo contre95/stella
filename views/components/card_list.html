@@ -44,7 +44,7 @@
             {{if $fact.DeckName}}
               <a href="/decks/{{$fact.Fact.DeckID}}"
                  hx-get="/decks/{{$fact.Fact.DeckID}}"
-                 hx-target="#contenido"
+                 hx-target="#contenido" hx-sync="#contenido:replace"
                  hx-swap="outerHTML"
                  hx-push-url="true"
                  class="deck-badge mt-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset"

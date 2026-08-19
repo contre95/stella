@@ -54,6 +54,13 @@ func NewServer(cm *config.Manager, authSvc *auth.Service, registrars ...RouteReg
 		AppName:           cm.Get().Server.AppName,
 		BodyLimit:         cm.Get().Server.BodyLimit,
 		PassLocalsToViews: true,
+		// Fiber's context values (c.Query(), c.Params(), ...) are unsafe views
+		// into fasthttp's reused per-connection buffers by default — valid only
+		// for the handler's synchronous duration. The review service retains
+		// the deck filter past that (session.sessionKey, keyed off c.Query
+		// ("decks")), so without Immutable those bytes get silently overwritten
+		// by a later request reusing the same buffer, corrupting the stored key.
+		Immutable: true,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
 			var fe *fiber.Error

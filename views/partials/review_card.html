@@ -20,7 +20,7 @@
     {{if .DeckName}}
       <a href="/decks/{{.Fact.DeckID}}"
          hx-get="/decks/{{.Fact.DeckID}}"
-         hx-target="#contenido"
+         hx-target="#contenido" hx-sync="#contenido:replace"
          hx-swap="outerHTML"
          hx-push-url="true"
          class="deck-badge rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset"
@@ -31,7 +31,7 @@
     <a
       href="/"
       hx-get="/"
-      hx-target="#contenido"
+      hx-target="#contenido" hx-sync="#contenido:replace"
       hx-swap="outerHTML"
       hx-push-url="true"
       class="text-sm text-gray-400 hover:text-pink-600 transition-colors dark:hover:text-pink-400"

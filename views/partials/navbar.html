@@ -3,7 +3,7 @@
   <a
     href="/"
     hx-get="/"
-    hx-target="#contenido"
+    hx-target="#contenido" hx-sync="#contenido:replace"
     hx-swap="outerHTML"
     hx-push-url="true"
     _="on click remove .nav-active from .nav-link then add .nav-active to #nav-dashboard"

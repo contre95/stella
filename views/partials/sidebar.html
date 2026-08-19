@@ -3,7 +3,7 @@
   <a
     href="/"
     hx-get="/"
-    hx-target="#contenido"
+    hx-target="#contenido" hx-sync="#contenido:replace"
     hx-swap="outerHTML"
     hx-push-url="true"
     _="on click remove .nav-active from .nav-link then add .nav-active to #nav-dashboard"
@@ -22,7 +22,7 @@
       id="nav-dashboard"
       href="/"
       hx-get="/"
-      hx-target="#contenido"
+      hx-target="#contenido" hx-sync="#contenido:replace"
       hx-swap="outerHTML"
       hx-push-url="true"
       _="on click remove .nav-active from .nav-link then add .nav-active to me"
@@ -34,7 +34,7 @@
     <a
       href="/review/pick"
       hx-get="/review/pick"
-      hx-target="#contenido"
+      hx-target="#contenido" hx-sync="#contenido:replace"
       hx-swap="outerHTML"
       hx-push-url="true"
       _="on click remove .nav-active from .nav-link then add .nav-active to me"
@@ -46,7 +46,7 @@
     <a
       href="/decks"
       hx-get="/decks"
-      hx-target="#contenido"
+      hx-target="#contenido" hx-sync="#contenido:replace"
       hx-swap="outerHTML"
       hx-push-url="true"
       _="on click remove .nav-active from .nav-link then add .nav-active to me"
@@ -58,7 +58,7 @@
     <a
       href="/cards"
       hx-get="/cards"
-      hx-target="#contenido"
+      hx-target="#contenido" hx-sync="#contenido:replace"
       hx-swap="outerHTML"
       hx-push-url="true"
       _="on click remove .nav-active from .nav-link then add .nav-active to me"
@@ -70,7 +70,7 @@
     <a
       href="/about"
       hx-get="/about"
-      hx-target="#contenido"
+      hx-target="#contenido" hx-sync="#contenido:replace"
       hx-swap="outerHTML"
       hx-push-url="true"
       _="on click remove .nav-active from .nav-link then add .nav-active to me"
@@ -84,7 +84,7 @@
     <a
       href="/settings/tokens"
       hx-get="/settings/tokens"
-      hx-target="#contenido"
+      hx-target="#contenido" hx-sync="#contenido:replace"
       hx-swap="outerHTML"
       hx-push-url="true"
       _="on click remove .nav-active from .nav-link then add .nav-active to me"
