@@ -14,12 +14,11 @@ podman pull codeberg.org/monopieza/stella:beta   # newest release
 
 There is deliberately no `latest` tag — pin a version, or track `beta`.
 
-| Tag       | What it is                              |
-| --------- | --------------------------------------- |
-| `vX.Y.Z`  | An exact release, immutable             |
-| `beta`    | Newest release — the tag to follow      |
-| `nightly` | `main` as of 02:00 UTC                  |
-| `dev`     | Every push to `main`                    |
+| Tag       | What it is                         |
+| --------- | ---------------------------------- |
+| `vX.Y.Z`  | An exact release, immutable        |
+| `beta`    | Newest release — the tag to follow |
+| `nightly` | `main` as of 02:00 UTC             |
 
 ## Build
 
