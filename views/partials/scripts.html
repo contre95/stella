@@ -51,6 +51,34 @@
     if (window._hyperscript) _hyperscript.processNode(div);
   };
 
+  // Puts a single File into a hidden <input type=file> as if the user had
+  // chosen it, so the surrounding <form> submits it normally.
+  function setInputFile(input, file) {
+    var dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+  }
+
+  // Toasts and returns true if size exceeds form's data-max-bytes (the
+  // server's configured upload limit for that form).
+  function exceedsMaxBytes(form, size, label) {
+    var max = parseInt(form.dataset.maxBytes, 10);
+    if (max && size > max) {
+      pushToast('err', 'That ' + label + ' is too large. Maximum upload size is ' + humanBytes(max) + '.');
+      return true;
+    }
+    return false;
+  }
+
+  // Runs init over every element matching selector on first load and after
+  // every htmx swap. init must guard its own re-entry (e.g. an `_init` flag
+  // on the element) since matches can repeat across swaps.
+  function initOnSwap(selector, init) {
+    function run() { document.querySelectorAll(selector).forEach(init); }
+    document.addEventListener('DOMContentLoaded', run);
+    document.addEventListener('htmx:afterSwap', run);
+  }
+
   // Blocks a deck/group import submit when the chosen file already exceeds
   // the server's configured BodyLimit (read from the form's data-max-bytes),
   // so oversized uploads get an instant, accurate toast instead of an
@@ -58,10 +86,8 @@
   window.guardImportSize = function (evt, inputId, formId) {
     var form = document.getElementById(formId);
     var file = document.getElementById(inputId).files[0];
-    var max = parseInt(form.dataset.maxBytes, 10);
-    if (file && max && file.size > max) {
+    if (file && exceedsMaxBytes(form, file.size, 'file')) {
       evt.preventDefault();
-      pushToast('err', 'That file is too large. Maximum upload size is ' + humanBytes(max) + '.');
     }
   };
 
@@ -82,15 +108,10 @@
       return;
     }
     var form = document.getElementById(formId);
-    var max = parseInt(form.dataset.maxBytes, 10);
-    if (max && new Blob([text]).size > max) {
-      pushToast('err', 'That deck is too large. Maximum upload size is ' + humanBytes(max) + '.');
+    if (exceedsMaxBytes(form, new Blob([text]).size, 'deck')) {
       return;
     }
-    var file = new File([text], 'clipboard-deck.json', { type: 'application/json' });
-    var dt = new DataTransfer();
-    dt.items.add(file);
-    document.getElementById(inputId).files = dt.files;
+    setInputFile(document.getElementById(inputId), new File([text], 'clipboard-deck.json', { type: 'application/json' }));
     form.requestSubmit();
   };
 
@@ -353,9 +374,7 @@
               var blob = new Blob(chunks, {type: mr.mimeType||'audio/webm'});
               if (blobUrl) URL.revokeObjectURL(blobUrl);
               blobUrl = URL.createObjectURL(blob);
-              var dt = new DataTransfer();
-              dt.items.add(new File([blob], 'recording.webm', {type: blob.type}));
-              fileInput.files = dt.files;
+              setInputFile(fileInput, new File([blob], 'recording.webm', {type: blob.type}));
               renderDone();
             };
             mr.start();
@@ -385,11 +404,7 @@
       renderIdle();
     }
 
-    function initAll() {
-      document.querySelectorAll('.audio-rec-widget').forEach(initWidget);
-    }
-    document.addEventListener('DOMContentLoaded', initAll);
-    document.addEventListener('htmx:afterSwap', initAll);
+    initOnSwap('.audio-rec-widget', initWidget);
   })();
 
   // KaTeX math rendering — the server emits <span class="katex-math" data-tex="...">
@@ -445,9 +460,7 @@
       function setFile(blob) {
         var type = blob.type || 'image/png';
         var name = blob.name || 'pasted-' + Date.now() + extFor(type);
-        var dt = new DataTransfer();
-        dt.items.add(new File([blob], name, {type: type}));
-        fileInput.files = dt.files;
+        setInputFile(fileInput, new File([blob], name, {type: type}));
         renderPreview();
       }
       widget._ipSetFile = setFile;
@@ -560,10 +573,6 @@
       }
     });
 
-    function initAll() {
-      document.querySelectorAll('.image-paste-widget').forEach(initWidget);
-    }
-    document.addEventListener('DOMContentLoaded', initAll);
-    document.addEventListener('htmx:afterSwap', initAll);
+    initOnSwap('.image-paste-widget', initWidget);
   })();
 </script>
