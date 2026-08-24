@@ -2,10 +2,9 @@
 name: Tag, Release, and Build
 
 on:
-  pull_request:
+  push:
     branches:
       - main
-    types: [closed]
   workflow_dispatch:
     inputs:
       version_type:
@@ -32,7 +31,6 @@ permissions:
 
 jobs:
   tag-and-release:
-    if: (github.event.pull_request.merged == true && (startsWith(github.event.pull_request.head.ref, 'fix/') || startsWith(github.event.pull_request.head.ref, 'feat/') || startsWith(github.event.pull_request.head.ref, 'release/'))) || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       tag_name: ${{ steps.set_tag.outputs.tag_name }}
@@ -52,6 +50,8 @@ jobs:
 
       - name: Determine new version
         id: determine_version
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           version=${tag#v}
           IFS='.' read -r major minor patch <<< "$version"
@@ -79,17 +79,17 @@ jobs:
               esac
               new_version="v${major}.${minor}.${patch}"
             fi
+          elif [[ "$COMMIT_MESSAGE" == *"[MAJOR]"* ]]; then
+            major=$((major + 1))
+            minor=0
+            patch=0
+            new_version="v${major}.${minor}.${patch}"
+          elif [[ "$COMMIT_MESSAGE" == *"[MINOR]"* ]]; then
+            minor=$((minor + 1))
+            patch=0
+            new_version="v${major}.${minor}.${patch}"
           else
-            if [[ "${{ github.event.pull_request.head.ref }}" == fix/* ]]; then
-              patch=$((patch + 1))
-            elif [[ "${{ github.event.pull_request.head.ref }}" == feat/* ]]; then
-              minor=$((minor + 1))
-              patch=0
-            elif [[ "${{ github.event.pull_request.head.ref }}" == release/* ]]; then
-              major=$((major + 1))
-              minor=0
-              patch=0
-            fi
+            patch=$((patch + 1))
             new_version="v${major}.${minor}.${patch}"
           fi
 
