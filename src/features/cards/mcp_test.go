@@ -1,4 +1,4 @@
-package mcp
+package cards
 
 import (
 	"bytes"
@@ -11,20 +11,19 @@ import (
 	"time"
 
 	"github.com/contre95/stella/src/features/auth"
-	"github.com/contre95/stella/src/features/cards"
 	"github.com/contre95/stella/src/features/config"
 	"github.com/contre95/stella/src/infra/database"
 	"github.com/contre95/stella/src/srs"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// newTestCards builds a cards.Service backed by a temp sqlite database and
-// media directory, with the local single-user account created. Split out of
+// newTestCards builds a Service backed by a temp sqlite database and media
+// directory, with the local single-user account created. Split out of
 // newTestSession so tests can seed fact media directly on the service —
 // bypassing the MCP tool layer's http(s)-only restriction on image/audio
 // sources (see mediaHTTPClient) — while still exercising get_card_image over
 // a real MCP session.
-func newTestCards(t *testing.T) (*cards.Service, string) {
+func newTestCards(t *testing.T) (*Service, string) {
 	t.Helper()
 	dir := t.TempDir()
 	db, err := database.NewSqliteSRS(filepath.Join(dir, "test.db"))
@@ -55,14 +54,14 @@ func newTestCards(t *testing.T) (*cards.Service, string) {
 	if _, err := auth.NewService(context.Background(), db, cfg); err != nil {
 		t.Fatalf("auth service: %v", err)
 	}
-	return cards.NewService(db, scheduler, cfg), mediaDir
+	return NewService(db, scheduler, cfg), mediaDir
 }
 
 // newTestSessionFor wires an MCP server backed by cardsService onto an
 // in-memory client and returns a ready-to-call session.
-func newTestSessionFor(t *testing.T, cardsService *cards.Service) *mcpsdk.ClientSession {
+func newTestSessionFor(t *testing.T, cardsService *Service) *mcpsdk.ClientSession {
 	t.Helper()
-	srv := NewServer("stella-test", "0.0.0", cardsService, auth.LocalUserID)
+	srv := NewMCPServer("stella-test", "0.0.0", cardsService, auth.LocalUserID)
 
 	ctx := context.Background()
 	serverT, clientT := mcpsdk.NewInMemoryTransports()

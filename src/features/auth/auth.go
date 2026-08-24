@@ -12,8 +12,8 @@
 // echoed back to the client, but nothing checks it against what a tool call
 // is allowed to do. A scope of "read-only" would look identical, in terms of
 // actual access, to no scope at all. Narrowing this would mean threading a
-// granted-scope check into every MCP tool handler in src/presenter/mcp — out
-// of scope for now, but the plumbing is already there to build on.
+// granted-scope check into every MCP tool handler (see cards.NewMCPServer) —
+// out of scope for now, but the plumbing is already there to build on.
 package auth
 
 import (

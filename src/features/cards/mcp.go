@@ -1,7 +1,7 @@
-// Package mcp exposes Stella's card operations over the Model Context Protocol,
-// letting an MCP client (Claude, editors, etc.) create and browse cards. It is a
-// transport over the cards service — the same layer the web handlers sit in.
-package mcp
+// This file exposes the cards feature over the Model Context Protocol,
+// letting an MCP client (Claude, editors, etc.) create and browse cards. It is
+// a transport over the same Service the web Handler sits on.
+package cards
 
 import (
 	"context"
@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/contre95/stella/src/features/cards"
 	"github.com/contre95/stella/src/srs"
 	"github.com/google/uuid"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -65,18 +64,18 @@ func isDisallowedMediaIP(ip net.IP) bool {
 		ip.IsPrivate() || ip.IsUnspecified() || !ip.IsGlobalUnicast()
 }
 
-// Server adapts the cards service onto MCP tool handlers. The MCP transport
-// has no login, so every tool call runs as the fixed userID it was built with
-// (the local account — MCP is only served in single-user mode).
-type Server struct {
-	cards  *cards.Service
+// mcpServer adapts the cards service onto MCP tool handlers. The MCP
+// transport has no login, so every tool call runs as the fixed userID it was
+// built with (the local account — MCP is only served in single-user mode).
+type mcpServer struct {
+	cards  *Service
 	userID string
 }
 
-// NewServer builds an MCP server exposing the card tools, backed by the given
-// cards service and operating as userID.
-func NewServer(name, version string, cardsService *cards.Service, userID string) *mcpsdk.Server {
-	s := &Server{cards: cardsService, userID: userID}
+// NewMCPServer builds an MCP server exposing the card tools, backed by the
+// given cards service and operating as userID.
+func NewMCPServer(name, version string, cardsService *Service, userID string) *mcpsdk.Server {
+	s := &mcpServer{cards: cardsService, userID: userID}
 	srv := mcpsdk.NewServer(&mcpsdk.Implementation{Name: name, Version: version}, nil)
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
@@ -239,7 +238,7 @@ type CreateCardOutput struct {
 	CardsAdded int    `json:"cardsAdded"`
 }
 
-func (s *Server) createCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in CreateCardInput) (*mcpsdk.CallToolResult, CreateCardOutput, error) {
+func (s *mcpServer) createCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in CreateCardInput) (*mcpsdk.CallToolResult, CreateCardOutput, error) {
 	front := strings.TrimSpace(in.Front)
 	if front == "" {
 		return nil, CreateCardOutput{}, fmt.Errorf("front is required")
@@ -319,7 +318,7 @@ type EditCardOutput struct {
 	AudioBack  string `json:"audioBack,omitempty"`
 }
 
-func (s *Server) editCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in EditCardInput) (*mcpsdk.CallToolResult, EditCardOutput, error) {
+func (s *mcpServer) editCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in EditCardInput) (*mcpsdk.CallToolResult, EditCardOutput, error) {
 	if strings.TrimSpace(in.FactID) == "" {
 		return nil, EditCardOutput{}, fmt.Errorf("factId is required — use list_recent_cards to find it")
 	}
@@ -412,7 +411,7 @@ type MoveCardOutput struct {
 	DeckID string `json:"deckId"`
 }
 
-func (s *Server) moveCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in MoveCardInput) (*mcpsdk.CallToolResult, MoveCardOutput, error) {
+func (s *mcpServer) moveCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in MoveCardInput) (*mcpsdk.CallToolResult, MoveCardOutput, error) {
 	if strings.TrimSpace(in.FactID) == "" {
 		return nil, MoveCardOutput{}, fmt.Errorf("factId is required")
 	}
@@ -452,7 +451,7 @@ type ListRecentCardsOutput struct {
 	Facts []FactSummary `json:"facts"`
 }
 
-func (s *Server) listRecentCards(ctx context.Context, _ *mcpsdk.CallToolRequest, in ListRecentCardsInput) (*mcpsdk.CallToolResult, ListRecentCardsOutput, error) {
+func (s *mcpServer) listRecentCards(ctx context.Context, _ *mcpsdk.CallToolRequest, in ListRecentCardsInput) (*mcpsdk.CallToolResult, ListRecentCardsOutput, error) {
 	limit := in.Limit
 	if limit <= 0 {
 		limit = 20
@@ -497,7 +496,7 @@ type GetCardImageOutput struct {
 	ImageBack  string `json:"imageBack,omitempty"`
 }
 
-func (s *Server) getCardImage(ctx context.Context, _ *mcpsdk.CallToolRequest, in GetCardImageInput) (*mcpsdk.CallToolResult, GetCardImageOutput, error) {
+func (s *mcpServer) getCardImage(ctx context.Context, _ *mcpsdk.CallToolRequest, in GetCardImageInput) (*mcpsdk.CallToolResult, GetCardImageOutput, error) {
 	if strings.TrimSpace(in.FactID) == "" {
 		return nil, GetCardImageOutput{}, fmt.Errorf("factId is required")
 	}
@@ -551,7 +550,7 @@ func (s *Server) getCardImage(ctx context.Context, _ *mcpsdk.CallToolRequest, in
 // readImage loads a stored image file and reports its MIME type, inferred
 // from the extension saveImageFromURL gave it (jpg, png, gif, or webp — the
 // same set create_card/edit_card accept).
-func (s *Server) readImage(filename string) ([]byte, string, error) {
+func (s *mcpServer) readImage(filename string) ([]byte, string, error) {
 	mimeType := imageMIMEType(filename)
 	if mimeType == "" {
 		return nil, "", fmt.Errorf("unsupported image type: %s", filename)
@@ -594,7 +593,7 @@ type CreateDeckOutput struct {
 	GroupID string `json:"groupId,omitempty"`
 }
 
-func (s *Server) createDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in CreateDeckInput) (*mcpsdk.CallToolResult, CreateDeckOutput, error) {
+func (s *mcpServer) createDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in CreateDeckInput) (*mcpsdk.CallToolResult, CreateDeckOutput, error) {
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
 		return nil, CreateDeckOutput{}, fmt.Errorf("name is required")
@@ -623,7 +622,7 @@ type ListDecksOutput struct {
 }
 
 // tagNamesByDeck maps every tagged deck ID to its tag names, name-ordered.
-func (s *Server) tagNamesByDeck(ctx context.Context) (map[string][]string, error) {
+func (s *mcpServer) tagNamesByDeck(ctx context.Context) (map[string][]string, error) {
 	byDeck, err := s.cards.TagsByDeck(ctx, s.userID)
 	if err != nil {
 		return nil, err
@@ -639,7 +638,7 @@ func (s *Server) tagNamesByDeck(ctx context.Context) (map[string][]string, error
 	return out, nil
 }
 
-func (s *Server) listDecks(ctx context.Context, _ *mcpsdk.CallToolRequest, _ ListDecksInput) (*mcpsdk.CallToolResult, ListDecksOutput, error) {
+func (s *mcpServer) listDecks(ctx context.Context, _ *mcpsdk.CallToolRequest, _ ListDecksInput) (*mcpsdk.CallToolResult, ListDecksOutput, error) {
 	decks, err := s.cards.ListDecks(ctx, s.userID)
 	if err != nil {
 		return nil, ListDecksOutput{}, fmt.Errorf("listing decks: %w", err)
@@ -666,7 +665,7 @@ type DeleteCardOutput struct {
 	FactID  string `json:"factId"`
 }
 
-func (s *Server) deleteCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in DeleteCardInput) (*mcpsdk.CallToolResult, DeleteCardOutput, error) {
+func (s *mcpServer) deleteCard(ctx context.Context, _ *mcpsdk.CallToolRequest, in DeleteCardInput) (*mcpsdk.CallToolResult, DeleteCardOutput, error) {
 	if strings.TrimSpace(in.FactID) == "" {
 		return nil, DeleteCardOutput{}, fmt.Errorf("factId is required")
 	}
@@ -687,7 +686,7 @@ type DeleteDeckOutput struct {
 	DeckID  string `json:"deckId"`
 }
 
-func (s *Server) deleteDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in DeleteDeckInput) (*mcpsdk.CallToolResult, DeleteDeckOutput, error) {
+func (s *mcpServer) deleteDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in DeleteDeckInput) (*mcpsdk.CallToolResult, DeleteDeckOutput, error) {
 	if strings.TrimSpace(in.DeckID) == "" {
 		return nil, DeleteDeckOutput{}, fmt.Errorf("deckId is required")
 	}
@@ -708,7 +707,7 @@ type CreateGroupOutput struct {
 	Name    string `json:"name"`
 }
 
-func (s *Server) createGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in CreateGroupInput) (*mcpsdk.CallToolResult, CreateGroupOutput, error) {
+func (s *mcpServer) createGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in CreateGroupInput) (*mcpsdk.CallToolResult, CreateGroupOutput, error) {
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
 		return nil, CreateGroupOutput{}, fmt.Errorf("name is required")
@@ -736,7 +735,7 @@ type ListGroupsOutput struct {
 	Ungrouped []DeckSummary  `json:"ungrouped"`
 }
 
-func (s *Server) listGroups(ctx context.Context, _ *mcpsdk.CallToolRequest, _ ListGroupsInput) (*mcpsdk.CallToolResult, ListGroupsOutput, error) {
+func (s *mcpServer) listGroups(ctx context.Context, _ *mcpsdk.CallToolRequest, _ ListGroupsInput) (*mcpsdk.CallToolResult, ListGroupsOutput, error) {
 	views, err := s.cards.ListGroupViews(ctx, s.userID, "")
 	if err != nil {
 		return nil, ListGroupsOutput{}, fmt.Errorf("listing groups: %w", err)
@@ -772,7 +771,7 @@ type RenameGroupOutput struct {
 	Name    string `json:"name"`
 }
 
-func (s *Server) renameGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in RenameGroupInput) (*mcpsdk.CallToolResult, RenameGroupOutput, error) {
+func (s *mcpServer) renameGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in RenameGroupInput) (*mcpsdk.CallToolResult, RenameGroupOutput, error) {
 	if strings.TrimSpace(in.GroupID) == "" {
 		return nil, RenameGroupOutput{}, fmt.Errorf("groupId is required")
 	}
@@ -798,7 +797,7 @@ type DeleteGroupOutput struct {
 	GroupID string `json:"groupId"`
 }
 
-func (s *Server) deleteGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in DeleteGroupInput) (*mcpsdk.CallToolResult, DeleteGroupOutput, error) {
+func (s *mcpServer) deleteGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in DeleteGroupInput) (*mcpsdk.CallToolResult, DeleteGroupOutput, error) {
 	if strings.TrimSpace(in.GroupID) == "" {
 		return nil, DeleteGroupOutput{}, fmt.Errorf("groupId is required")
 	}
@@ -822,7 +821,7 @@ type RenameDeckOutput struct {
 	Description string `json:"description,omitempty"`
 }
 
-func (s *Server) renameDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in RenameDeckInput) (*mcpsdk.CallToolResult, RenameDeckOutput, error) {
+func (s *mcpServer) renameDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in RenameDeckInput) (*mcpsdk.CallToolResult, RenameDeckOutput, error) {
 	if strings.TrimSpace(in.DeckID) == "" {
 		return nil, RenameDeckOutput{}, fmt.Errorf("deckId is required")
 	}
@@ -858,7 +857,7 @@ type SetDeckGroupOutput struct {
 	GroupID string `json:"groupId,omitempty"`
 }
 
-func (s *Server) setDeckGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in SetDeckGroupInput) (*mcpsdk.CallToolResult, SetDeckGroupOutput, error) {
+func (s *mcpServer) setDeckGroup(ctx context.Context, _ *mcpsdk.CallToolRequest, in SetDeckGroupInput) (*mcpsdk.CallToolResult, SetDeckGroupOutput, error) {
 	if strings.TrimSpace(in.DeckID) == "" {
 		return nil, SetDeckGroupOutput{}, fmt.Errorf("deckId is required")
 	}
@@ -879,7 +878,7 @@ type TagOutput struct {
 	Name  string `json:"name"`
 }
 
-func (s *Server) createTag(ctx context.Context, _ *mcpsdk.CallToolRequest, in CreateTagInput) (*mcpsdk.CallToolResult, TagOutput, error) {
+func (s *mcpServer) createTag(ctx context.Context, _ *mcpsdk.CallToolRequest, in CreateTagInput) (*mcpsdk.CallToolResult, TagOutput, error) {
 	tag, err := s.cards.EnsureTag(ctx, s.userID, in.Name)
 	if err != nil {
 		return nil, TagOutput{}, fmt.Errorf("creating tag: %w", err)
@@ -902,7 +901,7 @@ type ListTagsOutput struct {
 	Tags []TagSummary `json:"tags"`
 }
 
-func (s *Server) listTags(ctx context.Context, _ *mcpsdk.CallToolRequest, _ ListTagsInput) (*mcpsdk.CallToolResult, ListTagsOutput, error) {
+func (s *mcpServer) listTags(ctx context.Context, _ *mcpsdk.CallToolRequest, _ ListTagsInput) (*mcpsdk.CallToolResult, ListTagsOutput, error) {
 	tags, err := s.cards.ListTags(ctx, s.userID)
 	if err != nil {
 		return nil, ListTagsOutput{}, fmt.Errorf("listing tags: %w", err)
@@ -938,7 +937,7 @@ type RenameTagInput struct {
 	Name  string `json:"name" jsonschema:"New name for the tag. Required."`
 }
 
-func (s *Server) renameTag(ctx context.Context, _ *mcpsdk.CallToolRequest, in RenameTagInput) (*mcpsdk.CallToolResult, TagOutput, error) {
+func (s *mcpServer) renameTag(ctx context.Context, _ *mcpsdk.CallToolRequest, in RenameTagInput) (*mcpsdk.CallToolResult, TagOutput, error) {
 	if strings.TrimSpace(in.TagID) == "" {
 		return nil, TagOutput{}, fmt.Errorf("tagId is required")
 	}
@@ -960,7 +959,7 @@ type DeleteTagOutput struct {
 	TagID   string `json:"tagId"`
 }
 
-func (s *Server) deleteTag(ctx context.Context, _ *mcpsdk.CallToolRequest, in DeleteTagInput) (*mcpsdk.CallToolResult, DeleteTagOutput, error) {
+func (s *mcpServer) deleteTag(ctx context.Context, _ *mcpsdk.CallToolRequest, in DeleteTagInput) (*mcpsdk.CallToolResult, DeleteTagOutput, error) {
 	if strings.TrimSpace(in.TagID) == "" {
 		return nil, DeleteTagOutput{}, fmt.Errorf("tagId is required")
 	}
@@ -983,7 +982,7 @@ type TagDeckOutput struct {
 	Tag    string `json:"tag"`
 }
 
-func (s *Server) tagDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in TagDeckInput) (*mcpsdk.CallToolResult, TagDeckOutput, error) {
+func (s *mcpServer) tagDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in TagDeckInput) (*mcpsdk.CallToolResult, TagDeckOutput, error) {
 	if strings.TrimSpace(in.DeckID) == "" {
 		return nil, TagDeckOutput{}, fmt.Errorf("deckId is required — use list_decks to find it")
 	}
@@ -1000,7 +999,7 @@ type UntagDeckInput struct {
 	Tag    string `json:"tag" jsonschema:"Name of the tag to remove. Required."`
 }
 
-func (s *Server) untagDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in UntagDeckInput) (*mcpsdk.CallToolResult, TagDeckOutput, error) {
+func (s *mcpServer) untagDeck(ctx context.Context, _ *mcpsdk.CallToolRequest, in UntagDeckInput) (*mcpsdk.CallToolResult, TagDeckOutput, error) {
 	if strings.TrimSpace(in.DeckID) == "" {
 		return nil, TagDeckOutput{}, fmt.Errorf("deckId is required — use list_decks to find it")
 	}
@@ -1039,7 +1038,7 @@ type CreateCardsOutput struct {
 	Facts      []CreateCardOutput `json:"facts"`
 }
 
-func (s *Server) createCards(ctx context.Context, _ *mcpsdk.CallToolRequest, in CreateCardsInput) (*mcpsdk.CallToolResult, CreateCardsOutput, error) {
+func (s *mcpServer) createCards(ctx context.Context, _ *mcpsdk.CallToolRequest, in CreateCardsInput) (*mcpsdk.CallToolResult, CreateCardsOutput, error) {
 	if strings.TrimSpace(in.DeckID) == "" {
 		return nil, CreateCardsOutput{}, fmt.Errorf("deckId is required — use list_decks or create_deck first")
 	}
@@ -1112,7 +1111,7 @@ type SetDeckReverseOutput struct {
 	Changed int    `json:"changed"`
 }
 
-func (s *Server) setDeckReverse(ctx context.Context, _ *mcpsdk.CallToolRequest, in SetDeckReverseInput) (*mcpsdk.CallToolResult, SetDeckReverseOutput, error) {
+func (s *mcpServer) setDeckReverse(ctx context.Context, _ *mcpsdk.CallToolRequest, in SetDeckReverseInput) (*mcpsdk.CallToolResult, SetDeckReverseOutput, error) {
 	if strings.TrimSpace(in.DeckID) == "" {
 		return nil, SetDeckReverseOutput{}, fmt.Errorf("deckId is required — use list_decks to find it")
 	}
@@ -1125,7 +1124,7 @@ func (s *Server) setDeckReverse(ctx context.Context, _ *mcpsdk.CallToolRequest, 
 
 // removeMedia deletes named media files from the media directory, silently
 // ignoring missing files and empty names.
-func (s *Server) removeMedia(filenames ...string) {
+func (s *mcpServer) removeMedia(filenames ...string) {
 	for _, f := range filenames {
 		if f != "" {
 			os.Remove(filepath.Join(s.cards.ImagePath(), f))
@@ -1138,7 +1137,7 @@ func (s *Server) removeMedia(filenames ...string) {
 // are accepted — this server is reachable over the network, so a "local
 // file path" would mean the server's own filesystem, not the MCP caller's,
 // which would turn this into an arbitrary-file-read primitive.
-func (s *Server) saveImageFromSource(src string) (string, error) {
+func (s *mcpServer) saveImageFromSource(src string) (string, error) {
 	if src != "" && !isURL(src) {
 		return "", fmt.Errorf("imageFront/imageBack must be an http(s) URL")
 	}
@@ -1148,7 +1147,7 @@ func (s *Server) saveImageFromSource(src string) (string, error) {
 // saveAudioFromSource stores an audio file downloaded from an http(s) URL,
 // returning the stored filename. Empty source returns "". See
 // saveImageFromSource for why local file paths are not accepted.
-func (s *Server) saveAudioFromSource(src string) (string, error) {
+func (s *mcpServer) saveAudioFromSource(src string) (string, error) {
 	if src != "" && !isURL(src) {
 		return "", fmt.Errorf("audioFront/audioBack must be an http(s) URL")
 	}
@@ -1162,7 +1161,7 @@ func isURL(src string) bool {
 
 // saveAudioFromURL downloads a URL and saves it as a local audio file.
 // Returns the filename, or empty string if url is empty.
-func (s *Server) saveAudioFromURL(url string) (string, error) {
+func (s *mcpServer) saveAudioFromURL(url string) (string, error) {
 	if url == "" {
 		return "", nil
 	}
@@ -1213,7 +1212,7 @@ func (s *Server) saveAudioFromURL(url string) (string, error) {
 
 // saveImageFromURL downloads a URL and saves it as a local image file.
 // Returns the filename, or empty string if url is empty.
-func (s *Server) saveImageFromURL(url string) (string, error) {
+func (s *mcpServer) saveImageFromURL(url string) (string, error) {
 	if url == "" {
 		return "", nil
 	}

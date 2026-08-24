@@ -108,7 +108,6 @@ jobs:
         with:
           tag_name: ${{ env.new_version }}
           name: Release ${{ env.new_version }}
-          generate_release_notes: true
           draft: false
           prerelease: false
 
