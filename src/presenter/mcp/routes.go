@@ -1,3 +1,6 @@
+// Package mcp mounts Stella's MCP tool server — implemented per feature,
+// alongside that feature's HTTP handlers (see cards.NewMCPServer) — onto the
+// Fiber app over the StreamableHTTP transport.
 package mcp
 
 import (
@@ -29,7 +32,7 @@ func NewHTTPRegistrar(name, version string, cardsService *cards.Service, authSvc
 		if srv, ok := servers[userID]; ok {
 			return srv
 		}
-		srv := NewServer(name, version, cardsService, userID)
+		srv := cards.NewMCPServer(name, version, cardsService, userID)
 		servers[userID] = srv
 		return srv
 	}
