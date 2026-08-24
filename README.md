@@ -12,6 +12,8 @@ Images are published to the Codeberg registry:
 podman pull codeberg.org/monopieza/stella:beta   # newest release
 ```
 
+Image with each corresponding version are published in [Codeberg packages](https://codeberg.org/monopieza/-/packages/container/stella/beta)
+
 There is deliberately no `latest` tag — pin a version, or track `beta`.
 
 | Tag       | What it is                         |
