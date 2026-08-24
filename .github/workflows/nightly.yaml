@@ -1,25 +1,23 @@
 ---
-name: Build and Push to Codeberg Registry
+name: Nightly Build
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/codeberg.yaml
-      - Containerfile
-      - src/**
-      - views/**
-      - go.mod
-      - go.sum
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
   workflow_dispatch:
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+permissions:
+  contents: read
+  actions: write
 
+jobs:
+  nightly-build:
+    runs-on: ubuntu-latest
     steps:
       - name: Clone the repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up QEMU for cross-arch builds
         uses: docker/setup-qemu-action@v3
@@ -32,11 +30,15 @@ jobs:
           echo "${{ secrets.CODEBERG_TOKEN }}" | \
             docker login codeberg.org -u "${{ secrets.CODEBERG_USER }}" --password-stdin
 
-      - name: Build and push multi-arch image
+      - name: Build and push nightly image
         run: |
+          date_tag=$(date +%Y%m%d)
+          commit_sha=$(git rev-parse --short HEAD)
+
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --file Containerfile \
-            --tag codeberg.org/monopieza/stella:dev \
+            --build-arg IMAGE_TAG=nightly-$date_tag-$commit_sha \
+            --tag codeberg.org/monopieza/stella:nightly \
             --push \
             .

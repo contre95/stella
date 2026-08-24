@@ -1,0 +1,47 @@
+---
+name: Feature Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  feature-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU for cross-arch builds
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Codeberg registry
+        run: |
+          echo "${{ secrets.CODEBERG_TOKEN }}" | \
+            docker login codeberg.org -u "${{ secrets.CODEBERG_USER }}" --password-stdin
+
+      - name: Extract feature name
+        id: extract_feature
+        run: |
+          branch_name=${{ github.ref_name }}
+          feature_name=${branch_name//\//-}
+          echo "feature_name=$feature_name" >> $GITHUB_OUTPUT
+
+      - name: Build and push feature image
+        run: |
+          feature_name=${{ steps.extract_feature.outputs.feature_name }}
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --file Containerfile \
+            --build-arg IMAGE_TAG=$feature_name \
+            --tag codeberg.org/monopieza/stella:feat-$feature_name \
+            --push \
+            .
