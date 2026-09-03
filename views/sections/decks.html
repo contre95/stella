@@ -108,5 +108,20 @@
     </div>
   </div>
 
-  <div id="deck-list" hx-get="/decks/list" hx-trigger="load" class="mt-5"></div>
+  <div class="mt-5 mb-3">
+    <input
+      id="deck-search"
+      type="search"
+      name="q"
+      placeholder="Search decks…"
+      class="glass-input w-full rounded-xl px-3 py-2 text-sm"
+      hx-get="/decks/list"
+      hx-trigger="input changed delay:300ms"
+      hx-target="#deck-list"
+      hx-swap="innerHTML"
+      hx-include="#deck-active-tag"
+    />
+  </div>
+
+  <div id="deck-list" hx-get="/decks/list" hx-trigger="load" class="mt-2"></div>
 </div>

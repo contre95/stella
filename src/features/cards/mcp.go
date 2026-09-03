@@ -736,7 +736,7 @@ type ListGroupsOutput struct {
 }
 
 func (s *mcpServer) listGroups(ctx context.Context, _ *mcpsdk.CallToolRequest, _ ListGroupsInput) (*mcpsdk.CallToolResult, ListGroupsOutput, error) {
-	views, err := s.cards.ListGroupViews(ctx, s.userID, "")
+	views, err := s.cards.ListGroupViews(ctx, s.userID, "", "")
 	if err != nil {
 		return nil, ListGroupsOutput{}, fmt.Errorf("listing groups: %w", err)
 	}

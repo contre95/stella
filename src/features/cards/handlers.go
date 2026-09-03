@@ -550,7 +550,8 @@ func (h *Handler) RenderDecks(c *fiber.Ctx) error {
 // out-of-band (e.g. after adding a deck or group).
 func (h *Handler) deckListData(c *fiber.Ctx) (fiber.Map, error) {
 	tagID := c.Query("tag")
-	views, err := h.service.ListGroupViews(c.Context(), auth.UserID(c), tagID)
+	q := strings.TrimSpace(c.Query("q"))
+	views, err := h.service.ListGroupViews(c.Context(), auth.UserID(c), tagID, q)
 	if err != nil {
 		return nil, err
 	}
@@ -570,6 +571,7 @@ func (h *Handler) deckListData(c *fiber.Ctx) (fiber.Map, error) {
 		"HasGroups":  hasGroups,
 		"Tags":       tags,
 		"ActiveTag":  tagID,
+		"Query":      q,
 	}, nil
 }
 

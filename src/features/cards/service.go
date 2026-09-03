@@ -633,8 +633,10 @@ func (s *Service) ToggleDeckStudy(ctx context.Context, userID, deckID string) (*
 // ListGroupViews returns decks organised into groups for the deck list page.
 // Named groups come first (sorted by name), ungrouped decks are last with a
 // nil Group field. A non-empty tagID restricts the result to decks carrying
-// that tag; groups left with no matching decks are omitted.
-func (s *Service) ListGroupViews(ctx context.Context, userID, tagID string) ([]GroupView, error) {
+// that tag. A non-empty q restricts the result to decks whose name or
+// description contains it (case-insensitive). Groups left with no matching
+// decks are omitted.
+func (s *Service) ListGroupViews(ctx context.Context, userID, tagID, q string) ([]GroupView, error) {
 	groups, err := s.repo.ListGroups(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -660,6 +662,16 @@ func (s *Service) ListGroupViews(ctx context.Context, userID, tagID string) ([]G
 		}
 		decks = kept
 	}
+	if q != "" {
+		needle := strings.ToLower(q)
+		kept := decks[:0]
+		for _, d := range decks {
+			if strings.Contains(strings.ToLower(d.Name), needle) || strings.Contains(strings.ToLower(d.Description), needle) {
+				kept = append(kept, d)
+			}
+		}
+		decks = kept
+	}
 	byGroup := make(map[string][]*srs.Deck, len(groups))
 	var ungrouped []*srs.Deck
 	for _, d := range decks {
@@ -671,7 +683,7 @@ func (s *Service) ListGroupViews(ctx context.Context, userID, tagID string) ([]G
 	}
 	views := make([]GroupView, 0, len(groups)+1)
 	for _, g := range groups {
-		if tagID != "" && len(byGroup[g.ID]) == 0 {
+		if (tagID != "" || q != "") && len(byGroup[g.ID]) == 0 {
 			continue
 		}
 		sortDecksStudyFirst(byGroup[g.ID])
