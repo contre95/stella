@@ -1,5 +1,5 @@
 const CACHE = "stella-v1";
-const PRECACHE = ["/", "/manifest.json", "/icons/stella.svg"];
+const PRECACHE = ["/", "/site.webmanifest", "/icons/stella.svg"];
 
 self.addEventListener("install", e => {
   e.waitUntil(
