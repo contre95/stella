@@ -23,138 +23,99 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: write
   actions: write
 
 jobs:
-  detect-release:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    outputs:
-      should_release: ${{ steps.check.outputs.should_release }}
-      bump: ${{ steps.check.outputs.bump }}
-    steps:
-      - name: Check for a version marker in the commit message
-        id: check
-        env:
-          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
-        run: |
-          if [[ "$COMMIT_MESSAGE" == *"[MAJOR]"* ]]; then
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-            echo "bump=major" >> "$GITHUB_OUTPUT"
-          elif [[ "$COMMIT_MESSAGE" == *"[MINOR]"* ]]; then
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-            echo "bump=minor" >> "$GITHUB_OUTPUT"
-          elif [[ "$COMMIT_MESSAGE" == *"[PATCH]"* ]]; then
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-            echo "bump=patch" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_release=false" >> "$GITHUB_OUTPUT"
-            echo "bump=none" >> "$GITHUB_OUTPUT"
-          fi
-
   tag-and-release:
-    needs: detect-release
-    if: |
-      always() &&
-      (github.event_name == 'workflow_dispatch' || needs.detect-release.outputs.should_release == 'true')
     runs-on: ubuntu-latest
     outputs:
-      tag_name: ${{ steps.set_tag.outputs.tag_name }}
+      tag_name: ${{ steps.version.outputs.tag_name }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Get the latest tag
-        id: get_tag
+      - name: Determine new version
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          VERSION_TYPE: ${{ github.event.inputs.version_type }}
+          CUSTOM_VERSION: ${{ github.event.inputs.custom_version }}
         run: |
           git fetch --tags --force
           latest_tag=$(git tag -l | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
-          if [[ -z "$latest_tag" ]]; then
-            latest_tag="v0.0.0"
-          fi
-          echo "Latest tag: $latest_tag"
-          echo "tag=$latest_tag" >> $GITHUB_ENV
+          echo "Latest tag: ${latest_tag:-none}"
 
-      - name: Determine new version
-        id: determine_version
-        env:
-          BUMP: ${{ needs.detect-release.outputs.bump }}
-        run: |
-          version=${tag#v}
-          IFS='.' read -r major minor patch <<< "$version"
+          version=${latest_tag:-v0.0.0}
+          IFS='.' read -r major minor patch <<< "${version#v}"
 
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            if [[ -n "${{ github.event.inputs.custom_version }}" ]]; then
-              new_version="${{ github.event.inputs.custom_version }}"
-              if [[ ! $new_version =~ ^v ]]; then
-                new_version="v$new_version"
-              fi
-            else
-              case "${{ github.event.inputs.version_type }}" in
-                patch)
-                  patch=$((patch + 1))
-                  ;;
-                minor)
-                  minor=$((minor + 1))
-                  patch=0
-                  ;;
-                major)
-                  major=$((major + 1))
-                  minor=0
-                  patch=0
-                  ;;
-              esac
-              new_version="v${major}.${minor}.${patch}"
-            fi
-          else
-            case "$BUMP" in
-              major)
-                major=$((major + 1))
-                minor=0
-                patch=0
-                ;;
-              minor)
-                minor=$((minor + 1))
-                patch=0
-                ;;
-              patch)
-                patch=$((patch + 1))
-                ;;
+          bump() {
+            case "$1" in
+              major) major=$((major + 1)); minor=0; patch=0 ;;
+              minor) minor=$((minor + 1)); patch=0 ;;
+              patch) patch=$((patch + 1)) ;;
             esac
-            new_version="v${major}.${minor}.${patch}"
+          }
+
+          release=false
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            release=true
+            bump "$VERSION_TYPE"
+          else
+            range=${latest_tag:+$latest_tag..}HEAD
+            while IFS= read -r -d '' message; do
+              case "$message" in
+                *"[MAJOR]"*) bump major ;;
+                *"[MINOR]"*) bump minor ;;
+                *"[PATCH]"*) bump patch ;;
+                *) continue ;;
+              esac
+              echo "Bump from: $(head -n2 <<< "$message" | tr -d '\n')"
+              release=true
+            done < <(git log --first-parent --reverse --format='%B%x00' "$range")
           fi
 
-          echo "New version: $new_version"
-          echo "new_version=$new_version" >> $GITHUB_ENV
+          new_version="v${major}.${minor}.${patch}"
+          if [[ -n "$CUSTOM_VERSION" ]]; then
+            new_version="v${CUSTOM_VERSION#v}"
+          fi
 
-      - name: Create Git tag
+          echo "New version: $new_version (release: $release)"
+          if [[ "$release" == "true" ]]; then
+            echo "tag_name=$new_version" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push tag to Codeberg and GitHub
+        if: steps.version.outputs.tag_name != ''
+        env:
+          TAG: ${{ steps.version.outputs.tag_name }}
+          CODEBERG_USER: ${{ secrets.CODEBERG_USER }}
+          CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
         run: |
-          git tag ${{ env.new_version }}
-          git push origin ${{ env.new_version }}
+          git tag "$TAG"
+          # Codeberg's push mirror force-syncs refs to GitHub, deleting any tag that doesn't exist on Codeberg.
+          git push "https://${CODEBERG_USER}:${CODEBERG_TOKEN}@codeberg.org/monopieza/Stella.git" "refs/tags/$TAG"
+          git push origin "refs/tags/$TAG"
 
       - name: Create GitHub Release
+        if: steps.version.outputs.tag_name != ''
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ env.new_version }}
-          name: Release ${{ env.new_version }}
+          tag_name: ${{ steps.version.outputs.tag_name }}
+          name: Release ${{ steps.version.outputs.tag_name }}
           draft: false
           prerelease: false
 
-      - name: Output tag name
-        id: set_tag
-        run: |
-          echo "tag_name=${{ env.new_version }}" >> $GITHUB_OUTPUT
-
   build-and-push:
     needs: tag-and-release
+    if: needs.tag-and-release.outputs.tag_name != ''
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code at tag
