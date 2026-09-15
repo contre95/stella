@@ -98,8 +98,10 @@ jobs:
           CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
         run: |
           git tag "$TAG"
+          user=${CODEBERG_USER//[[:space:]]/}
+          token=${CODEBERG_TOKEN//[[:space:]]/}
           # Codeberg's push mirror force-syncs refs to GitHub, deleting any tag that doesn't exist on Codeberg.
-          git push "https://${CODEBERG_USER}:${CODEBERG_TOKEN}@codeberg.org/monopieza/Stella.git" "refs/tags/$TAG"
+          git push "https://${user}:${token}@codeberg.org/monopieza/Stella.git" "refs/tags/$TAG"
           git push origin "refs/tags/$TAG"
 
       - name: Create GitHub Release
