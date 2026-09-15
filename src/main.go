@@ -18,8 +18,8 @@ import (
 	"github.com/contre95/stella/src/features/config"
 	"github.com/contre95/stella/src/features/devicesync"
 	"github.com/contre95/stella/src/features/hosting"
-	"github.com/contre95/stella/src/features/portability"
 	"github.com/contre95/stella/src/features/logging"
+	"github.com/contre95/stella/src/features/portability"
 	"github.com/contre95/stella/src/features/review"
 	"github.com/contre95/stella/src/features/ui"
 	"github.com/contre95/stella/src/infra/database"
@@ -106,7 +106,6 @@ func main() {
 	_ = server.Shutdown()
 }
 
-// schedulerParams maps the review config onto the domain's scheduler params.
 func schedulerParams(c *config.Config) srs.Params {
 	return srs.Params{
 		DayStartsAt:              c.Review.DayStartsAt,
