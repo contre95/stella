@@ -44,6 +44,7 @@ jobs:
         id: version
         env:
           EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
           VERSION_TYPE: ${{ github.event.inputs.version_type }}
           CUSTOM_VERSION: ${{ github.event.inputs.custom_version }}
         run: |
@@ -76,8 +77,17 @@ jobs:
                 *) continue ;;
               esac
               echo "Bump from: $(head -n2 <<< "$message" | tr -d '\n')"
-              release=true
             done < <(git log --first-parent --reverse --format='%B%x00' "$range")
+
+            # before is all zeros for a new branch and missing after a force push.
+            if git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+              pushed="$BEFORE_SHA..HEAD"
+            else
+              pushed="HEAD^!"
+            fi
+            if git log --first-parent --format=%B "$pushed" | grep -qE '\[(MAJOR|MINOR|PATCH)\]'; then
+              release=true
+            fi
           fi
 
           new_version="v${major}.${minor}.${patch}"
