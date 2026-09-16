@@ -56,9 +56,6 @@ jobs:
           latest_tag=$(git tag -l | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
           echo "Latest tag: ${latest_tag:-none}"
 
-          version=${latest_tag:-v0.0.0}
-          IFS='.' read -r major minor patch <<< "${version#v}"
-
           bump() {
             case "$1" in
               major) major=$((major + 1)); minor=0; patch=0 ;;
@@ -67,22 +64,26 @@ jobs:
             esac
           }
 
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            bump "$VERSION_TYPE"
+          if [[ -z "$latest_tag" ]]; then
+            new_version="v0.0.1"
           else
-            range=${latest_tag:+$latest_tag..}HEAD
-            while IFS= read -r -d '' message; do
-              case "$message" in
-                *"[MAJOR]"*) bump major ;;
-                *"[MINOR]"*) bump minor ;;
-                *"[PATCH]"*) bump patch ;;
-                *) continue ;;
-              esac
-              echo "Bump from: $(head -n2 <<< "$message" | tr -d '\n')"
-            done < <(git log --first-parent --reverse --format='%B%x00' "$range")
+            IFS='.' read -r major minor patch <<< "${latest_tag#v}"
+            if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+              bump "$VERSION_TYPE"
+            else
+              while IFS= read -r -d '' message; do
+                case "$message" in
+                  *"[MAJOR]"*) bump major ;;
+                  *"[MINOR]"*) bump minor ;;
+                  *"[PATCH]"*) bump patch ;;
+                  *) continue ;;
+                esac
+                echo "Bump from: $(head -n2 <<< "$message" | tr -d '\n')"
+              done < <(git log --first-parent --reverse --format='%B%x00' "$latest_tag..HEAD")
+            fi
+            new_version="v${major}.${minor}.${patch}"
           fi
 
-          new_version="v${major}.${minor}.${patch}"
           if [[ -n "$CUSTOM_VERSION" ]]; then
             new_version="v${CUSTOM_VERSION#v}"
           fi
