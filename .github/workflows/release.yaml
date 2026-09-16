@@ -49,6 +49,7 @@ jobs:
         id: version
         env:
           EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
           VERSION_TYPE: ${{ github.event.inputs.version_type }}
           CUSTOM_VERSION: ${{ github.event.inputs.custom_version }}
         run: |
@@ -64,33 +65,40 @@ jobs:
             esac
           }
 
-          if [[ -z "$latest_tag" ]]; then
-            new_version="v0.0.1"
+          version=${latest_tag:-v0.0.0}
+          IFS='.' read -r major minor patch <<< "${version#v}"
+
+          if [[ -n "$latest_tag" ]]; then
+            range="$latest_tag..HEAD"
+          # Without a tag only this push counts. before is all zeros for a new branch and missing after a force push.
+          elif git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            range="$BEFORE_SHA..HEAD"
           else
-            IFS='.' read -r major minor patch <<< "${latest_tag#v}"
-            if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-              bump "$VERSION_TYPE"
-            else
-              while IFS= read -r -d '' message; do
-                case "$message" in
-                  *"[MAJOR]"*) bump major ;;
-                  *"[MINOR]"*) bump minor ;;
-                  *"[PATCH]"*) bump patch ;;
-                  *) continue ;;
-                esac
-                echo "Bump from: $(head -n2 <<< "$message" | tr -d '\n')"
-              done < <(git log --first-parent --reverse --format='%B%x00' "$latest_tag..HEAD")
-            fi
-            new_version="v${major}.${minor}.${patch}"
+            range="HEAD^!"
           fi
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            bump "$VERSION_TYPE"
+          else
+            while IFS= read -r -d '' message; do
+              case "$message" in
+                *"[MAJOR]"*) bump major ;;
+                *"[MINOR]"*) bump minor ;;
+                *"[PATCH]"*) bump patch ;;
+                *) continue ;;
+              esac
+              echo "Bump from: $(head -n2 <<< "$message" | tr -d '\n')"
+            done < <(git log --first-parent --reverse --format='%B%x00' "$range")
+          fi
+          new_version="v${major}.${minor}.${patch}"
 
           if [[ -n "$CUSTOM_VERSION" ]]; then
             new_version="v${CUSTOM_VERSION#v}"
           fi
 
           # Markers only on commits inside a merged PR aren't counted; the merge commit title needs one.
-          if [[ "$new_version" == "$latest_tag" ]]; then
-            echo "::error::No version marker found on main's own commits since $latest_tag"
+          if [[ "$new_version" == "$version" ]]; then
+            echo "::error::No version marker found on main's own commits in $range"
             exit 1
           fi
 
