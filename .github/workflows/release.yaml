@@ -28,6 +28,7 @@ concurrency:
 permissions:
   contents: write
   actions: write
+  packages: write
 
 jobs:
   tag-and-release:
@@ -108,14 +109,8 @@ jobs:
       - name: Push tag
         env:
           TAG: ${{ steps.version.outputs.tag_name }}
-          CODEBERG_USER: ${{ secrets.CODEBERG_USER }}
-          CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
         run: |
           git tag "$TAG"
-          user=${CODEBERG_USER//[[:space:]]/}
-          token=${CODEBERG_TOKEN//[[:space:]]/}
-          # Codeberg's push mirror runs `git push --mirror`, which deletes GitHub tags that don't exist on Codeberg.
-          git push "https://${user}:${token}@codeberg.org/monopieza/Stella.git" "refs/tags/$TAG"
           git push origin "refs/tags/$TAG"
 
       - name: Create GitHub Release
@@ -144,21 +139,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Codeberg registry
-        env:
-          CODEBERG_USER: ${{ secrets.CODEBERG_USER }}
-          CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
-        run: |
-          user=${CODEBERG_USER//[[:space:]]/}
-          token=${CODEBERG_TOKEN//[[:space:]]/}
-          for attempt in 1 2 3 4 5; do
-            if docker login codeberg.org -u "$user" --password-stdin <<< "$token"; then
-              exit 0
-            fi
-            echo "Login attempt $attempt failed, retrying in $((attempt * 10))s"
-            sleep $((attempt * 10))
-          done
-          exit 1
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Build and push versioned image
         run: |
@@ -167,7 +149,7 @@ jobs:
             --platform linux/amd64,linux/arm64 \
             --file Containerfile \
             --build-arg IMAGE_TAG=$version \
-            --tag codeberg.org/monopieza/stella:$version \
+            --tag ghcr.io/contre95/stella:$version \
             --push \
             .
 
@@ -180,6 +162,6 @@ jobs:
             --platform linux/amd64,linux/arm64 \
             --file Containerfile \
             --build-arg IMAGE_TAG=beta-$version \
-            --tag codeberg.org/monopieza/stella:beta \
+            --tag ghcr.io/contre95/stella:beta \
             --push \
             .

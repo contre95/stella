@@ -6,13 +6,13 @@ A self-hosted spaced-repetition web app. The scheduling engine is a faithful por
 
 ## Install
 
-Images are published to the Codeberg registry:
+Images are published to the GitHub Container Registry:
 
 ```bash
-podman pull codeberg.org/monopieza/stella:beta   # newest release
+podman pull ghcr.io/contre95/stella:beta   # newest release
 ```
 
-Image with each corresponding version are published in [Codeberg packages](https://codeberg.org/monopieza/-/packages/container/stella/beta)
+Image with each corresponding version are published in [GitHub packages](https://github.com/contre95/stella/pkgs/container/stella)
 
 There is deliberately no `latest` tag — pin a version, or track `beta`.
 
