@@ -200,6 +200,15 @@ textarea.glass-input:focus {
 }
 .dark .btn-ghost:hover { background: rgba(255, 255, 255, 0.1); }
 
+/* ── Collapsible panels (create/import forms) ────────────────── */
+.collapse-panel > summary { list-style: none; }
+.collapse-panel > summary::-webkit-details-marker { display: none; }
+.collapse-panel-icon { transition: transform .2s ease; }
+.collapse-panel[open] .collapse-panel-icon { transform: rotate(45deg); }
+@media (prefers-reduced-motion: reduce) {
+  .collapse-panel-icon { transition: none; }
+}
+
 /* ── Blur/fade behind the face label & bottom action bar while scrolled
    card content passes underneath. Sits between the content (z-10) and the
    label/buttons (z-20); mask-image tapers the blur from full strength at
