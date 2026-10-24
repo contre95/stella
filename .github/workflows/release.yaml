@@ -1,142 +1,81 @@
 ---
-name: Tag, Release, and Build
+name: Release
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
-    inputs:
-      version_type:
-        description: 'Version bump type'
-        required: true
-        default: 'patch'
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
-      custom_version:
-        description: 'Custom version (optional, overrides version_type)'
-        required: false
-        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
 
 permissions:
   contents: write
-  actions: write
+  pull-requests: write
 
 jobs:
-  tag-and-release:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      contains(join(github.event.commits.*.message, ' '), '[MAJOR]') ||
-      contains(join(github.event.commits.*.message, ' '), '[MINOR]') ||
-      contains(join(github.event.commits.*.message, ' '), '[PATCH]')
+  release-please:
     runs-on: ubuntu-latest
     outputs:
-      tag_name: ${{ steps.version.outputs.tag_name }}
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Run release-please
+        id: rp
+        uses: googleapis/release-please-action@v4
         with:
-          fetch-depth: 0
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
 
-      - name: Determine new version
-        id: version
+      # Release-please builds the GitHub release notes from the CHANGELOG entry,
+      # not from the PR description, so the header is added to both: the release
+      # PR (above the first `---`, which release-please ignores) and the release.
+      - name: Build release header
+        if: steps.rp.outputs.pr || steps.rp.outputs.release_created
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          BEFORE_SHA: ${{ github.event.before }}
-          VERSION_TYPE: ${{ github.event.inputs.version_type }}
-          CUSTOM_VERSION: ${{ github.event.inputs.custom_version }}
+          PR: ${{ steps.rp.outputs.pr }}
+          TAG: ${{ steps.rp.outputs.tag_name }}
         run: |
-          git fetch --tags --force
-          latest_tag=$(git tag -l | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
-          echo "Latest tag: ${latest_tag:-none}"
+          version=${TAG:-v$(jq -r .title <<<"$PR" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+[^ ]*$')}
+          cat > "$RUNNER_TEMP/header.md" <<EOF
+          # <img src="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/public/logo.png" width="48" alt="stella"> Stella
 
-          bump() {
-            case "$1" in
-              major) major=$((major + 1)); minor=0; patch=0 ;;
-              minor) minor=$((minor + 1)); patch=0 ;;
-              patch) patch=$((patch + 1)) ;;
-            esac
-          }
+          🐳 Pull the image from [Codeberg packages](https://codeberg.org/monopieza/-/packages/container/stella/${version}):
 
-          version=${latest_tag:-v0.0.0}
-          IFS='.' read -r major minor patch <<< "${version#v}"
+          \`\`\`sh
+          podman pull codeberg.org/monopieza/stella:${version}
+          \`\`\`
+          EOF
 
-          if [[ -n "$latest_tag" ]]; then
-            range="$latest_tag..HEAD"
-          # Without a tag only this push counts. before is all zeros for a new branch and missing after a force push.
-          elif git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
-            range="$BEFORE_SHA..HEAD"
-          else
-            range="HEAD^!"
-          fi
-
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            bump "$VERSION_TYPE"
-          else
-            while IFS= read -r -d '' message; do
-              case "$message" in
-                *"[MAJOR]"*) bump major ;;
-                *"[MINOR]"*) bump minor ;;
-                *"[PATCH]"*) bump patch ;;
-                *) continue ;;
-              esac
-              echo "Bump from: $(head -n2 <<< "$message" | tr -d '\n')"
-            done < <(git log --first-parent --reverse --format='%B%x00' "$range")
-          fi
-          new_version="v${major}.${minor}.${patch}"
-
-          if [[ -n "$CUSTOM_VERSION" ]]; then
-            new_version="v${CUSTOM_VERSION#v}"
-          fi
-
-          # Markers only on commits inside a merged PR aren't counted; the merge commit title needs one.
-          if [[ "$new_version" == "$version" ]]; then
-            echo "::error::No version marker found on main's own commits in $range"
-            exit 1
-          fi
-
-          echo "New version: $new_version"
-          echo "tag_name=$new_version" >> "$GITHUB_OUTPUT"
-
-      - name: Push tag
+      - name: Brand release PR description
+        if: steps.rp.outputs.pr
         env:
-          TAG: ${{ steps.version.outputs.tag_name }}
-          CODEBERG_USER: ${{ secrets.CODEBERG_USER }}
-          CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.rp.outputs.pr }}
         run: |
-          git tag "$TAG"
-          user=${CODEBERG_USER//[[:space:]]/}
-          token=${CODEBERG_TOKEN//[[:space:]]/}
-          # Codeberg's push mirror runs `git push --mirror`, which deletes GitHub tags that don't exist on Codeberg.
-          git push "https://${user}:${token}@codeberg.org/monopieza/Stella.git" "refs/tags/$TAG"
-          git push origin "refs/tags/$TAG"
+          number=$(jq -r .number <<<"$PR")
+          gh pr view "$number" -R "$GITHUB_REPOSITORY" --json body -q .body \
+            | awk -v h="$RUNNER_TEMP/header.md" 'NR==1 {while ((getline l < h) > 0) print l} /^---$/ {f=1} f' \
+            | gh pr edit "$number" -R "$GITHUB_REPOSITORY" --body-file -
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+      - name: Brand release notes
+        if: steps.rp.outputs.release_created
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.version.outputs.tag_name }}
-          name: Release ${{ steps.version.outputs.tag_name }}
-          draft: false
-          prerelease: false
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.rp.outputs.tag_name }}
+        run: |
+          { cat "$RUNNER_TEMP/header.md"; echo; gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json body -q .body; } \
+            | gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --notes-file -
 
   build-and-push:
-    needs: tag-and-release
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code at tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.tag-and-release.outputs.tag_name }}
-          fetch-depth: 0
+          ref: ${{ needs.release-please.outputs.tag_name }}
 
       - name: Set up QEMU for cross-arch builds
         uses: docker/setup-qemu-action@v3
@@ -162,7 +101,7 @@ jobs:
 
       - name: Build and push versioned image
         run: |
-          version=${{ needs.tag-and-release.outputs.tag_name }}
+          version=${{ needs.release-please.outputs.tag_name }}
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --file Containerfile \
@@ -175,7 +114,7 @@ jobs:
       # the builder's layer cache from the step above and only redoes that stage.
       - name: Build and push beta image
         run: |
-          version=${{ needs.tag-and-release.outputs.tag_name }}
+          version=${{ needs.release-please.outputs.tag_name }}
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --file Containerfile \
@@ -183,3 +122,28 @@ jobs:
             --tag codeberg.org/monopieza/stella:beta \
             --push \
             .
+
+  # Discord doesn't render HTML, so the same template is rebuilt as an embed:
+  # logo as the author icon, headings turned into bold lines.
+  announce-discord:
+    needs: [release-please, build-and-push]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post release to Discord
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then echo "DISCORD_WEBHOOK not set, skipping"; exit 0; fi
+          release=$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json body,url)
+          changelog=$(jq -r .body <<<"$release" | awk '/^## \[/ {f=1} f' | sed -E 's/^#+ (.*)/**\1**/')
+          description=$(printf '🐳 Pull the image from [Codeberg packages](https://codeberg.org/monopieza/-/packages/container/stella/%s):\n```sh\npodman pull codeberg.org/monopieza/stella:%s\n```\n%s' "$TAG" "$TAG" "$changelog")
+          jq -n \
+            --arg url "$(jq -r .url <<<"$release")" \
+            --arg logo "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/public/logo.png" \
+            --arg description "${description:0:4000}" \
+            '{username: "Stella", avatar_url: $logo, embeds: [{
+              author: {name: "Stella", icon_url: $logo, url: $url},
+              url: $url, description: $description, color: 7506394}]}' \
+            | curl -fsS -H 'Content-Type: application/json' -d @- "$WEBHOOK"

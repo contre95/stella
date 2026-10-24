@@ -1,0 +1,20 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "b2c925276d1af1b1b9450ff24403adf8f50b77c4",
+  "packages": {
+    ".": {
+      "release-type": "go",
+      "package-name": "stella",
+      "include-component-in-tag": false,
+      "pull-request-footer": " ",
+      "changelog-sections": [
+        { "type": "feat", "section": "✨ Features" },
+        { "type": "fix", "section": "🐛 Bug Fixes" },
+        { "type": "perf", "section": "⚡ Performance" },
+        { "type": "refactor", "section": "♻️ Refactoring", "hidden": true },
+        { "type": "docs", "section": "📝 Documentation", "hidden": true },
+        { "type": "chore", "section": "🔧 Miscellaneous", "hidden": true }
+      ]
+    }
+  }
+}
