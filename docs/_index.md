@@ -12,7 +12,7 @@ A self-hosted spaced-repetition web app. The scheduling engine is a faithful por
 [Mnemosyne](https://github.com/mnemosyne-proj/mnemosyne)'s SM2 algorithm, rewritten in Go
 and wrapped in a small HTMX + Tailwind web UI.
 
-These pages are published at [stella.contre.io](https://stella.contre.io) from the `docs/`
+These pages are published at [stella-docs.contre.io](https://stella-docs.contre.io) from the `docs/`
 folder of the [stella repository](https://github.com/contre95/stella). Start with
 [Self hosted](self-host.md) to get it running, then [Configuration](config.md).
 
