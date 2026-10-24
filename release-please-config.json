@@ -1,10 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-  "bootstrap-sha": "b2c925276d1af1b1b9450ff24403adf8f50b77c4",
   "packages": {
     ".": {
       "release-type": "go",
       "package-name": "stella",
+      "initial-version": "0.0.1",
       "include-component-in-tag": false,
       "pull-request-footer": " ",
       "changelog-sections": [
