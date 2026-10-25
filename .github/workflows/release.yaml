@@ -41,10 +41,11 @@ jobs:
           cat > "$RUNNER_TEMP/header.md" <<EOF
           # <img src="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/public/logo.png" width="48" alt="stella"> Stella
 
-          🐳 Pull the image from [GitHub packages](https://github.com/${GITHUB_REPOSITORY}/pkgs/container/stella):
+          🐳 Pull the image from [GitHub packages](https://github.com/${GITHUB_REPOSITORY}/pkgs/container/stella) or [Docker Hub](https://hub.docker.com/r/contre95/stella):
 
           \`\`\`sh
           podman pull ghcr.io/contre95/stella:${version}
+          podman pull docker.io/contre95/stella:${version}
           \`\`\`
           EOF
 
@@ -131,7 +132,7 @@ jobs:
           if [ -z "$WEBHOOK" ]; then echo "DISCORD_WEBHOOK not set, skipping"; exit 0; fi
           release=$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json body,url)
           changelog=$(jq -r .body <<<"$release" | awk '/^## \[/ {f=1} f' | sed -E 's/^#+ (.*)/**\1**/')
-          description=$(printf '🐳 Pull the image from [GitHub packages](https://github.com/%s/pkgs/container/stella):\n```sh\npodman pull ghcr.io/contre95/stella:%s\n```\n%s' "$GITHUB_REPOSITORY" "$TAG" "$changelog")
+          description=$(printf '🐳 Pull the image from [GitHub packages](https://github.com/%s/pkgs/container/stella) or [Docker Hub](https://hub.docker.com/r/contre95/stella):\n```sh\npodman pull ghcr.io/contre95/stella:%s\npodman pull docker.io/contre95/stella:%s\n```\n%s' "$GITHUB_REPOSITORY" "$TAG" "$TAG" "$changelog")
           jq -n \
             --arg url "$(jq -r .url <<<"$release")" \
             --arg logo "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/public/logo.png" \
