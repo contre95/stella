@@ -87,6 +87,9 @@ jobs:
       - name: Log in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login docker.io -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
       - name: Build and push versioned image
         run: |
           version=${{ needs.release-please.outputs.tag_name }}
@@ -95,6 +98,7 @@ jobs:
             --file Containerfile \
             --build-arg IMAGE_TAG=$version \
             --tag ghcr.io/contre95/stella:$version \
+            --tag docker.io/contre95/stella:$version \
             --push \
             .
 
@@ -108,6 +112,7 @@ jobs:
             --file Containerfile \
             --build-arg IMAGE_TAG=beta-$version \
             --tag ghcr.io/contre95/stella:beta \
+            --tag docker.io/contre95/stella:beta \
             --push \
             .
 
