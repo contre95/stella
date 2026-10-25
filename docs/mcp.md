@@ -54,8 +54,15 @@ files into its own media store.
 
 ## Agent skill
 
-The repo ships an agent skill at
-[`docs/skills/stella-cards/SKILL.md`](https://github.com/contre95/stella/blob/main/docs/skills/stella-cards/SKILL.md)
-that documents the [card format](cards.md) and every tool in detail, so an agent can write
-well-formatted cards without trial and error. Install it into your agent (for Claude Code,
-copy the `stella-cards` folder into `~/.claude/skills/`).
+The repo ships agent skills under
+[`skills/`](https://github.com/contre95/stella/tree/main/skills):
+
+- [`stella-cards`](https://github.com/contre95/stella/blob/main/skills/stella-cards/SKILL.md) —
+  the main skill: the [card format](cards.md) and every tool in detail, so an agent can write
+  well-formatted cards without trial and error.
+- [`stella-japanese-decks`](https://github.com/contre95/stella/blob/main/skills/stella-japanese-decks/SKILL.md) —
+  conventions for Japanese decks (colour code, furigana, `{tts:ja}`, card archetypes).
+- [`stella-vocabulary-decks`](https://github.com/contre95/stella/blob/main/skills/stella-vocabulary-decks/SKILL.md) —
+  conventions for Spanish vocabulary decks.
+
+Install them into your agent (for Claude Code, copy the folders into `~/.claude/skills/`).
