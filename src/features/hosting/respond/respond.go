@@ -40,14 +40,6 @@ func Partial(c *fiber.Ctx, template string, data fiber.Map) error {
 	return c.JSON(data)
 }
 
-// ToastOk renders a success toast (HTMX) or a JSON ok payload.
-func ToastOk(c *fiber.Ctx, msg string) error {
-	if IsHTMX(c) {
-		return c.Render("toast/toastOk", fiber.Map{"Msg": msg})
-	}
-	return c.JSON(fiber.Map{"ok": true, "msg": msg})
-}
-
 // ToastErr renders an error toast (HTMX) or a JSON error payload with status.
 // For 5xx statuses the underlying message is logged but never sent to the
 // client — those come from internal errors (DB failures, filesystem paths,
@@ -75,14 +67,6 @@ func NotFound(err error, msg string) error {
 		return fiber.NewError(fiber.StatusNotFound, msg)
 	}
 	return err
-}
-
-// ToastInfo renders an info toast (HTMX) or a JSON ok payload.
-func ToastInfo(c *fiber.Ctx, msg string) error {
-	if IsHTMX(c) {
-		return c.Render("toast/toastInfo", fiber.Map{"Msg": msg})
-	}
-	return c.JSON(fiber.Map{"ok": true, "msg": msg})
 }
 
 // FieldErrors maps a form field's `name=` attribute to its user-facing
