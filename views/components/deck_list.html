@@ -68,12 +68,7 @@
           </div>
         </div>
         {{if $gv.Decks}}
-          <div
-            class="deck-row flex gap-5 overflow-x-auto px-2 pt-1 pb-5"
-            _="on wheel(deltaY) halt the event then set my scrollLeft to my scrollLeft + deltaY"
-          >
-            {{range $gv.Decks}}{{template "deck-card" (dict "Deck" . "Group" $gv.Group)}}{{end}}
-          </div>
+          {{template "deck-row" (dict "Decks" $gv.Decks "Group" $gv.Group)}}
         {{else}}
           <p class="text-sm text-gray-400 dark:text-gray-500 italic">No decks in this group yet.</p>
         {{end}}
@@ -88,12 +83,7 @@
               <div class="h-px flex-1 bg-gray-200 dark:bg-white/10"></div>
             </div>
           {{end}}
-          <div
-            class="deck-row flex gap-5 overflow-x-auto px-2 pt-1 pb-5"
-            _="on wheel(deltaY) halt the event then set my scrollLeft to my scrollLeft + deltaY"
-          >
-            {{range $gv.Decks}}{{template "deck-card" (dict "Deck" .)}}{{end}}
-          </div>
+          {{template "deck-row" (dict "Decks" $gv.Decks)}}
         </div>
       {{end}}
     {{end}}
@@ -102,6 +92,21 @@
   <div class="glass rounded-2xl border-dashed p-10 text-center">
     <p class="text-sm text-gray-500 dark:text-gray-400">{{if .Query}}No decks match &ldquo;{{.Query}}&rdquo;.{{else if $activeTag}}No decks carry this tag.{{else}}No decks yet. Create one above.{{end}}</p>
   </div>
+{{end}}
+
+{{define "deck-row"}}
+{{$group := .Group}}
+<div class="deck-row-wrap relative" data-deck-row>
+  <button type="button" class="deck-nav deck-nav-prev" data-deck-prev aria-label="Scroll decks left" tabindex="-1">
+    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+  </button>
+  <div class="deck-row flex gap-5 overflow-x-auto px-2 pt-1 pb-5">
+    {{range .Decks}}{{template "deck-card" (dict "Deck" . "Group" $group)}}{{end}}
+  </div>
+  <button type="button" class="deck-nav deck-nav-next" data-deck-next aria-label="Scroll decks right" tabindex="-1">
+    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+  </button>
+</div>
 {{end}}
 
 {{define "deck-card"}}
@@ -180,6 +185,42 @@
   .deck-row::-webkit-scrollbar { height: 6px; }
   .deck-row::-webkit-scrollbar-thumb { border-radius: 9999px; background: rgba(120, 120, 120, 0.35); }
   .deck-row::-webkit-scrollbar-track { background: transparent; }
+  .deck-nav {
+    position: absolute; top: calc(50% - 0.625rem); z-index: 20;
+    display: flex; align-items: center; justify-content: center;
+    width: 2.5rem; height: 2.5rem; border-radius: 9999px;
+    color: #374151;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    box-shadow: 0 6px 20px rgba(24, 16, 48, 0.16);
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+    transform: translateY(-50%);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s ease, background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  }
+  .deck-nav-prev { left: 0.25rem; }
+  .deck-nav-next { right: 0.25rem; }
+  .deck-nav.is-visible { opacity: 1; pointer-events: auto; }
+  .deck-nav.is-visible:hover { background: rgba(255, 255, 255, 0.85); color: #db2777; transform: translateY(-50%) scale(1.08); }
+  .deck-nav.is-visible:active { transform: translateY(-50%) scale(0.96); }
+  .deck-nav:focus-visible { outline: 2px solid #ec4899; outline-offset: 2px; }
+  .dark .deck-nav {
+    color: #e5e7eb;
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  }
+  .dark .deck-nav.is-visible:hover { background: rgba(255, 255, 255, 0.16); color: #f472b6; }
+  .eink .deck-nav {
+    color: #000000; background: #ffffff; border: 1px solid #1a1a1a;
+    box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
+  .eink .deck-nav.is-visible:hover { background: #f0f0f0; color: #000000; transform: translateY(-50%); }
+  @media (hover: none) { .deck-nav { display: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .deck-nav { transition: none; }
+  }
   .deck-stack { position: relative; }
   .deck-layer {
     position: absolute; inset: 0;
