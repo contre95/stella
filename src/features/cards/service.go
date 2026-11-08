@@ -630,6 +630,16 @@ func (s *Service) ToggleDeckStudy(ctx context.Context, userID, deckID string) (*
 	return deck, s.repo.UpdateDeck(ctx, deck)
 }
 
+// ToggleDeckSync flips a deck's SyncEnabled flag and returns the updated deck.
+func (s *Service) ToggleDeckSync(ctx context.Context, userID, deckID string) (*srs.Deck, error) {
+	deck, err := s.repo.GetDeck(ctx, userID, deckID)
+	if err != nil {
+		return nil, err
+	}
+	deck.SyncEnabled = !deck.SyncEnabled
+	return deck, s.repo.UpdateDeck(ctx, deck)
+}
+
 // ListGroupViews returns decks organised into groups for the deck list page.
 // Named groups come first (sorted by name), ungrouped decks are last with a
 // nil Group field. A non-empty tagID restricts the result to decks carrying

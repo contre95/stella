@@ -126,6 +126,7 @@ CREATE TABLE IF NOT EXISTS decks (
 	image         TEXT NOT NULL DEFAULT '',
 	group_id      TEXT,
 	study_enabled INTEGER NOT NULL DEFAULT 1,
+	sync_enabled  INTEGER NOT NULL DEFAULT 0,
 	FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
@@ -215,6 +216,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_cards_sync ON cards(user_id, sync_id);
 `
 	if _, err := s.db.Exec(indexes); err != nil {
 		return fmt.Errorf("creating sync indexes: %w", err)
+	}
+	return s.addDeckSyncEnabled()
+}
+
+// addDeckSyncEnabled upgrades databases created before decks.sync_enabled
+// existed. Decks that already exist keep syncing (the column is added with
+// DEFAULT 1, so devices don't suddenly lose their decks); decks created from
+// here on are opt-in, as in a fresh schema.
+func (s *SqliteSRS) addDeckSyncEnabled() error {
+	var n int
+	if err := s.db.QueryRow(`SELECT count(*) FROM pragma_table_info('decks') WHERE name='sync_enabled'`).Scan(&n); err != nil {
+		return fmt.Errorf("inspecting decks table: %w", err)
+	}
+	if n > 0 {
+		return nil
+	}
+	if _, err := s.db.Exec(`ALTER TABLE decks ADD COLUMN sync_enabled INTEGER NOT NULL DEFAULT 1`); err != nil {
+		return fmt.Errorf("adding decks.sync_enabled: %w", err)
 	}
 	return nil
 }
@@ -470,8 +489,8 @@ func (s *SqliteSRS) AddDeck(ctx context.Context, d *srs.Deck) error {
 	groupID := nullableString(d.GroupID)
 	for {
 		d.SyncID = srs.NewSyncID()
-		_, err := s.db.ExecContext(ctx, `INSERT INTO decks (id, user_id, sync_id, name, color, description, image, group_id, study_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			d.ID, d.UserID, d.SyncID, d.Name, d.Color, d.Description, d.Image, groupID, boolToInt(d.StudyEnabled))
+		_, err := s.db.ExecContext(ctx, `INSERT INTO decks (id, user_id, sync_id, name, color, description, image, group_id, study_enabled, sync_enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			d.ID, d.UserID, d.SyncID, d.Name, d.Color, d.Description, d.Image, groupID, boolToInt(d.StudyEnabled), boolToInt(d.SyncEnabled))
 		if !isSyncIDCollision(err) {
 			return err
 		}
@@ -489,9 +508,9 @@ func (s *SqliteSRS) GetDeckBySyncID(ctx context.Context, userID, syncID string) 
 func (s *SqliteSRS) getDeckWhere(ctx context.Context, where string, args ...any) (*srs.Deck, error) {
 	var d srs.Deck
 	var groupID sql.NullString
-	var studyEnabled int
-	err := s.db.QueryRowContext(ctx, `SELECT id, user_id, sync_id, name, color, description, image, group_id, study_enabled FROM decks WHERE `+where, args...).
-		Scan(&d.ID, &d.UserID, &d.SyncID, &d.Name, &d.Color, &d.Description, &d.Image, &groupID, &studyEnabled)
+	var studyEnabled, syncEnabled int
+	err := s.db.QueryRowContext(ctx, `SELECT id, user_id, sync_id, name, color, description, image, group_id, study_enabled, sync_enabled FROM decks WHERE `+where, args...).
+		Scan(&d.ID, &d.UserID, &d.SyncID, &d.Name, &d.Color, &d.Description, &d.Image, &groupID, &studyEnabled, &syncEnabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, srs.ErrNotFound
 	}
@@ -502,19 +521,20 @@ func (s *SqliteSRS) getDeckWhere(ctx context.Context, where string, args ...any)
 		d.GroupID = groupID.String
 	}
 	d.StudyEnabled = studyEnabled != 0
+	d.SyncEnabled = syncEnabled != 0
 	return &d, nil
 }
 
 func (s *SqliteSRS) UpdateDeck(ctx context.Context, d *srs.Deck) error {
 	groupID := nullableString(d.GroupID)
-	_, err := s.db.ExecContext(ctx, `UPDATE decks SET name=?, color=?, description=?, image=?, group_id=?, study_enabled=? WHERE id=? AND user_id=?`,
-		d.Name, d.Color, d.Description, d.Image, groupID, boolToInt(d.StudyEnabled), d.ID, d.UserID)
+	_, err := s.db.ExecContext(ctx, `UPDATE decks SET name=?, color=?, description=?, image=?, group_id=?, study_enabled=?, sync_enabled=? WHERE id=? AND user_id=?`,
+		d.Name, d.Color, d.Description, d.Image, groupID, boolToInt(d.StudyEnabled), boolToInt(d.SyncEnabled), d.ID, d.UserID)
 	return err
 }
 
 func (s *SqliteSRS) ListDecks(ctx context.Context, userID string) ([]*srs.Deck, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, user_id, sync_id, name, color, description, image, group_id, study_enabled FROM decks WHERE user_id=? ORDER BY group_id IS NULL, group_id, name`, userID)
+		`SELECT id, user_id, sync_id, name, color, description, image, group_id, study_enabled, sync_enabled FROM decks WHERE user_id=? ORDER BY group_id IS NULL, group_id, name`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -523,14 +543,15 @@ func (s *SqliteSRS) ListDecks(ctx context.Context, userID string) ([]*srs.Deck, 
 	for rows.Next() {
 		var d srs.Deck
 		var groupID sql.NullString
-		var studyEnabled int
-		if err := rows.Scan(&d.ID, &d.UserID, &d.SyncID, &d.Name, &d.Color, &d.Description, &d.Image, &groupID, &studyEnabled); err != nil {
+		var studyEnabled, syncEnabled int
+		if err := rows.Scan(&d.ID, &d.UserID, &d.SyncID, &d.Name, &d.Color, &d.Description, &d.Image, &groupID, &studyEnabled, &syncEnabled); err != nil {
 			return nil, err
 		}
 		if groupID.Valid {
 			d.GroupID = groupID.String
 		}
 		d.StudyEnabled = studyEnabled != 0
+		d.SyncEnabled = syncEnabled != 0
 		decks = append(decks, &d)
 	}
 	return decks, rows.Err()

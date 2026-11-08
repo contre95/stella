@@ -19,10 +19,17 @@ The device then syncs in explicit sessions. Each session uploads the reviews don
 device, downloads any decks that changed on the server, and exchanges scheduling state in
 both directions (the most recent change wins).
 
+## Choosing which decks sync
+
+Decks are not synced by default. Mark a deck with the sync button (the circular-arrows icon)
+on its card in the deck list, or on its deck page, where it reads "Syncing" / "Not synced".
+Only marked decks are offered to the device. Un-marking a deck removes it from the device on
+its next sync; its cards and history stay on the server.
+
 ## What syncs
 
-- Server decks show up on the device as read-only mirrors. Editing, deleting, and choosing
-  which decks to study happen on the server.
+- Marked server decks show up on the device as read-only mirrors. Editing, deleting, and
+  choosing which decks to study happen on the server.
 - Reviews done on the device land in the server's review history, and are safe to upload
   more than once.
 - Cards reach the device as plain text: the [card formatting](cards.md#content-format) is

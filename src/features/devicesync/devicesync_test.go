@@ -33,7 +33,7 @@ func newTestService(t *testing.T) (*Service, *database.SqliteSRS) {
 func fixture(t *testing.T, db *database.SqliteSRS) (*srs.Deck, *srs.Card, *srs.Card) {
 	t.Helper()
 	ctx := context.Background()
-	deck := &srs.Deck{ID: "d1", UserID: testUser, Name: "Capitals", Color: "#000", StudyEnabled: true}
+	deck := &srs.Deck{ID: "d1", UserID: testUser, Name: "Capitals", Color: "#000", StudyEnabled: true, SyncEnabled: true}
 	if err := db.AddDeck(ctx, deck); err != nil {
 		t.Fatalf("add deck: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestDeckCSVSwapsReverseCards(t *testing.T) {
 func TestDeckCSVCuratesMarkupAndFlagsImages(t *testing.T) {
 	svc, db := newTestService(t)
 	ctx := context.Background()
-	deck := &srs.Deck{ID: "d1", UserID: testUser, Name: "Physics", Color: "#000", StudyEnabled: true}
+	deck := &srs.Deck{ID: "d1", UserID: testUser, Name: "Physics", Color: "#000", StudyEnabled: true, SyncEnabled: true}
 	if err := db.AddDeck(ctx, deck); err != nil {
 		t.Fatalf("add deck: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestDeckCSVCuratesMarkupAndFlagsImages(t *testing.T) {
 func TestManifestEtagChangesWithImage(t *testing.T) {
 	svc, db := newTestService(t)
 	ctx := context.Background()
-	deck := &srs.Deck{ID: "d1", UserID: testUser, Name: "Capitals", Color: "#000", StudyEnabled: true}
+	deck := &srs.Deck{ID: "d1", UserID: testUser, Name: "Capitals", Color: "#000", StudyEnabled: true, SyncEnabled: true}
 	if err := db.AddDeck(ctx, deck); err != nil {
 		t.Fatalf("add deck: %v", err)
 	}
@@ -157,6 +157,47 @@ func TestManifestEtagTracksContent(t *testing.T) {
 	m3, _ := svc.Manifest(ctx, testUser)
 	if m3[0].Etag == m1[0].Etag {
 		t.Error("etag unchanged after fact edit")
+	}
+}
+
+func TestUnmarkedDecksAreInvisibleToDevices(t *testing.T) {
+	svc, db := newTestService(t)
+	deck, _, _ := fixture(t, db)
+	ctx := context.Background()
+
+	deck.SyncEnabled = false
+	if err := db.UpdateDeck(ctx, deck); err != nil {
+		t.Fatalf("update deck: %v", err)
+	}
+
+	m, err := svc.Manifest(ctx, testUser)
+	if err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+	if len(m) != 0 {
+		t.Errorf("unmarked deck listed in manifest: %+v", m)
+	}
+
+	var buf bytes.Buffer
+	if err := svc.WriteDeckCSV(ctx, testUser, deck.SyncID, &buf); err != srs.ErrNotFound {
+		t.Errorf("WriteDeckCSV err = %v, want ErrNotFound", err)
+	}
+	if err := svc.WriteState(ctx, testUser, deck.SyncID, 0, &buf); err != srs.ErrNotFound {
+		t.Errorf("WriteState err = %v, want ErrNotFound", err)
+	}
+	if _, _, err := svc.ApplyState(ctx, testUser, deck.SyncID, strings.NewReader("")); err != srs.ErrNotFound {
+		t.Errorf("ApplyState err = %v, want ErrNotFound", err)
+	}
+	if err := svc.ExchangeState(ctx, testUser, deck.SyncID, strings.NewReader(""), &buf); err != srs.ErrNotFound {
+		t.Errorf("ExchangeState err = %v, want ErrNotFound", err)
+	}
+
+	deck.SyncEnabled = true
+	if err := db.UpdateDeck(ctx, deck); err != nil {
+		t.Fatalf("update deck: %v", err)
+	}
+	if m, _ = svc.Manifest(ctx, testUser); len(m) != 1 {
+		t.Errorf("re-marked deck missing from manifest: %+v", m)
 	}
 }
 

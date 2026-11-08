@@ -3,7 +3,8 @@
 // idempotent review ingestion, and last-writer-wins scheduling-state merge —
 // all of it device-agnostic, operating purely on domain types (srs.Card,
 // srs.Deck) and a pluggable Normalizer (normalize.go) that curates content
-// for whichever client is asking. x4_wire.go holds the one thing that is
+// for whichever client is asking. Only decks the user marked for sync
+// (srs.Deck.SyncEnabled) are visible to any client. x4_wire.go holds the one thing that is
 // genuinely x4-specific: its wire format (CSV export, terse JSON scheduling
 // state) driven by the device's hardware constraints (SD card parsing, small
 // network buffers). A future client family (e.g. a mobile app) would add its
@@ -70,9 +71,24 @@ type DeckManifest struct {
 	StudyEnabled bool   `json:"studyEnabled"`
 }
 
-// Manifest lists every deck with its export etag. All decks are listed —
-// including study-disabled ones — so toggling study on the server reaches the
-// device as a flag flip without a re-download.
+// syncDeck resolves a deck by sync ID, treating decks the user has not marked
+// for sync as nonexistent: a device only ever sees (and can only touch) the
+// decks listed in its manifest.
+func (s *Service) syncDeck(ctx context.Context, userID, deckSyncID string) (*srs.Deck, error) {
+	deck, err := s.repo.GetDeckBySyncID(ctx, userID, deckSyncID)
+	if err != nil {
+		return nil, err
+	}
+	if !deck.SyncEnabled {
+		return nil, srs.ErrNotFound
+	}
+	return deck, nil
+}
+
+// Manifest lists every deck marked for sync with its export etag. Unmarked
+// decks are omitted, so un-marking a deck removes it from the device on its
+// next pull. Study-disabled decks are still listed, so toggling study on the
+// server reaches the device as a flag flip without a re-download.
 func (s *Service) Manifest(ctx context.Context, userID string) ([]DeckManifest, error) {
 	decks, err := s.repo.ListDecks(ctx, userID)
 	if err != nil {
@@ -80,6 +96,9 @@ func (s *Service) Manifest(ctx context.Context, userID string) ([]DeckManifest, 
 	}
 	out := make([]DeckManifest, 0, len(decks))
 	for _, d := range decks {
+		if !d.SyncEnabled {
+			continue
+		}
 		rows, truncated, err := s.exportRows(ctx, userID, d.ID)
 		if err != nil {
 			return nil, err
@@ -277,7 +296,7 @@ func applyState(c *srs.Card, st CardState) {
 // and order-free, so devices retry failed batches at will. Records for cards
 // the server no longer has are dropped.
 func (s *Service) ApplyState(ctx context.Context, userID, deckSyncID string, in io.Reader) (applied, received int, err error) {
-	deck, err := s.repo.GetDeckBySyncID(ctx, userID, deckSyncID)
+	deck, err := s.syncDeck(ctx, userID, deckSyncID)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -326,7 +345,7 @@ func (s *Service) ApplyState(ctx context.Context, userID, deckSyncID string, in 
 // information — the deck CSV already delivers them as unseen — and cards
 // beyond the export cap are invisible to the device, so both are omitted.
 func (s *Service) WriteState(ctx context.Context, userID, deckSyncID string, since int64, out io.Writer) error {
-	deck, err := s.repo.GetDeckBySyncID(ctx, userID, deckSyncID)
+	deck, err := s.syncDeck(ctx, userID, deckSyncID)
 	if err != nil {
 		return err
 	}
@@ -364,7 +383,7 @@ func (s *Service) WriteState(ctx context.Context, userID, deckSyncID string, sin
 // Incoming records for cards the server no longer has are dropped — the
 // following deck pull removes them from the device too.
 func (s *Service) ExchangeState(ctx context.Context, userID, deckSyncID string, in io.Reader, out io.Writer) error {
-	deck, err := s.repo.GetDeckBySyncID(ctx, userID, deckSyncID)
+	deck, err := s.syncDeck(ctx, userID, deckSyncID)
 	if err != nil {
 		return err
 	}

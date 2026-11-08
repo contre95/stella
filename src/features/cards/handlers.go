@@ -709,6 +709,21 @@ func (h *Handler) ToggleDeckStudy(c *fiber.Ctx) error {
 	return h.DeckList(c)
 }
 
+// ToggleDeckSync flips whether a deck is offered to sync devices and returns
+// the refreshed deck list, or the deck/group page when called from there.
+func (h *Handler) ToggleDeckSync(c *fiber.Ctx) error {
+	if _, err := h.service.ToggleDeckSync(c.Context(), auth.UserID(c), c.Params("id")); err != nil {
+		return respond.NotFound(err, "Deck not found")
+	}
+	if c.Query("source") == "deck_page" {
+		return h.RenderDeckPage(c)
+	}
+	if c.Query("source") == "group_page" {
+		return h.groupGrid(c, c.Query("group"))
+	}
+	return h.DeckList(c)
+}
+
 // SetDeckGroup assigns a deck to a group (or clears it) and returns the refreshed list.
 func (h *Handler) SetDeckGroup(c *fiber.Ctx) error {
 	groupID := strings.TrimSpace(c.FormValue("group_id"))
