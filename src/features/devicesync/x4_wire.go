@@ -15,7 +15,7 @@ const ExportCap = 1000
 // the leading ID column. Front/back are run through the service's Normalizer
 // so each client family gets content it can actually render.
 func (s *Service) WriteDeckCSV(ctx context.Context, userID, deckSyncID string, w io.Writer) error {
-	deck, err := s.repo.GetDeckBySyncID(ctx, userID, deckSyncID)
+	deck, err := s.syncDeck(ctx, userID, deckSyncID)
 	if err != nil {
 		return err
 	}

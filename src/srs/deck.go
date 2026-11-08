@@ -21,6 +21,10 @@ type Deck struct {
 	// StudyEnabled controls whether this deck is included in the global study
 	// session (when no explicit deck filter is selected). Defaults to true.
 	StudyEnabled bool
+	// SyncEnabled controls whether this deck is offered to sync devices. Only
+	// decks with SyncEnabled are listed in the device manifest and reachable
+	// through the device sync endpoints. Defaults to false (opt-in).
+	SyncEnabled bool
 }
 
 // TruncatedName returns the first 12 runes of the name, appending ellipsis if

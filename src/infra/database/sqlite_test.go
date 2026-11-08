@@ -403,3 +403,45 @@ func ids(cards []*srs.Card) []string {
 	}
 	return out
 }
+
+func TestDeckSyncEnabledRoundTripAndUpgrade(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "test.db")
+	db, err := NewSqliteSRS(path)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	addUser(t, db, testUser)
+	addDeck(t, db, "off")
+	if err := db.AddDeck(ctx, &srs.Deck{ID: "on", UserID: testUser, Name: "on", Color: "#000", SyncEnabled: true}); err != nil {
+		t.Fatalf("add deck: %v", err)
+	}
+	for id, want := range map[string]bool{"off": false, "on": true} {
+		d, err := db.GetDeck(ctx, testUser, id)
+		if err != nil || d.SyncEnabled != want {
+			t.Fatalf("deck %s: SyncEnabled=%v err=%v, want %v", id, d != nil && d.SyncEnabled, err, want)
+		}
+	}
+
+	// Simulate a database from before the column existed: the upgrade must
+	// keep existing decks syncing.
+	if _, err := db.db.Exec(`ALTER TABLE decks DROP COLUMN sync_enabled`); err != nil {
+		t.Fatalf("drop column: %v", err)
+	}
+	db.Close()
+	db, err = NewSqliteSRS(path)
+	if err != nil {
+		t.Fatalf("reopen db: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	for _, id := range []string{"off", "on"} {
+		d, err := db.GetDeck(ctx, testUser, id)
+		if err != nil || !d.SyncEnabled {
+			t.Errorf("deck %s after upgrade: SyncEnabled=%v err=%v, want true", id, d != nil && d.SyncEnabled, err)
+		}
+	}
+	addDeck(t, db, "new")
+	if d, _ := db.GetDeck(ctx, testUser, "new"); d.SyncEnabled {
+		t.Error("deck created after upgrade should default to not synced")
+	}
+}
