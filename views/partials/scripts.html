@@ -12,10 +12,8 @@
 
   // 422 = form validation failure with a re-rendered form fragment (and
   // possibly an OOB sibling update, e.g. a refreshed list) in the body.
-  // htmx 1.9 hardcodes shouldSwap = status < 400 with no config knob for
-  // it (that came later, in htmx 2.x) — the documented escape hatch for
-  // this version is htmx:beforeSwap, per htmx's own source comment above
-  // the shouldSwap line. Forcing shouldSwap here makes both the primary
+  // htmx:beforeSwap is the escape hatch for overriding htmx's default
+  // "4xx/5xx: no swap" handling. Forcing shouldSwap here makes both the primary
   // target swap AND any hx-swap-oob fragments in the body apply, instead of
   // htmx's default "4xx: no swap, fire htmx:responseError". isError=false
   // suppresses that event too, since the inline error is already visible in
@@ -78,6 +76,33 @@
     document.addEventListener('DOMContentLoaded', run);
     document.addEventListener('htmx:afterSwap', run);
   }
+
+  // Wires the arrow buttons on a deck row: they page the row sideways and
+  // only show while there is more to scroll in that direction. Vertical
+  // wheel/touch input is left alone so the page scrolls from anywhere.
+  initOnSwap('[data-deck-row]', function (wrap) {
+    if (wrap._init) return;
+    wrap._init = true;
+    var row = wrap.querySelector('.deck-row');
+    var prev = wrap.querySelector('[data-deck-prev]');
+    var next = wrap.querySelector('[data-deck-next]');
+
+    function update() {
+      var max = row.scrollWidth - row.clientWidth;
+      prev.classList.toggle('is-visible', row.scrollLeft > 4);
+      next.classList.toggle('is-visible', row.scrollLeft < max - 4);
+    }
+    function page(dir) {
+      var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      row.scrollBy({ left: dir * Math.max(row.clientWidth * 0.8, 160), behavior: reduce ? 'auto' : 'smooth' });
+    }
+
+    prev.addEventListener('click', function () { page(-1); });
+    next.addEventListener('click', function () { page(1); });
+    row.addEventListener('scroll', update, { passive: true });
+    if (window.ResizeObserver) new ResizeObserver(update).observe(row);
+    update();
+  });
 
   // Blocks a deck/group import submit when the chosen file already exceeds
   // the server's configured BodyLimit (read from the form's data-max-bytes),

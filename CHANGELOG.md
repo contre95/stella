@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.2](https://github.com/contre95/stella/compare/v0.0.1...v0.0.2) (2026-10-25)
+
+
+### 🐛 Bug Fixes
+
+* Skills ([1af8cd5](https://github.com/contre95/stella/commit/1af8cd5194cd4732996dc18d59fdcd9944395747))
+
 ## 0.0.1 (2026-10-24)
 
 
