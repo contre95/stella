@@ -79,6 +79,33 @@
     document.addEventListener('htmx:afterSwap', run);
   }
 
+  // Wires the arrow buttons on a deck row: they page the row sideways and
+  // only show while there is more to scroll in that direction. Vertical
+  // wheel/touch input is left alone so the page scrolls from anywhere.
+  initOnSwap('[data-deck-row]', function (wrap) {
+    if (wrap._init) return;
+    wrap._init = true;
+    var row = wrap.querySelector('.deck-row');
+    var prev = wrap.querySelector('[data-deck-prev]');
+    var next = wrap.querySelector('[data-deck-next]');
+
+    function update() {
+      var max = row.scrollWidth - row.clientWidth;
+      prev.classList.toggle('is-visible', row.scrollLeft > 4);
+      next.classList.toggle('is-visible', row.scrollLeft < max - 4);
+    }
+    function page(dir) {
+      var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      row.scrollBy({ left: dir * Math.max(row.clientWidth * 0.8, 160), behavior: reduce ? 'auto' : 'smooth' });
+    }
+
+    prev.addEventListener('click', function () { page(-1); });
+    next.addEventListener('click', function () { page(1); });
+    row.addEventListener('scroll', update, { passive: true });
+    if (window.ResizeObserver) new ResizeObserver(update).observe(row);
+    update();
+  });
+
   // Blocks a deck/group import submit when the chosen file already exceeds
   // the server's configured BodyLimit (read from the form's data-max-bytes),
   // so oversized uploads get an instant, accurate toast instead of an
