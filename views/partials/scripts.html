@@ -12,10 +12,8 @@
 
   // 422 = form validation failure with a re-rendered form fragment (and
   // possibly an OOB sibling update, e.g. a refreshed list) in the body.
-  // htmx 1.9 hardcodes shouldSwap = status < 400 with no config knob for
-  // it (that came later, in htmx 2.x) — the documented escape hatch for
-  // this version is htmx:beforeSwap, per htmx's own source comment above
-  // the shouldSwap line. Forcing shouldSwap here makes both the primary
+  // htmx:beforeSwap is the escape hatch for overriding htmx's default
+  // "4xx/5xx: no swap" handling. Forcing shouldSwap here makes both the primary
   // target swap AND any hx-swap-oob fragments in the body apply, instead of
   // htmx's default "4xx: no swap, fire htmx:responseError". isError=false
   // suppresses that event too, since the inline error is already visible in
