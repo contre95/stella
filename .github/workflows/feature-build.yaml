@@ -51,7 +51,7 @@ jobs:
             --push \
             .
 
-  # Lists the image in a "Feature builds" section of the latest release notes.
+  # Lists the image in a "Next release features" section of the latest release notes.
   # The section sits between HTML comment markers (invisible on GitHub), so later
   # builds add a row, and rebuilding a branch replaces that branch's row.
   # Runs one at a time so two builds can't overwrite each other's edit.
@@ -89,9 +89,9 @@ jobs:
           {
             printf '%s\n\n' "$rest"
             echo "$start"
-            echo "## 🧪 Feature builds"
+            echo "## 🧪 Next release features"
             echo
-            echo "Preview images built from feature branches after this release. Each tag is on both [Docker Hub](https://hub.docker.com/r/contre95/stella/tags) and [GHCR]($repo_url/pkgs/container/stella)."
+            echo "These features are based on the current release and will be part of the next release. You can try them and help provide feedback. Each tag is on both [Docker Hub](https://hub.docker.com/r/contre95/stella/tags) and [GHCR]($repo_url/pkgs/container/stella)."
             echo
             echo "| Image tag | Branch | Commit | Built | Pull |"
             echo "|---|---|---|---|---|"
