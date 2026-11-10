@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.0](https://github.com/contre95/stella/compare/v0.0.2...v0.1.0) (2026-11-09)
+
+
+### ✨ Features
+
+* **decks:** add scroll arrows to deck rows ([5296e69](https://github.com/contre95/stella/commit/5296e69c0c9f04b57b7340294317b1525516a3c1))
+* **decks:** add scroll arrows to deck rows ([df2184f](https://github.com/contre95/stella/commit/df2184f313dd3ccb37a45d1792adb015732f9947))
+
 ## [0.0.2](https://github.com/contre95/stella/compare/v0.0.1...v0.0.2) (2026-10-25)
 
 
